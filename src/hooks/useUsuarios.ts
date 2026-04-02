@@ -19,8 +19,10 @@ export function useUsuarios() {
   }, []);
 
   const createUsuario = useCallback(async (email: string, password: string, nombre: string, rol: Rol, sedeId: string) => {
-    // Create auth user via admin API (this requires service_role key in edge function)
-    // For now, we create the user via signUp and then update the profile
+    // Save current session before creating new user
+    const { data: currentSession } = await supabase.auth.getSession();
+
+    // Create auth user via signUp
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -32,7 +34,41 @@ export function useUsuarios() {
     if (error) return { error: error.message };
     if (!data.user) return { error: 'No se pudo crear el usuario' };
 
-    return { error: null, userId: data.user.id };
+    const newUserId = data.user.id;
+
+    // signUp may have switched our session to the new user.
+    // Restore the owner session.
+    if (currentSession.session) {
+      await supabase.auth.setSession({
+        access_token: currentSession.session.access_token,
+        refresh_token: currentSession.session.refresh_token,
+      });
+    }
+
+    // Check if the trigger created the profile
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', newUserId)
+      .maybeSingle();
+
+    // If trigger didn't create it, create manually
+    if (!existingProfile) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: newUserId,
+          nombre,
+          email,
+          rol,
+          sede_id: sedeId,
+          activo: true,
+        });
+
+      if (profileError) return { error: `Usuario creado pero error al crear perfil: ${profileError.message}` };
+    }
+
+    return { error: null, userId: newUserId };
   }, []);
 
   const updateUsuario = useCallback(async (id: string, updates: { nombre?: string; rol?: Rol; sede_id?: string; activo?: boolean }) => {
