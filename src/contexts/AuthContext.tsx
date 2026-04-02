@@ -9,6 +9,7 @@ interface AuthState {
   profile: Profile | null;
   sede: Sede | null;
   loading: boolean;
+  profileError: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -21,16 +22,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sede, setSede] = useState<Sede | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
+    if (error) {
+      console.error('Error fetching profile:', error);
+      setProfileError(`No se pudo cargar el perfil: ${error.message}`);
+      return;
+    }
+
     if (data) {
       setProfile(data as Profile);
+      setProfileError(null);
       if (data.sede_id) {
         const { data: sedeData } = await supabase
           .from('sedes')
@@ -39,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
         if (sedeData) setSede(sedeData as Sede);
       }
+    } else {
+      setProfileError('No se encontro un perfil para este usuario.');
     }
   }
 
@@ -80,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, sede, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, sede, loading, profileError, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
