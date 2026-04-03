@@ -95,8 +95,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
             type="date"
             value={form.fecha}
             onChange={e => updateField('fecha', e.target.value)}
-            max={isOwner ? undefined : today}
-            min={isOwner ? undefined : today}
+            max={today}
             className="mt-1"
           />
         </div>
