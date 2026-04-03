@@ -23,7 +23,7 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
 
   function canEdit(gasto: GastoConCategoria): boolean {
     if (isOwner) return true;
-    return gasto.registrado_por === profile?.id && gasto.fecha === today;
+    return gasto.registrado_por === profile?.id;
   }
 
   return (
