@@ -261,15 +261,15 @@ export function ResumenMensualPage() {
 
       {/* Reposicion Cards */}
       {isOwner && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <Card className="border-yayis-green/30 bg-yayis-cream">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Wallet size={18} className="text-yayis-green" />
                 <span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span>
               </div>
-              <p className="text-xl font-bold text-yayis-green">{formatMonto(fondoEf)}</p>
-              <p className="text-xs text-muted-foreground mt-1">Caja chica completa</p>
+              <p className="text-2xl font-bold text-yayis-green">{formatMonto(totalEfectivo)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Total gastado en efectivo por Luis</p>
             </CardContent>
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
@@ -278,26 +278,8 @@ export function ResumenMensualPage() {
                 <CreditCard size={18} className="text-blue-600" />
                 <span className="text-xs font-medium text-blue-600">Reponer Cuentas</span>
               </div>
-              <p className="text-xl font-bold text-blue-600">{formatMonto(totalCuentas)}</p>
-              <p className="text-xs text-muted-foreground mt-1">Gastado en transferencias</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Wallet size={18} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Gastado Efectivo</span>
-              </div>
-              <p className="text-xl font-bold text-yayis-dark">{formatMonto(totalEfectivo)}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <CreditCard size={18} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Gastado Cuentas</span>
-              </div>
-              <p className="text-xl font-bold text-yayis-dark">{formatMonto(totalCuentas)}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatMonto(totalCuentas)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Total gastado en transferencias por Luis</p>
             </CardContent>
           </Card>
         </div>
