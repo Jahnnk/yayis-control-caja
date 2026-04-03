@@ -8,6 +8,8 @@ import { Loading } from '@/components/ui/loading';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getMesesDisponibles, getSemanasDelMes } from '@/lib/dates';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Wallet, CreditCard, DollarSign, AlertTriangle } from 'lucide-react';
+import { useFondos } from '@/hooks/useFondos';
 import type { ArqueoSemanal } from '@/types';
 
 interface SemanaResumen {
@@ -22,7 +24,9 @@ interface SemanaResumen {
 export function ResumenMensualPage() {
   const { profile } = useAuth();
   const { fetchArqueosMes } = useArqueo();
+  const { fondos } = useFondos();
   const meses = getMesesDisponibles();
+  const isOwner = profile?.rol === 'owner';
 
   const [selectedMes, setSelectedMes] = useState(() => {
     const d = new Date();
@@ -33,6 +37,8 @@ export function ResumenMensualPage() {
   const [arqueos, setArqueos] = useState<ArqueoSemanal[]>([]);
   const [topCategorias, setTopCategorias] = useState<{ nombre: string; total: number; porcentaje: number }[]>([]);
   const [allCatNames, setAllCatNames] = useState<string[]>([]);
+  const [totalEfectivo, setTotalEfectivo] = useState(0);
+  const [totalCuentas, setTotalCuentas] = useState(0);
 
   const loadData = useCallback(async () => {
     if (!profile?.sede_id) return;
@@ -67,6 +73,9 @@ export function ResumenMensualPage() {
       });
     }
 
+    let sumEfectivo = 0;
+    let sumCuentas = 0;
+
     for (const g of gastosData ?? []) {
       const s = semanaMap.get(g.semana);
       if (!s) continue;
@@ -76,6 +85,8 @@ export function ResumenMensualPage() {
       s.totalGastado = roundTwo(s.totalGastado + monto);
       if (g.estado === 'pagado') {
         s.totalPagado = roundTwo(s.totalPagado + monto);
+        if (g.metodo_pago === 'efectivo') sumEfectivo = roundTwo(sumEfectivo + monto);
+        else sumCuentas = roundTwo(sumCuentas + monto);
       } else {
         s.totalPendiente = roundTwo(s.totalPendiente + monto);
       }
@@ -83,6 +94,9 @@ export function ResumenMensualPage() {
       s.porCategoria[catName] = roundTwo((s.porCategoria[catName] ?? 0) + monto);
       catTotalMap.set(catName, roundTwo((catTotalMap.get(catName) ?? 0) + monto));
     }
+
+    setTotalEfectivo(sumEfectivo);
+    setTotalCuentas(sumCuentas);
 
     // Add arqueo data
     for (const a of arq) {
@@ -157,6 +171,52 @@ export function ResumenMensualPage() {
             <option key={`${m.anio}-${m.mes}`} value={`${m.anio}-${m.mes}`}>{m.label}</option>
           ))}
         </Select>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign size={18} className="text-yayis-accent" />
+              <span className="text-xs text-muted-foreground">Total Gastado</span>
+            </div>
+            <p className="text-xl font-bold text-yayis-dark">{formatMonto(totales.gastado)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={18} className="text-amber-500" />
+              <span className="text-xs text-muted-foreground">Total Pendiente</span>
+            </div>
+            <p className="text-xl font-bold text-amber-600">{formatMonto(totales.pendiente)}</p>
+          </CardContent>
+        </Card>
+        {isOwner && (
+          <Card className="border-yayis-green/30 bg-yayis-cream">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet size={18} className="text-yayis-green" />
+                <span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span>
+              </div>
+              <p className="text-xl font-bold text-yayis-green">{formatMonto(fondos ? Number(fondos.fondo_efectivo) : 500)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Gastado: {formatMonto(totalEfectivo)}</p>
+            </CardContent>
+          </Card>
+        )}
+        {isOwner && (
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CreditCard size={18} className="text-blue-600" />
+                <span className="text-xs font-medium text-blue-600">Reponer Cuentas</span>
+              </div>
+              <p className="text-xl font-bold text-blue-600">{formatMonto(totalCuentas)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Gastado en transferencias</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Table by week */}

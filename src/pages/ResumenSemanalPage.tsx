@@ -262,7 +262,7 @@ export function ResumenSemanalPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -294,25 +294,60 @@ export function ResumenSemanalPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <Wallet size={18} className="text-yayis-green" />
-              <span className="text-xs text-muted-foreground">Disponible Efectivo</span>
+              <span className="text-xs text-muted-foreground">Gastado Efectivo</span>
             </div>
-            <p className={`text-xl font-bold ${resumen.disponibleEfectivo < 0 ? 'text-red-600' : 'text-yayis-green'}`}>
-              {formatMonto(resumen.disponibleEfectivo)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <CreditCard size={18} className="text-blue-500" />
-              <span className="text-xs text-muted-foreground">Disponible Cuentas</span>
-            </div>
-            <p className={`text-xl font-bold ${resumen.disponibleCuentas < 0 ? 'text-red-600' : 'text-blue-600'}`}>
-              {formatMonto(resumen.disponibleCuentas)}
-            </p>
+            <p className="text-xl font-bold text-yayis-dark">{formatMonto(gastadoEfectivo)}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Reposicion Cards - lo que debes reponer a Luis */}
+      {isOwner && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-yayis-green/30 bg-yayis-cream">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet size={18} className="text-yayis-green" />
+                <span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span>
+              </div>
+              <p className="text-xl font-bold text-yayis-green">{formatMonto(fondoEf)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Caja chica completa</p>
+            </CardContent>
+          </Card>
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CreditCard size={18} className="text-blue-600" />
+                <span className="text-xs font-medium text-blue-600">Reponer Cuentas</span>
+              </div>
+              <p className="text-xl font-bold text-blue-600">{formatMonto(gastadoCuentas)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Gastado en transferencias</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet size={18} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Disponible Efectivo</span>
+              </div>
+              <p className={`text-xl font-bold ${resumen.disponibleEfectivo < 0 ? 'text-red-600' : 'text-yayis-dark'}`}>
+                {formatMonto(resumen.disponibleEfectivo)}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CreditCard size={18} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Disponible Cuentas</span>
+              </div>
+              <p className={`text-xl font-bold ${resumen.disponibleCuentas < 0 ? 'text-red-600' : 'text-yayis-dark'}`}>
+                {formatMonto(resumen.disponibleCuentas)}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category breakdown */}
