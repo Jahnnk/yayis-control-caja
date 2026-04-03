@@ -36,7 +36,7 @@ export function ResumenSemanalPage() {
     return { anio: d.getFullYear(), mes: d.getMonth() + 1, label: getMesLabel(today) };
   });
   const [semanas, setSemanas] = useState(getSemanasDelMes(selectedMes.anio, selectedMes.mes));
-  const [selectedSemana, setSelectedSemana] = useState(() => calcularSemana(today));
+  const [selectedSemana, setSelectedSemana] = useState<number>(() => calcularSemana(today));
   const [resumen, setResumen] = useState<ResumenSemanalData | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -56,12 +56,14 @@ export function ResumenSemanalPage() {
     const mesLabel = selectedMes.label;
 
     await fetchGastos({
-      semana: selectedSemana,
+      semana: selectedSemana === 0 ? undefined : selectedSemana,
       mes: mesLabel,
       pageSize: 500,
     });
 
-    await fetchArqueo(selectedSemana, mesLabel, selectedMes.anio, profile?.sede_id ?? undefined);
+    if (selectedSemana > 0) {
+      await fetchArqueo(selectedSemana, mesLabel, selectedMes.anio, profile?.sede_id ?? undefined);
+    }
     setLoadingData(false);
   }, [selectedSemana, selectedMes, fetchGastos, fetchArqueo, profile]);
 
@@ -173,7 +175,7 @@ export function ResumenSemanalPage() {
 
   // Ensure arqueo record exists for this week
   useEffect(() => {
-    if (!profile?.sede_id || !fondos || loadingData) return;
+    if (!profile?.sede_id || !fondos || loadingData || selectedSemana === 0) return;
     if (arqueo) {
       setVentasPos(String(arqueo.ventas_efectivo_pos || ''));
       setEfectivoEntregado(String(arqueo.efectivo_entregado_luis || ''));
@@ -232,11 +234,12 @@ export function ResumenSemanalPage() {
           <Select
             value={selectedSemana}
             onChange={e => setSelectedSemana(parseInt(e.target.value))}
-            className="w-40"
+            className="w-48"
           >
+            <option value={0}>Todas las semanas</option>
             {semanas.map(s => (
               <option key={s.semana} value={s.semana}>
-                Semana {s.semana}
+                Semana {s.semana} ({s.inicio.slice(5)} al {s.fin.slice(5)})
               </option>
             ))}
           </Select>
@@ -401,8 +404,8 @@ export function ResumenSemanalPage() {
         </Card>
       )}
 
-      {/* Arqueo Semanal */}
-      {isOwner && (
+      {/* Arqueo Semanal - solo en semana individual */}
+      {isOwner && selectedSemana > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Arqueo Semanal</CardTitle>
