@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useFondos } from '@/hooks/useFondos';
 import { useArqueo } from '@/hooks/useArqueo';
+import { useReposiciones } from '@/hooks/useReposiciones';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -14,8 +15,8 @@ import { Loading } from '@/components/ui/loading';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes, getMesesDisponibles } from '@/lib/dates';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, Lock } from 'lucide-react';
-import type { GastoConCategoria, ResumenSemanalData } from '@/types';
+import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, Lock, Plus, Trash2, Loader2 } from 'lucide-react';
+import type { GastoConCategoria, ResumenSemanalData, MetodoPago } from '@/types';
 
 const COLORS = ['#004C40', '#098B5F', '#10B981', '#34D399', '#6EE7B7', '#A7F3D0', '#F59E0B', '#DC2626', '#8B5CF6', '#EC4899', '#06B6D4'];
 
@@ -25,6 +26,7 @@ export function ResumenSemanalPage() {
   const { fondos, fetchFondosParaFecha } = useFondos();
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { categorias } = useCategorias();
+  const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
   const { addToast } = useToast();
 
   const today = getTodayLima();
@@ -45,6 +47,13 @@ export function ResumenSemanalPage() {
   const [efectivoEntregado, setEfectivoEntregado] = useState('');
   const [showCerrar, setShowCerrar] = useState(false);
 
+  // Reposicion form
+  const [repoFecha, setRepoFecha] = useState(today);
+  const [repoMetodo, setRepoMetodo] = useState<MetodoPago>('efectivo');
+  const [repoMonto, setRepoMonto] = useState('');
+  const [repoNotas, setRepoNotas] = useState('');
+  const [repoSaving, setRepoSaving] = useState(false);
+
   useEffect(() => {
     const s = getSemanasDelMes(selectedMes.anio, selectedMes.mes);
     setSemanas(s);
@@ -62,8 +71,9 @@ export function ResumenSemanalPage() {
     });
 
     await fetchArqueo(selectedSemana, mesLabel, selectedMes.anio, profile?.sede_id ?? undefined);
+    await fetchSaldo(profile?.sede_id ?? undefined);
     setLoadingData(false);
-  }, [selectedSemana, selectedMes, fetchGastos, fetchArqueo, profile]);
+  }, [selectedSemana, selectedMes, fetchGastos, fetchArqueo, fetchSaldo, profile]);
 
   useEffect(() => {
     loadData();
@@ -604,6 +614,143 @@ export function ResumenSemanalPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reposiciones - Sistema de pagos a Luis */}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Reposiciones a Luis</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Saldo cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-red-600 font-medium">Deuda Efectivo</p>
+                <p className="text-xl font-bold text-red-700">{formatMonto(saldo.deudaEfectivo)}</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-emerald-600 font-medium">Repuesto Efectivo</p>
+                <p className="text-xl font-bold text-emerald-700">{formatMonto(saldo.repuestoEfectivo)}</p>
+              </div>
+              <div className={`border rounded-lg p-4 text-center ${saldo.saldoEfectivo <= 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'}`}>
+                <p className="text-xs font-medium">{saldo.saldoEfectivo <= 0 ? 'Efectivo al dia' : 'Pendiente Efectivo'}</p>
+                <p className={`text-xl font-bold ${saldo.saldoEfectivo <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {saldo.saldoEfectivo <= 0 ? 'S/ 0.00' : formatMonto(saldo.saldoEfectivo)}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-red-600 font-medium">Deuda Cuentas</p>
+                <p className="text-xl font-bold text-red-700">{formatMonto(saldo.deudaCuentas)}</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-emerald-600 font-medium">Repuesto Cuentas</p>
+                <p className="text-xl font-bold text-emerald-700">{formatMonto(saldo.repuestoCuentas)}</p>
+              </div>
+              <div className={`border rounded-lg p-4 text-center ${saldo.saldoCuentas <= 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'}`}>
+                <p className="text-xs font-medium">{saldo.saldoCuentas <= 0 ? 'Cuentas al dia' : 'Pendiente Cuentas'}</p>
+                <p className={`text-xl font-bold ${saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {saldo.saldoCuentas <= 0 ? 'S/ 0.00' : formatMonto(saldo.saldoCuentas)}
+                </p>
+              </div>
+            </div>
+
+            {/* Formulario reposicion */}
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-bold text-yayis-dark mb-3">Registrar Reposicion</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-xs font-medium">Fecha</label>
+                  <Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Tipo</label>
+                  <Select value={repoMetodo} onChange={e => setRepoMetodo(e.target.value as MetodoPago)} className="mt-1">
+                    <option value="efectivo">Efectivo</option>
+                    <option value="cuentas">Cuentas</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Monto (S/)</label>
+                  <Input type="number" step="0.01" min="0.01" placeholder="0.00" value={repoMonto} onChange={e => setRepoMonto(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Notas</label>
+                  <Input placeholder="Opcional..." value={repoNotas} onChange={e => setRepoNotas(e.target.value)} className="mt-1" />
+                </div>
+              </div>
+              <Button
+                className="mt-3"
+                disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0}
+                onClick={async () => {
+                  setRepoSaving(true);
+                  const { error } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
+                  if (error) addToast(`Error: ${error}`, 'error');
+                  else {
+                    addToast('Reposicion registrada', 'success');
+                    setRepoMonto('');
+                    setRepoNotas('');
+                    loadData();
+                  }
+                  setRepoSaving(false);
+                }}
+              >
+                {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
+                Registrar Reposicion
+              </Button>
+            </div>
+
+            {/* Historial */}
+            {reposiciones.length > 0 && (
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-bold text-yayis-dark mb-3">Historial de Reposiciones</h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 font-medium">Fecha</th>
+                      <th className="text-left py-2 font-medium">Tipo</th>
+                      <th className="text-right py-2 font-medium">Monto</th>
+                      <th className="text-left py-2 font-medium">Notas</th>
+                      <th className="py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reposiciones.map(r => (
+                      <tr key={r.id} className="border-b">
+                        <td className="py-2">{r.fecha}</td>
+                        <td className="py-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'
+                          }`}>
+                            {r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right font-medium">{formatMonto(Number(r.monto))}</td>
+                        <td className="py-2 text-muted-foreground text-xs">{r.notas ?? '-'}</td>
+                        <td className="py-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-700"
+                            onClick={async () => {
+                              const { error } = await deleteReposicion(r.id);
+                              if (error) addToast(`Error: ${error}`, 'error');
+                              else { addToast('Reposicion eliminada', 'success'); loadData(); }
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>

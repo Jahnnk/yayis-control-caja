@@ -83,6 +83,26 @@ export interface ArqueoSemanal {
   created_at: string;
 }
 
+export interface Reposicion {
+  id: string;
+  sede_id: string;
+  fecha: string;
+  metodo_pago: MetodoPago;
+  monto: number;
+  notas: string | null;
+  registrado_por: string;
+  created_at: string;
+}
+
+export interface SaldoReposicion {
+  deudaEfectivo: number;
+  deudaCuentas: number;
+  repuestoEfectivo: number;
+  repuestoCuentas: number;
+  saldoEfectivo: number;
+  saldoCuentas: number;
+}
+
 export interface GastoFormData {
   fecha: string;
   descripcion: string;

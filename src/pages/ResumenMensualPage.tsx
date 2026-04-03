@@ -10,6 +10,7 @@ import { getMesesDisponibles, getSemanasDelMes } from '@/lib/dates';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Wallet, CreditCard, DollarSign, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useFondos } from '@/hooks/useFondos';
+import { useReposiciones } from '@/hooks/useReposiciones';
 import type { ArqueoSemanal } from '@/types';
 
 interface PeriodoResumen {
@@ -27,6 +28,7 @@ export function ResumenMensualPage() {
   const { profile } = useAuth();
   const { fetchArqueosMes } = useArqueo();
   const { fondos } = useFondos();
+  const { saldo, fetchSaldo } = useReposiciones();
   const meses = useMemo(() => getMesesDisponibles(), []);
   const isOwner = profile?.rol === 'owner';
 
@@ -180,8 +182,9 @@ export function ResumenMensualPage() {
       setAllCatNames(Array.from(catTotalMap.keys()).sort((a, b) => (catTotalMap.get(b) ?? 0) - (catTotalMap.get(a) ?? 0)));
     }
 
+    await fetchSaldo(profile.sede_id);
     setLoading(false);
-  }, [profile, selectedPeriodo, isAnual, fetchArqueosMes, meses, currentYear]);
+  }, [profile, selectedPeriodo, isAnual, fetchArqueosMes, fetchSaldo, meses, currentYear]);
 
   useEffect(() => {
     loadData();
@@ -282,6 +285,26 @@ export function ResumenMensualPage() {
               <p className="text-xs text-muted-foreground mt-1">Total gastado en transferencias por Luis</p>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Saldo pendiente global */}
+      {isOwner && (saldo.saldoEfectivo > 0 || saldo.saldoCuentas > 0) && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className={`border-2 rounded-lg p-4 text-center ${saldo.saldoEfectivo <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+            <p className="text-xs font-medium">{saldo.saldoEfectivo <= 0 ? 'Efectivo al dia' : 'Saldo Pendiente Efectivo'}</p>
+            <p className={`text-2xl font-bold ${saldo.saldoEfectivo <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {saldo.saldoEfectivo <= 0 ? 'S/ 0.00' : formatMonto(saldo.saldoEfectivo)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Repuesto: {formatMonto(saldo.repuestoEfectivo)} de {formatMonto(saldo.deudaEfectivo)}</p>
+          </div>
+          <div className={`border-2 rounded-lg p-4 text-center ${saldo.saldoCuentas <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+            <p className="text-xs font-medium">{saldo.saldoCuentas <= 0 ? 'Cuentas al dia' : 'Saldo Pendiente Cuentas'}</p>
+            <p className={`text-2xl font-bold ${saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {saldo.saldoCuentas <= 0 ? 'S/ 0.00' : formatMonto(saldo.saldoCuentas)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Repuesto: {formatMonto(saldo.repuestoCuentas)} de {formatMonto(saldo.deudaCuentas)}</p>
+          </div>
         </div>
       )}
 
