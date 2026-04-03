@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
@@ -35,6 +35,31 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     notas: editData?.notas ?? '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Update form when editData changes (user clicks edit on a gasto)
+  useEffect(() => {
+    if (editData) {
+      setForm({
+        fecha: editData.fecha,
+        descripcion: editData.descripcion,
+        categoria_id: editData.categoria_id,
+        metodo_pago: editData.metodo_pago,
+        monto: editData.monto,
+        estado: editData.estado,
+        notas: editData.notas,
+      });
+    } else {
+      setForm({
+        fecha: today,
+        descripcion: '',
+        categoria_id: '',
+        metodo_pago: 'efectivo',
+        monto: '',
+        estado: 'pagado',
+        notas: '',
+      });
+    }
+  }, [editData]);
 
   function updateField<K extends keyof GastoFormData>(key: K, value: GastoFormData[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
