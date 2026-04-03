@@ -46,11 +46,13 @@ export function ResumenPage() {
   const [filterMes, setFilterMes] = useState<number>(new Date().getMonth() + 1);
   const [filterSemana, setFilterSemana] = useState<number>(0); // 0 = todas
 
-  const semanas = useMemo(() => getSemanasDelMes(filterAnio, filterMes), [filterAnio, filterMes]);
+  const isAnual = filterMes === 0;
+  const semanas = useMemo(() => isAnual ? [] : getSemanasDelMes(filterAnio, filterMes), [filterAnio, filterMes, isAnual]);
   const mesLabel = useMemo(() => {
+    if (isAnual) return '';
     const m = meses.find(x => x.anio === filterAnio && x.mes === filterMes);
     return m?.label ?? '';
-  }, [filterAnio, filterMes, meses]);
+  }, [filterAnio, filterMes, meses, isAnual]);
 
   // Data
   const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ export function ResumenPage() {
   const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
 
   const loadData = useCallback(async () => {
-    if (!profile?.sede_id || !mesLabel) return;
+    if (!profile?.sede_id || (!isAnual && !mesLabel)) return;
     setLoading(true);
 
     // Fetch gastos
@@ -87,8 +89,14 @@ export function ResumenPage() {
       .from('gastos')
       .select('*, categorias(nombre)')
       .eq('sede_id', profile.sede_id)
-      .eq('mes', mesLabel)
-      .order('semana');
+      .order('fecha', { ascending: true });
+
+    if (isAnual) {
+      // Filter by year using fecha range
+      query = query.gte('fecha', `${filterAnio}-01-01`).lte('fecha', `${filterAnio}-12-31`);
+    } else {
+      query = query.eq('mes', mesLabel);
+    }
 
     if (filterSemana > 0) {
       query = query.eq('semana', filterSemana);
@@ -96,18 +104,24 @@ export function ResumenPage() {
 
     const { data: gastosData } = await query;
 
-    // Build semana map
-    const semanaMap = new Map<number, SemanaRow>();
+    // Build period map (by semana or by month)
+    const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
     let sumEf = 0, sumCt = 0, sumTotal = 0, sumPend = 0, sumPagado = 0;
 
-    for (const s of semanas) {
-      semanaMap.set(s.semana, { semana: s.semana, totalGastado: 0, efectivo: 0, cuentas: 0, pendiente: 0, porCategoria: {} });
+    if (isAnual) {
+      for (let m = 1; m <= 12; m++) {
+        periodMap.set(m, { semana: m, totalGastado: 0, efectivo: 0, cuentas: 0, pendiente: 0, porCategoria: {} });
+      }
+    } else {
+      for (const s of semanas) {
+        periodMap.set(s.semana, { semana: s.semana, totalGastado: 0, efectivo: 0, cuentas: 0, pendiente: 0, porCategoria: {} });
+      }
     }
 
     for (const g of (gastosData ?? []) as Array<Record<string, unknown>>) {
-      const semana = g.semana as number;
-      const s = semanaMap.get(semana);
+      const key = isAnual ? new Date(g.fecha as string).getMonth() + 1 : g.semana as number;
+      const s = periodMap.get(key);
       if (!s) continue;
       const monto = Number(g.monto);
       const catName = ((g.categorias as { nombre: string } | null)?.nombre) ?? 'Otros';
@@ -117,15 +131,17 @@ export function ResumenPage() {
       s.totalGastado = roundTwo(s.totalGastado + monto);
       sumTotal = roundTwo(sumTotal + monto);
 
+      // Desglose por metodo de pago (todos los gastos, sin importar estado)
+      if (metodo === 'efectivo') {
+        s.efectivo = roundTwo(s.efectivo + monto);
+        sumEf = roundTwo(sumEf + monto);
+      } else {
+        s.cuentas = roundTwo(s.cuentas + monto);
+        sumCt = roundTwo(sumCt + monto);
+      }
+
       if (estado === 'pagado') {
         sumPagado = roundTwo(sumPagado + monto);
-        if (metodo === 'efectivo') {
-          s.efectivo = roundTwo(s.efectivo + monto);
-          sumEf = roundTwo(sumEf + monto);
-        } else {
-          s.cuentas = roundTwo(s.cuentas + monto);
-          sumCt = roundTwo(sumCt + monto);
-        }
       } else {
         s.pendiente = roundTwo(s.pendiente + monto);
         sumPend = roundTwo(sumPend + monto);
@@ -135,7 +151,8 @@ export function ResumenPage() {
       catTotalMap.set(catName, roundTwo((catTotalMap.get(catName) ?? 0) + monto));
     }
 
-    setSemanasData(Array.from(semanaMap.values()));
+    const allPeriods = Array.from(periodMap.values());
+    setSemanasData(isAnual ? allPeriods.filter(p => p.totalGastado > 0) : allPeriods);
     setTotalEfectivo(sumEf);
     setTotalCuentas(sumCt);
     setTotalGastado(sumTotal);
@@ -159,7 +176,7 @@ export function ResumenPage() {
     await fetchSaldo(profile.sede_id);
 
     setLoading(false);
-  }, [profile, mesLabel, filterSemana, filterAnio, semanas, fetchArqueo, fetchSaldo]);
+  }, [profile, mesLabel, filterSemana, filterAnio, isAnual, semanas, fetchArqueo, fetchSaldo]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -223,10 +240,20 @@ export function ResumenPage() {
   if (loading) return <Loading text="Cargando resumen..." />;
 
   const barData = filterSemana === 0
-    ? semanasData.map(s => ({ name: `Sem ${s.semana}`, 'Total Gastado': s.totalGastado }))
+    ? semanasData.map(s => {
+        const name = isAnual
+          ? new Date(filterAnio, s.semana - 1, 1).toLocaleDateString('es-PE', { month: 'short' }).replace(/^./, c => c.toUpperCase())
+          : `Sem ${s.semana}`;
+        return { name, 'Total Gastado': s.totalGastado };
+      })
     : topCategorias.map(c => ({ name: c.nombre, 'Total Gastado': c.total }));
 
-  const stackedData = semanasData.map(s => ({ name: `Sem ${s.semana}`, ...s.porCategoria }));
+  const stackedData = semanasData.map(s => {
+    const name = isAnual
+      ? new Date(filterAnio, s.semana - 1, 1).toLocaleDateString('es-PE', { month: 'short' }).replace(/^./, c => c.toUpperCase())
+      : `Sem ${s.semana}`;
+    return { name, ...s.porCategoria };
+  });
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -238,19 +265,22 @@ export function ResumenPage() {
             <option value={currentYear}>{currentYear}</option>
             <option value={currentYear - 1}>{currentYear - 1}</option>
           </Select>
-          <Select value={filterMes} onChange={e => { setFilterMes(parseInt(e.target.value)); setFilterSemana(0); }} className="w-40">
+          <Select value={filterMes} onChange={e => { setFilterMes(parseInt(e.target.value)); setFilterSemana(0); }} className="w-44">
+            <option value={0}>Todo el Ano</option>
             {Array.from({ length: 12 }, (_, i) => {
               const d = new Date(filterAnio, i, 1);
               const label = d.toLocaleDateString('es-PE', { month: 'long' });
               return <option key={i + 1} value={i + 1}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
             })}
           </Select>
-          <Select value={filterSemana} onChange={e => setFilterSemana(parseInt(e.target.value))} className="w-52">
-            <option value={0}>Todas las semanas</option>
-            {semanas.map(s => (
-              <option key={s.semana} value={s.semana}>Semana {s.semana} ({s.inicio.slice(5)} al {s.fin.slice(5)})</option>
-            ))}
-          </Select>
+          {!isAnual && (
+            <Select value={filterSemana} onChange={e => setFilterSemana(parseInt(e.target.value))} className="w-52">
+              <option value={0}>Todas las semanas</option>
+              {semanas.map(s => (
+                <option key={s.semana} value={s.semana}>Semana {s.semana} ({s.inicio.slice(5)} al {s.fin.slice(5)})</option>
+              ))}
+            </Select>
+          )}
         </div>
       </div>
 
@@ -319,13 +349,13 @@ export function ResumenPage() {
       {/* Tabla por semana (solo si no se filtro por semana) */}
       {filterSemana === 0 && (
         <Card>
-          <CardHeader><CardTitle>Resumen por Semana</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{isAnual ? 'Resumen por Mes' : 'Resumen por Semana'}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 font-medium">Semana</th>
+                    <th className="text-left py-2 font-medium">{isAnual ? 'Mes' : 'Semana'}</th>
                     <th className="text-right py-2 font-medium">Total Gastado</th>
                     <th className="text-right py-2 font-medium">Efectivo</th>
                     <th className="text-right py-2 font-medium">Cuentas</th>
@@ -333,15 +363,19 @@ export function ResumenPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {semanasData.map(s => (
-                    <tr key={s.semana} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => setFilterSemana(s.semana)}>
-                      <td className="py-2 text-yayis-accent font-medium">Semana {s.semana}</td>
+                  {semanasData.map(s => {
+                    const periodLabel = isAnual
+                      ? new Date(filterAnio, s.semana - 1, 1).toLocaleDateString('es-PE', { month: 'long' }).replace(/^./, c => c.toUpperCase())
+                      : `Semana ${s.semana}`;
+                    return (
+                    <tr key={s.semana} className={`border-b ${!isAnual ? 'hover:bg-gray-50 cursor-pointer' : ''}`} onClick={() => { if (!isAnual) setFilterSemana(s.semana); }}>
+                      <td className="py-2 text-yayis-accent font-medium">{periodLabel}</td>
                       <td className="text-right py-2 font-medium">{formatMonto(s.totalGastado)}</td>
                       <td className="text-right py-2">{formatMonto(s.efectivo)}</td>
                       <td className="text-right py-2">{formatMonto(s.cuentas)}</td>
                       <td className="text-right py-2 text-amber-600">{formatMonto(s.pendiente)}</td>
                     </tr>
-                  ))}
+                  );})}
                   <tr className="font-bold border-t-2">
                     <td className="py-2">Total</td>
                     <td className="text-right py-2">{formatMonto(totalGastado)}</td>
@@ -359,7 +393,7 @@ export function ResumenPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle>{filterSemana === 0 ? 'Gasto por Semana' : 'Gasto por Categoria'}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{filterSemana === 0 ? (isAnual ? 'Gasto por Mes' : 'Gasto por Semana') : 'Gasto por Categoria'}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={barData}>
@@ -374,7 +408,7 @@ export function ResumenPage() {
         </Card>
         {filterSemana === 0 && (
           <Card>
-            <CardHeader><CardTitle>Categorias por Semana</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{isAnual ? 'Categorias por Mes' : 'Categorias por Semana'}</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={stackedData}>
