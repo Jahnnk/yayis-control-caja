@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useArqueo } from '@/hooks/useArqueo';
@@ -27,7 +27,7 @@ export function ResumenMensualPage() {
   const { profile } = useAuth();
   const { fetchArqueosMes } = useArqueo();
   const { fondos } = useFondos();
-  const meses = getMesesDisponibles();
+  const meses = useMemo(() => getMesesDisponibles(), []);
   const isOwner = profile?.rol === 'owner';
 
   // "0-0" = todo el ano, "YYYY-MM" = mes especifico
