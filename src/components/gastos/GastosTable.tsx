@@ -26,6 +26,13 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
     return gasto.registrado_por === profile?.id;
   }
 
+  function canDelete(gasto: GastoConCategoria): boolean {
+    if (isOwner) return true;
+    // Admin can delete their own records
+    if (profile?.rol === 'admin' && gasto.registrado_por === profile?.id) return true;
+    return false;
+  }
+
   return (
     <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
@@ -80,7 +87,7 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
                         <Pencil size={14} />
                       </Button>
                     )}
-                    {isOwner && (
+                    {canDelete(g) && (
                       <Button variant="ghost" size="icon" onClick={() => onDelete(g.id)} title="Eliminar" className="text-red-500 hover:text-red-700">
                         <Trash2 size={14} />
                       </Button>

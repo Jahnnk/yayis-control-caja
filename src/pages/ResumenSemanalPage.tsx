@@ -61,9 +61,7 @@ export function ResumenSemanalPage() {
       pageSize: 500,
     });
 
-    if (selectedSemana > 0) {
-      await fetchArqueo(selectedSemana, mesLabel, selectedMes.anio, profile?.sede_id ?? undefined);
-    }
+    await fetchArqueo(selectedSemana, mesLabel, selectedMes.anio, profile?.sede_id ?? undefined);
     setLoadingData(false);
   }, [selectedSemana, selectedMes, fetchGastos, fetchArqueo, profile]);
 
@@ -173,25 +171,35 @@ export function ResumenSemanalPage() {
     setShowCerrar(false);
   }
 
-  // Ensure arqueo record exists for this week
+  // Ensure arqueo record exists for this week/month
   useEffect(() => {
-    if (!profile?.sede_id || !fondos || loadingData || selectedSemana === 0) return;
+    if (!profile?.sede_id || !fondos || loadingData) return;
     if (arqueo) {
       setVentasPos(String(arqueo.ventas_efectivo_pos || ''));
       setEfectivoEntregado(String(arqueo.efectivo_entregado_luis || ''));
       return;
     }
 
-    const semanaInfo = semanas.find(s => s.semana === selectedSemana);
-    if (!semanaInfo) return;
+    let fechaInicio: string;
+    let fechaFin: string;
+    if (selectedSemana === 0) {
+      // "Todas las semanas" - rango del mes completo
+      fechaInicio = semanas[0]?.inicio ?? `${selectedMes.anio}-${String(selectedMes.mes).padStart(2, '0')}-01`;
+      fechaFin = semanas[semanas.length - 1]?.fin ?? fechaInicio;
+    } else {
+      const semanaInfo = semanas.find(s => s.semana === selectedSemana);
+      if (!semanaInfo) return;
+      fechaInicio = semanaInfo.inicio;
+      fechaFin = semanaInfo.fin;
+    }
 
     saveArqueo({
       sede_id: profile.sede_id,
       semana: selectedSemana,
       mes: selectedMes.label,
       anio: selectedMes.anio,
-      fecha_inicio: semanaInfo.inicio,
-      fecha_fin: semanaInfo.fin,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
       fondo_inicial_efectivo: Number(fondos.fondo_efectivo),
       fondo_inicial_cuentas: Number(fondos.fondo_cuentas),
       total_gastado_efectivo: 0,
@@ -404,8 +412,8 @@ export function ResumenSemanalPage() {
         </Card>
       )}
 
-      {/* Arqueo Semanal - solo en semana individual */}
-      {isOwner && selectedSemana > 0 && (
+      {/* Arqueo Semanal */}
+      {isOwner && (
         <Card>
           <CardHeader>
             <CardTitle>Arqueo Semanal</CardTitle>
