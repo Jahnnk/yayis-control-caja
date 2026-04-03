@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { Navigate } from 'react-router-dom';
-import { UserPlus, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
-import type { Rol } from '@/types';
+import { UserPlus, ToggleLeft, ToggleRight, Loader2, Pencil, X, Check } from 'lucide-react';
+import type { Rol, Profile } from '@/types';
 
 export function UsuariosPage() {
   const { profile } = useAuth();
@@ -18,6 +18,7 @@ export function UsuariosPage() {
   const { sedes } = useSedes();
   const { addToast } = useToast();
 
+  // Create form
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,6 +26,12 @@ export function UsuariosPage() {
   const [rol, setRol] = useState<Rol>('admin');
   const [sedeId, setSedeId] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNombre, setEditNombre] = useState('');
+  const [editRol, setEditRol] = useState<Rol>('admin');
+  const [editSedeId, setEditSedeId] = useState('');
 
   useEffect(() => {
     fetchUsuarios();
@@ -48,7 +55,7 @@ export function UsuariosPage() {
     const { error } = await createUsuario(email, password, nombre, rol, sedeId);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
-      addToast('Usuario creado. Debe verificar su email.', 'success');
+      addToast('Usuario creado exitosamente', 'success');
       setEmail('');
       setPassword('');
       setNombre('');
@@ -59,19 +66,31 @@ export function UsuariosPage() {
     setSaving(false);
   }
 
+  function startEdit(u: Profile) {
+    setEditingId(u.id);
+    setEditNombre(u.nombre);
+    setEditRol(u.rol);
+    setEditSedeId(u.sede_id ?? '');
+  }
+
+  async function saveEdit() {
+    if (!editingId || !editNombre.trim()) return;
+    const { error } = await updateUsuario(editingId, {
+      nombre: editNombre.trim(),
+      rol: editRol,
+      sede_id: editSedeId,
+    });
+    if (error) addToast(`Error: ${error}`, 'error');
+    else {
+      addToast('Usuario actualizado', 'success');
+      setEditingId(null);
+    }
+  }
+
   async function handleToggleActivo(id: string, activo: boolean) {
     const { error } = await updateUsuario(id, { activo: !activo });
     if (error) addToast(`Error: ${error}`, 'error');
     else addToast(activo ? 'Usuario desactivado' : 'Usuario activado', 'success');
-  }
-
-  async function handleChangeRol(id: string, newRol: Rol) {
-    const { error } = await updateUsuario(id, { rol: newRol });
-    if (error) addToast(`Error: ${error}`, 'error');
-    else {
-      addToast('Rol actualizado', 'success');
-      fetchUsuarios();
-    }
   }
 
   if (loading) return <Loading />;
@@ -121,11 +140,12 @@ export function UsuariosPage() {
                   ))}
                 </Select>
               </div>
-              <div className="flex items-end">
+              <div className="flex items-end gap-2">
                 <Button type="submit" disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Crear Usuario
                 </Button>
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               </div>
             </form>
           </CardContent>
@@ -141,50 +161,102 @@ export function UsuariosPage() {
                   <th className="text-left px-4 py-3 font-medium">Nombre</th>
                   <th className="text-left px-4 py-3 font-medium">Email</th>
                   <th className="text-left px-4 py-3 font-medium">Rol</th>
+                  <th className="text-left px-4 py-3 font-medium">Sede</th>
                   <th className="text-left px-4 py-3 font-medium">Estado</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {usuarios.map(u => (
-                  <tr key={u.id} className="border-b">
-                    <td className="px-4 py-3 font-medium">{u.nombre}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                    <td className="px-4 py-3">
-                      {u.id === profile?.id ? (
-                        <span className="capitalize font-medium text-yayis-green">{u.rol}</span>
-                      ) : (
-                        <Select
-                          value={u.rol}
-                          onChange={e => handleChangeRol(u.id, e.target.value as Rol)}
-                          className="w-28 h-8 text-xs"
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="viewer">Viewer</option>
-                          <option value="owner">Owner</option>
-                        </Select>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        u.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                      }`}>
-                        {u.activo ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.id !== profile?.id && (
-                        <button onClick={() => handleToggleActivo(u.id, u.activo)}>
-                          {u.activo ? (
-                            <ToggleRight size={24} className="text-emerald-500" />
+                {usuarios.map(u => {
+                  const isEditing = editingId === u.id;
+                  const isSelf = u.id === profile?.id;
+                  const sedeName = sedes.find(s => s.id === u.sede_id)?.nombre ?? '-';
+
+                  return (
+                    <tr key={u.id} className="border-b">
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <Input
+                            value={editNombre}
+                            onChange={e => setEditNombre(e.target.value)}
+                            className="h-8 text-sm w-40"
+                          />
+                        ) : (
+                          <span className="font-medium">{u.nombre}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <Select
+                            value={editRol}
+                            onChange={e => setEditRol(e.target.value as Rol)}
+                            className="w-28 h-8 text-xs"
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="viewer">Viewer</option>
+                            <option value="owner">Owner</option>
+                          </Select>
+                        ) : (
+                          <span className={`capitalize font-medium ${isSelf ? 'text-yayis-green' : ''}`}>{u.rol}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <Select
+                            value={editSedeId}
+                            onChange={e => setEditSedeId(e.target.value)}
+                            className="w-32 h-8 text-xs"
+                          >
+                            {sedes.map(s => (
+                              <option key={s.id} value={s.id}>{s.nombre}</option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground">{sedeName}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          u.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {u.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          {isEditing ? (
+                            <>
+                              <Button size="icon" variant="ghost" onClick={saveEdit} title="Guardar">
+                                <Check size={16} className="text-emerald-500" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => setEditingId(null)} title="Cancelar">
+                                <X size={16} className="text-red-500" />
+                              </Button>
+                            </>
                           ) : (
-                            <ToggleLeft size={24} className="text-gray-400" />
+                            <>
+                              {!isSelf && (
+                                <Button size="icon" variant="ghost" onClick={() => startEdit(u)} title="Editar">
+                                  <Pencil size={14} />
+                                </Button>
+                              )}
+                              {!isSelf && (
+                                <button onClick={() => handleToggleActivo(u.id, u.activo)} title={u.activo ? 'Desactivar' : 'Activar'}>
+                                  {u.activo ? (
+                                    <ToggleRight size={24} className="text-emerald-500" />
+                                  ) : (
+                                    <ToggleLeft size={24} className="text-gray-400" />
+                                  )}
+                                </button>
+                              )}
+                            </>
                           )}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
