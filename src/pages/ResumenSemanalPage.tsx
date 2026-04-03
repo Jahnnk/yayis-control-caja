@@ -145,14 +145,24 @@ export function ResumenSemanalPage() {
     });
   }, [gastos, fondos, loadingData]);
 
+  // Calculated arqueo values
+  const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 500;
+  const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
+  const gastadoEfectivo = resumen ? roundTwo(fondoEf - resumen.disponibleEfectivo) : 0;
+  const gastadoCuentas = resumen ? roundTwo(fondoCt - resumen.disponibleCuentas) : 0;
+  const ventasNum = parseFloat(ventasPos) || 0;
+  const entregadoNum = parseFloat(efectivoEntregado) || 0;
+  const efectivoUsadoDeVentas = roundTwo(Math.max(0, gastadoEfectivo - fondoEf));
+  const debiaEntregar = roundTwo(ventasNum - efectivoUsadoDeVentas);
+  const diferenciaCaja = roundTwo(entregadoNum - debiaEntregar);
+
   async function handleCerrarSemana() {
     if (!arqueo?.id || !resumen || !fondos) return;
-    const ventas = parseFloat(ventasPos) || 0;
-    const entregado = parseFloat(efectivoEntregado) || 0;
-    const fondoInicialEf = Number(fondos.fondo_efectivo);
-    const totalGastadoEf = fondoInicialEf - resumen.disponibleEfectivo;
 
-    const { error } = await cerrarSemana(arqueo.id, ventas, entregado, fondoInicialEf, totalGastadoEf);
+    const { error } = await cerrarSemana(
+      arqueo.id, ventasNum, entregadoNum,
+      fondoEf, gastadoEfectivo, gastadoCuentas, fondoCt,
+    );
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Semana cerrada exitosamente', 'success');
@@ -397,31 +407,47 @@ export function ResumenSemanalPage() {
           <CardHeader>
             <CardTitle>Arqueo Semanal</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-muted-foreground">Fondo Efectivo</p>
-                <p className="font-bold text-lg">{formatMonto(fondos ? Number(fondos.fondo_efectivo) : 500)}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-muted-foreground">Fondo Cuentas</p>
-                <p className="font-bold text-lg">{formatMonto(fondos ? Number(fondos.fondo_cuentas) : 500)}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-muted-foreground">Gastado Efectivo</p>
-                <p className="font-bold text-lg">{formatMonto(roundTwo((fondos ? Number(fondos.fondo_efectivo) : 500) - resumen.disponibleEfectivo))}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-muted-foreground">Gastado Cuentas</p>
-                <p className="font-bold text-lg">{formatMonto(roundTwo((fondos ? Number(fondos.fondo_cuentas) : 500) - resumen.disponibleCuentas))}</p>
+          <CardContent className="space-y-5">
+            {/* Situacion de la semana */}
+            <div>
+              <h4 className="text-sm font-bold text-yayis-dark mb-3">Situacion de la Semana</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    <tr className="border-b">
+                      <td className="py-2 text-muted-foreground">Fondo caja chica (efectivo)</td>
+                      <td className="py-2 text-right font-medium">{formatMonto(fondoEf)}</td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-muted-foreground">Fondo cuentas (Yape/Plin/Transferencia)</td>
+                      <td className="py-2 text-right font-medium">{formatMonto(fondoCt)}</td>
+                    </tr>
+                    <tr className="border-b bg-red-50/50">
+                      <td className="py-2 font-medium">Total gastado en efectivo</td>
+                      <td className="py-2 text-right font-bold text-red-600">{formatMonto(gastadoEfectivo)}</td>
+                    </tr>
+                    <tr className="border-b bg-red-50/50">
+                      <td className="py-2 font-medium">Total gastado en cuentas</td>
+                      <td className="py-2 text-right font-bold text-red-600">{formatMonto(gastadoCuentas)}</td>
+                    </tr>
+                    {gastadoEfectivo > fondoEf && (
+                      <tr className="border-b bg-amber-50">
+                        <td className="py-2 text-amber-700">Luis uso de las ventas para cubrir gastos</td>
+                        <td className="py-2 text-right font-bold text-amber-700">{formatMonto(efectivoUsadoDeVentas)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
             {!arqueo?.cerrado && (
               <div className="border-t pt-4 space-y-4">
+                <h4 className="text-sm font-bold text-yayis-dark">Datos para el Cierre</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium">Ventas en efectivo (POS/Byte)</label>
+                    <label className="text-sm font-medium">Ventas en efectivo de la semana (S/)</label>
+                    <p className="text-xs text-muted-foreground mb-1">Monto total de ventas cobradas en efectivo</p>
                     <Input
                       type="number"
                       step="0.01"
@@ -432,7 +458,8 @@ export function ResumenSemanalPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Efectivo entregado por Luis</label>
+                    <label className="text-sm font-medium">Efectivo que Luis entrega (S/)</label>
+                    <p className="text-xs text-muted-foreground mb-1">Dinero fisico que Luis te devuelve</p>
                     <Input
                       type="number"
                       step="0.01"
@@ -444,13 +471,61 @@ export function ResumenSemanalPage() {
                   </div>
                 </div>
 
-                {ventasPos && (
-                  <div className="bg-yayis-cream rounded-lg p-4 space-y-2 text-sm">
-                    <p><strong>Monto a reponer efectivo:</strong> {formatMonto(roundTwo((fondos ? Number(fondos.fondo_efectivo) : 500) - resumen.disponibleEfectivo - (parseFloat(ventasPos) || 0)))}</p>
-                    <p><strong>Monto a reponer cuentas:</strong> {formatMonto(roundTwo((fondos ? Number(fondos.fondo_cuentas) : 500) - resumen.disponibleCuentas))}</p>
-                    {efectivoEntregado && (
-                      <p><strong>Diferencia de caja:</strong> {formatMonto(roundTwo((parseFloat(efectivoEntregado) || 0) - resumen.disponibleEfectivo))}</p>
-                    )}
+                {ventasNum > 0 && (
+                  <div className="bg-white border-2 border-yayis-green/20 rounded-lg p-5 space-y-3">
+                    <h4 className="text-sm font-bold text-yayis-green">Resultado del Arqueo</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <tbody>
+                          <tr className="border-b">
+                            <td className="py-2">Ventas en efectivo</td>
+                            <td className="py-2 text-right font-medium">{formatMonto(ventasNum)}</td>
+                          </tr>
+                          {efectivoUsadoDeVentas > 0 && (
+                            <tr className="border-b">
+                              <td className="py-2 text-amber-700">(-) Usado de ventas para cubrir gastos</td>
+                              <td className="py-2 text-right font-medium text-amber-700">- {formatMonto(efectivoUsadoDeVentas)}</td>
+                            </tr>
+                          )}
+                          <tr className="border-b bg-blue-50">
+                            <td className="py-2 font-medium">Luis deberia entregar</td>
+                            <td className="py-2 text-right font-bold text-blue-700">{formatMonto(debiaEntregar)}</td>
+                          </tr>
+                          {entregadoNum > 0 && (
+                            <>
+                              <tr className="border-b">
+                                <td className="py-2">Luis entrego</td>
+                                <td className="py-2 text-right font-medium">{formatMonto(entregadoNum)}</td>
+                              </tr>
+                              <tr className={`border-b ${diferenciaCaja === 0 ? 'bg-emerald-50' : diferenciaCaja > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                <td className="py-2 font-medium">
+                                  {diferenciaCaja === 0 ? 'Caja cuadrada' : diferenciaCaja > 0 ? 'Sobrante en caja' : 'Faltante en caja'}
+                                </td>
+                                <td className={`py-2 text-right font-bold ${diferenciaCaja >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                  {formatMonto(Math.abs(diferenciaCaja))}
+                                </td>
+                              </tr>
+                            </>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="border-t pt-3 mt-3">
+                      <h5 className="text-xs font-bold text-muted-foreground uppercase mb-2">Tu debes reponer</h5>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-yayis-cream rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground">Reponer Efectivo</p>
+                          <p className="text-xl font-bold text-yayis-green">{formatMonto(fondoEf)}</p>
+                          <p className="text-xs text-muted-foreground">Para dejar caja chica completa</p>
+                        </div>
+                        <div className="bg-yayis-cream rounded-lg p-3 text-center">
+                          <p className="text-xs text-muted-foreground">Reponer Cuentas</p>
+                          <p className="text-xl font-bold text-yayis-green">{formatMonto(gastadoCuentas)}</p>
+                          <p className="text-xs text-muted-foreground">Lo gastado en transferencias</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -462,13 +537,49 @@ export function ResumenSemanalPage() {
             )}
 
             {arqueo?.cerrado && (
-              <div className="border-t pt-4 bg-emerald-50 rounded-lg p-4 space-y-2 text-sm">
-                <p className="font-bold text-emerald-700 mb-2">Semana Cerrada</p>
-                <p>Ventas en efectivo: {formatMonto(Number(arqueo.ventas_efectivo_pos))}</p>
-                <p>Efectivo entregado: {formatMonto(Number(arqueo.efectivo_entregado_luis))}</p>
-                <p>Monto repuesto efectivo: {formatMonto(Number(arqueo.monto_reponer_efectivo))}</p>
-                <p>Monto repuesto cuentas: {formatMonto(Number(arqueo.monto_reponer_cuentas))}</p>
-                <p>Diferencia de caja: {formatMonto(Number(arqueo.diferencia_caja))}</p>
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                  <CheckCircle size={18} />
+                  Semana Cerrada
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground">Ventas en efectivo</td>
+                        <td className="py-2 text-right font-medium">{formatMonto(Number(arqueo.ventas_efectivo_pos))}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground">Efectivo entregado por Luis</td>
+                        <td className="py-2 text-right font-medium">{formatMonto(Number(arqueo.efectivo_entregado_luis))}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground">Gastado en efectivo</td>
+                        <td className="py-2 text-right font-medium">{formatMonto(Number(arqueo.total_gastado_efectivo))}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground">Gastado en cuentas</td>
+                        <td className="py-2 text-right font-medium">{formatMonto(Number(arqueo.total_gastado_cuentas))}</td>
+                      </tr>
+                      <tr className={`border-b ${Number(arqueo.diferencia_caja) >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                        <td className="py-2 font-medium">
+                          {Number(arqueo.diferencia_caja) === 0 ? 'Caja cuadrada' : Number(arqueo.diferencia_caja) > 0 ? 'Sobrante' : 'Faltante'}
+                        </td>
+                        <td className={`py-2 text-right font-bold ${Number(arqueo.diferencia_caja) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {formatMonto(Math.abs(Number(arqueo.diferencia_caja)))}
+                        </td>
+                      </tr>
+                      <tr className="border-b bg-yayis-cream">
+                        <td className="py-2 font-bold">Repuesto efectivo</td>
+                        <td className="py-2 text-right font-bold text-yayis-green">{formatMonto(Number(arqueo.monto_reponer_efectivo))}</td>
+                      </tr>
+                      <tr className="bg-yayis-cream">
+                        <td className="py-2 font-bold">Repuesto cuentas</td>
+                        <td className="py-2 text-right font-bold text-yayis-green">{formatMonto(Number(arqueo.monto_reponer_cuentas))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </CardContent>
