@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { ClipboardList, BarChart3, TrendingUp, Settings, Users, X } from 'lucide-react';
+import { ClipboardList, BarChart3, Settings, Users, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
@@ -9,8 +9,7 @@ interface SidebarProps {
 
 const navItems = [
   { to: '/gastos', label: 'Registro de Gastos', icon: ClipboardList, roles: ['owner', 'admin', 'viewer'] },
-  { to: '/semanal', label: 'Resumen Semanal', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },
-  { to: '/mensual', label: 'Resumen Mensual', icon: TrendingUp, roles: ['owner', 'admin', 'viewer'] },
+  { to: '/resumen', label: 'Resumen', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },
   { to: '/configuracion', label: 'Configuracion', icon: Settings, roles: ['owner'] },
   { to: '/usuarios', label: 'Usuarios', icon: Users, roles: ['owner'] },
 ] as const;
