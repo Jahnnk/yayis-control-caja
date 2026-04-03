@@ -224,7 +224,7 @@ export function ResumenMensualPage() {
           onChange={e => setSelectedPeriodo(e.target.value)}
           className="w-52"
         >
-          <option value="0-0">Todo el Ano {currentYear}</option>
+          <option value="0-0">Todo el Año {currentYear}</option>
           {meses.map(m => (
             <option key={`${m.anio}-${m.mes}`} value={`${m.anio}-${m.mes}`}>{m.label}</option>
           ))}

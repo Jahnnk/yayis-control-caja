@@ -266,7 +266,7 @@ export function ResumenPage() {
             <option value={currentYear - 1}>{currentYear - 1}</option>
           </Select>
           <Select value={filterMes} onChange={e => { setFilterMes(parseInt(e.target.value)); setFilterSemana(0); }} className="w-44">
-            <option value={0}>Todo el Ano</option>
+            <option value={0}>Todo el Año</option>
             {Array.from({ length: 12 }, (_, i) => {
               const d = new Date(filterAnio, i, 1);
               const label = d.toLocaleDateString('es-PE', { month: 'long' });
