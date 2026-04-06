@@ -15,8 +15,9 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes, getMesesDisponibles } from '@/lib/dates';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, Lock, Plus, Trash2, Loader2 } from 'lucide-react';
-import type { MetodoPago } from '@/types';
+import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, Lock, Plus, Trash2, Loader2, History } from 'lucide-react';
+import { useGastos } from '@/hooks/useGastos';
+import type { MetodoPago, GastoConCategoria } from '@/types';
 
 const COLORS = ['#004C40', '#098B5F', '#10B981', '#34D399', '#6EE7B7', '#F59E0B', '#DC2626', '#8B5CF6', '#EC4899', '#06B6D4'];
 
@@ -34,6 +35,7 @@ export function ResumenPage() {
   const { fondos } = useFondos();
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
+  const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
   const { addToast } = useToast();
 
   const today = getTodayLima();
@@ -76,6 +78,10 @@ export function ResumenPage() {
   const [repoMonto, setRepoMonto] = useState('');
   const [repoNotas, setRepoNotas] = useState('');
   const [repoSaving, setRepoSaving] = useState(false);
+
+  // Historico
+  const [showHistorico, setShowHistorico] = useState(false);
+  const [historicoPage, setHistoricoPage] = useState(0);
 
   const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 500;
   const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
@@ -236,6 +242,18 @@ export function ResumenPage() {
   // Caja de Luis
   const cajaEfectivo = roundTwo(fondoEf - saldo.deudaEfectivo + saldo.repuestoEfectivo);
   const cajaCuentas = roundTwo(fondoCt - saldo.deudaCuentas + saldo.repuestoCuentas);
+
+  // Load historico when opened or filters change
+  useEffect(() => {
+    if (!showHistorico) return;
+    fetchHistorico({
+      semana: (!isAnual && filterSemana > 0) ? filterSemana : undefined,
+      mes: isAnual ? undefined : mesLabel,
+      estado: 'pagado',
+      page: historicoPage,
+      pageSize: 20,
+    });
+  }, [showHistorico, filterSemana, mesLabel, isAnual, historicoPage, fetchHistorico]);
 
   if (loading) return <Loading text="Cargando resumen..." />;
 
@@ -466,6 +484,66 @@ export function ResumenPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Historico de gastos pagados */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Historico de Gastos</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => { setShowHistorico(!showHistorico); setHistoricoPage(0); }}>
+            <History size={16} className="mr-2" />
+            {showHistorico ? 'Ocultar' : 'Ver Historico'}
+          </Button>
+        </CardHeader>
+        {showHistorico && (
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-3">Gastos ya pagados{!isAnual ? ` - ${mesLabel}` : ` - ${filterAnio}`}{filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}</p>
+            {historicoGastos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No hay gastos pagados en este periodo</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left px-3 py-2 font-medium">Fecha</th>
+                        <th className="text-left px-3 py-2 font-medium">Descripcion</th>
+                        <th className="text-left px-3 py-2 font-medium">Categoria</th>
+                        <th className="text-left px-3 py-2 font-medium">Pago</th>
+                        <th className="text-right px-3 py-2 font-medium">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicoGastos.map(g => (
+                        <tr key={g.id} className="border-b">
+                          <td className="px-3 py-2 whitespace-nowrap">{g.fecha}</td>
+                          <td className="px-3 py-2">{g.descripcion}</td>
+                          <td className="px-3 py-2">{g.categorias?.nombre ?? '-'}</td>
+                          <td className="px-3 py-2">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${g.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+                              {g.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium">{formatMonto(Number(g.monto))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {historicoTotal > 20 && (
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-xs text-muted-foreground">{historicoTotal} registros</p>
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" onClick={() => setHistoricoPage(p => Math.max(0, p - 1))} disabled={historicoPage === 0}>Anterior</Button>
+                      <span className="flex items-center px-2 text-xs">{historicoPage + 1} / {Math.ceil(historicoTotal / 20)}</span>
+                      <Button variant="outline" size="sm" onClick={() => setHistoricoPage(p => p + 1)} disabled={historicoPage >= Math.ceil(historicoTotal / 20) - 1}>Siguiente</Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {/* Arqueo Semanal - solo cuando se selecciona semana especifica */}
       {isOwner && filterSemana > 0 && (

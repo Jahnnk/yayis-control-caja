@@ -44,7 +44,7 @@ export function RegistroGastosPage() {
       mes: filterSemana ? currentMes : undefined,
       categoria_id: filterCategoria || undefined,
       metodo_pago: filterMetodoPago || undefined,
-      estado: filterEstado || undefined,
+      estado: filterEstado === 'todos' ? undefined : (filterEstado || 'pendiente'),
       busqueda: busqueda || undefined,
       page,
       pageSize,
@@ -124,10 +124,10 @@ export function RegistroGastosPage() {
           <option value="efectivo">Efectivo</option>
           <option value="cuentas">Cuentas</option>
         </Select>
-        <Select value={filterEstado} onChange={e => { setFilterEstado(e.target.value); setPage(0); }} className="w-36">
-          <option value="">Todo estado</option>
-          <option value="pagado">Pagado</option>
-          <option value="pendiente">Pendiente</option>
+        <Select value={filterEstado} onChange={e => { setFilterEstado(e.target.value); setPage(0); }} className="w-40">
+          <option value="">Pendientes</option>
+          <option value="todos">Todos los estados</option>
+          <option value="pagado">Solo pagados</option>
         </Select>
       </div>
 
