@@ -65,6 +65,8 @@ export function ResumenPage() {
   const [totalPendiente, setTotalPendiente] = useState(0);
   const [totalPagado, setTotalPagado] = useState(0);
   const [topCategorias, setTopCategorias] = useState<{ nombre: string; total: number; porcentaje: number }[]>([]);
+  const [categoriasEfectivo, setCategoriasEfectivo] = useState<{ nombre: string; total: number }[]>([]);
+  const [categoriasCuentas, setCategoriasCuentas] = useState<{ nombre: string; total: number }[]>([]);
   const [allCatNames, setAllCatNames] = useState<string[]>([]);
 
   // Arqueo
@@ -113,6 +115,8 @@ export function ResumenPage() {
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
+    const catEfectivoMap = new Map<string, number>();
+    const catCuentasMap = new Map<string, number>();
     let sumEf = 0, sumCt = 0, sumTotal = 0, sumPend = 0, sumPagado = 0;
 
     if (isAnual) {
@@ -141,9 +145,11 @@ export function ResumenPage() {
       if (metodo === 'efectivo') {
         s.efectivo = roundTwo(s.efectivo + monto);
         sumEf = roundTwo(sumEf + monto);
+        catEfectivoMap.set(catName, roundTwo((catEfectivoMap.get(catName) ?? 0) + monto));
       } else {
         s.cuentas = roundTwo(s.cuentas + monto);
         sumCt = roundTwo(sumCt + monto);
+        catCuentasMap.set(catName, roundTwo((catCuentasMap.get(catName) ?? 0) + monto));
       }
 
       if (estado === 'pagado') {
@@ -171,6 +177,10 @@ export function ResumenPage() {
       nombre, total,
       porcentaje: sumTotal > 0 ? roundTwo((total / sumTotal) * 100) : 0,
     })));
+
+    // Categorias por metodo de pago
+    setCategoriasEfectivo(Array.from(catEfectivoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCategoriasCuentas(Array.from(catCuentasMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
     setAllCatNames(sorted.map(([n]) => n));
 
     // Arqueo (only when specific week selected)
@@ -361,6 +371,60 @@ export function ResumenPage() {
               <p className="text-xs text-muted-foreground">Fondo: {formatMonto(fondoCt)}</p>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Desglose por categoria: Efectivo vs Cuentas */}
+      {isOwner && (totalEfectivo > 0 || totalCuentas > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {categoriasEfectivo.length > 0 && (
+            <Card className="border-yayis-green/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet size={18} className="text-yayis-green" />
+                  Gastos en Efectivo: {formatMonto(totalEfectivo)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                  <tbody>
+                    {categoriasEfectivo.map(c => (
+                      <tr key={c.nombre} className="border-b">
+                        <td className="py-1.5">{c.nombre}</td>
+                        <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                        <td className="text-right py-1.5 text-muted-foreground">{totalEfectivo > 0 ? roundTwo((c.total / totalEfectivo) * 100) : 0}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+          {categoriasCuentas.length > 0 && (
+            <Card className="border-blue-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CreditCard size={18} className="text-blue-600" />
+                  Gastos en Cuentas: {formatMonto(totalCuentas)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                  <tbody>
+                    {categoriasCuentas.map(c => (
+                      <tr key={c.nombre} className="border-b">
+                        <td className="py-1.5">{c.nombre}</td>
+                        <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                        <td className="text-right py-1.5 text-muted-foreground">{totalCuentas > 0 ? roundTwo((c.total / totalCuentas) * 100) : 0}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
