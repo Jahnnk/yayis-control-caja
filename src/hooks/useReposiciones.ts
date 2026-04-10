@@ -19,11 +19,12 @@ export function useReposiciones() {
     if (!sid) return;
     setLoading(true);
 
-    // 1. Total gastado: suma de TODOS los gastos por metodo (sin importar estado)
+    // 1. Total deuda: suma de gastos PENDIENTES por metodo
     const { data: gastosPendientes } = await supabase
       .from('gastos')
       .select('metodo_pago, monto')
-      .eq('sede_id', sid);
+      .eq('sede_id', sid)
+      .eq('estado', 'pendiente');
 
     let deudaEf = 0, deudaCt = 0;
     for (const g of gastosPendientes ?? []) {
