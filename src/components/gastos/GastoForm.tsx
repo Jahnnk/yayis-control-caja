@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loader2, Plus } from 'lucide-react';
-import type { GastoFormData, MetodoPago, EstadoGasto } from '@/types';
+import type { GastoFormData, MetodoPago } from '@/types';
 
 interface GastoFormProps {
   onSaved: () => void;
@@ -31,7 +31,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     categoria_id: editData?.categoria_id ?? '',
     metodo_pago: editData?.metodo_pago ?? 'efectivo',
     monto: editData?.monto ?? '',
-    estado: editData?.estado ?? 'pagado',
+    estado: 'pendiente',
     notas: editData?.notas ?? '',
   });
   const [saving, setSaving] = useState(false);
@@ -179,19 +179,6 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
             required
             className="mt-1"
           />
-        </div>
-
-        {/* Estado */}
-        <div>
-          <label className="text-sm font-medium">Estado</label>
-          <Select
-            value={form.estado}
-            onChange={e => updateField('estado', e.target.value as EstadoGasto)}
-            className="mt-1"
-          >
-            <option value="pagado">Pagado</option>
-            <option value="pendiente">Pendiente</option>
-          </Select>
         </div>
 
         {/* Notas */}
