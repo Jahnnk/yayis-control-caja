@@ -19,12 +19,11 @@ export function useReposiciones() {
     if (!sid) return;
     setLoading(true);
 
-    // 1. Total deuda: suma de gastos con estado 'pendiente' por metodo
+    // 1. Total gastado: suma de TODOS los gastos por metodo (sin importar estado)
     const { data: gastosPendientes } = await supabase
       .from('gastos')
       .select('metodo_pago, monto')
-      .eq('sede_id', sid)
-      .eq('estado', 'pendiente');
+      .eq('sede_id', sid);
 
     let deudaEf = 0, deudaCt = 0;
     for (const g of gastosPendientes ?? []) {
@@ -54,25 +53,6 @@ export function useReposiciones() {
       saldoEfectivo: roundTwo(deudaEf - repEf),
       saldoCuentas: roundTwo(deudaCt - repCt),
     });
-
-    // 3. Si saldo <= 0, marcar gastos pendientes como pagados
-    if (deudaEf > 0 && repEf >= deudaEf) {
-      await supabase
-        .from('gastos')
-        .update({ estado: 'pagado' })
-        .eq('sede_id', sid)
-        .eq('estado', 'pendiente')
-        .eq('metodo_pago', 'efectivo');
-    }
-
-    if (deudaCt > 0 && repCt >= deudaCt) {
-      await supabase
-        .from('gastos')
-        .update({ estado: 'pagado' })
-        .eq('sede_id', sid)
-        .eq('estado', 'pendiente')
-        .eq('metodo_pago', 'cuentas');
-    }
 
     setLoading(false);
   }, [profile]);
