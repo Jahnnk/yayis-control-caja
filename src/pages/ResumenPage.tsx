@@ -67,6 +67,12 @@ export function ResumenPage() {
   const [topCategorias, setTopCategorias] = useState<{ nombre: string; total: number; porcentaje: number }[]>([]);
   const [categoriasEfectivo, setCategoriasEfectivo] = useState<{ nombre: string; total: number }[]>([]);
   const [categoriasCuentas, setCategoriasCuentas] = useState<{ nombre: string; total: number }[]>([]);
+  const [catEfPagado, setCatEfPagado] = useState<{ nombre: string; total: number }[]>([]);
+  const [catCtPagado, setCatCtPagado] = useState<{ nombre: string; total: number }[]>([]);
+  const [totalEfPagado, setTotalEfPagado] = useState(0);
+  const [totalCtPagado, setTotalCtPagado] = useState(0);
+  const [totalEfPend, setTotalEfPend] = useState(0);
+  const [totalCtPend, setTotalCtPend] = useState(0);
   const [allCatNames, setAllCatNames] = useState<string[]>([]);
 
   // Arqueo
@@ -117,6 +123,11 @@ export function ResumenPage() {
     const catTotalMap = new Map<string, number>();
     const catEfectivoMap = new Map<string, number>();
     const catCuentasMap = new Map<string, number>();
+    const catEfPagadoMap = new Map<string, number>();
+    const catCtPagadoMap = new Map<string, number>();
+    const catEfPendMap = new Map<string, number>();
+    const catCtPendMap = new Map<string, number>();
+    let sumEfPagado = 0, sumCtPagado = 0, sumEfPend = 0, sumCtPend = 0;
     let sumEf = 0, sumCt = 0, sumTotal = 0, sumPend = 0, sumPagado = 0;
 
     if (isAnual) {
@@ -154,9 +165,23 @@ export function ResumenPage() {
 
       if (estado === 'pagado') {
         sumPagado = roundTwo(sumPagado + monto);
+        if (metodo === 'efectivo') {
+          catEfPagadoMap.set(catName, roundTwo((catEfPagadoMap.get(catName) ?? 0) + monto));
+          sumEfPagado = roundTwo(sumEfPagado + monto);
+        } else {
+          catCtPagadoMap.set(catName, roundTwo((catCtPagadoMap.get(catName) ?? 0) + monto));
+          sumCtPagado = roundTwo(sumCtPagado + monto);
+        }
       } else {
         s.pendiente = roundTwo(s.pendiente + monto);
         sumPend = roundTwo(sumPend + monto);
+        if (metodo === 'efectivo') {
+          catEfPendMap.set(catName, roundTwo((catEfPendMap.get(catName) ?? 0) + monto));
+          sumEfPend = roundTwo(sumEfPend + monto);
+        } else {
+          catCtPendMap.set(catName, roundTwo((catCtPendMap.get(catName) ?? 0) + monto));
+          sumCtPend = roundTwo(sumCtPend + monto);
+        }
       }
 
       s.porCategoria[catName] = roundTwo((s.porCategoria[catName] ?? 0) + monto);
@@ -179,8 +204,16 @@ export function ResumenPage() {
     })));
 
     // Categorias por metodo de pago
-    setCategoriasEfectivo(Array.from(catEfectivoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
-    setCategoriasCuentas(Array.from(catCuentasMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCategoriasEfectivo(Array.from(catEfPendMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCategoriasCuentas(Array.from(catCtPendMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCatEfPagado(Array.from(catEfPagadoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCatCtPagado(Array.from(catCtPagadoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setTotalEfPagado(sumEfPagado);
+    setTotalCtPagado(sumCtPagado);
+    setTotalEfectivo(sumEf);
+    setTotalCuentas(sumCt);
+    setTotalEfPend(sumEfPend);
+    setTotalCtPend(sumCtPend);
     setAllCatNames(sorted.map(([n]) => n));
 
     // Arqueo (only when specific week selected)
@@ -346,15 +379,15 @@ export function ResumenPage() {
           <Card className="border-yayis-green/30 bg-yayis-cream">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span></div>
-              <p className="text-xl font-bold text-yayis-green">{formatMonto(totalEfectivo)}</p>
-              <p className="text-xs text-muted-foreground">Gastado en efectivo por Luis</p>
+              <p className="text-xl font-bold text-yayis-green">{formatMonto(saldo.deudaEfectivo)}</p>
+              <p className="text-xs text-muted-foreground">Pendiente en efectivo</p>
             </CardContent>
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer Cuentas</span></div>
-              <p className="text-xl font-bold text-blue-600">{formatMonto(totalCuentas)}</p>
-              <p className="text-xs text-muted-foreground">Gastado en transferencias</p>
+              <p className="text-xl font-bold text-blue-600">{formatMonto(saldo.deudaCuentas)}</p>
+              <p className="text-xs text-muted-foreground">Pendiente en cuentas</p>
             </CardContent>
           </Card>
           <Card className={`border-2 ${cajaEfectivo >= fondoEf ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
@@ -374,57 +407,117 @@ export function ResumenPage() {
         </div>
       )}
 
-      {/* Desglose por categoria: Efectivo vs Cuentas */}
-      {isOwner && (totalEfectivo > 0 || totalCuentas > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {categoriasEfectivo.length > 0 && (
-            <Card className="border-yayis-green/20">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Wallet size={18} className="text-yayis-green" />
-                  Gastos en Efectivo: {formatMonto(totalEfectivo)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
-                  <tbody>
-                    {categoriasEfectivo.map(c => (
-                      <tr key={c.nombre} className="border-b">
-                        <td className="py-1.5">{c.nombre}</td>
-                        <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                        <td className="text-right py-1.5 text-muted-foreground">{totalEfectivo > 0 ? roundTwo((c.total / totalEfectivo) * 100) : 0}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          )}
-          {categoriasCuentas.length > 0 && (
-            <Card className="border-blue-200">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <CreditCard size={18} className="text-blue-600" />
-                  Gastos en Cuentas: {formatMonto(totalCuentas)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
-                  <tbody>
-                    {categoriasCuentas.map(c => (
-                      <tr key={c.nombre} className="border-b">
-                        <td className="py-1.5">{c.nombre}</td>
-                        <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                        <td className="text-right py-1.5 text-muted-foreground">{totalCuentas > 0 ? roundTwo((c.total / totalCuentas) * 100) : 0}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          )}
+      {/* Desglose por categoria: Ya repuesto (pagado) */}
+      {isOwner && (totalEfPagado > 0 || totalCtPagado > 0) && (
+        <div>
+          <h3 className="text-base font-bold text-yayis-dark mb-3">Desglose de lo Repuesto (gastos ya pagados)</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {catEfPagado.length > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Wallet size={18} className="text-emerald-600" />
+                    Repuesto Efectivo: {formatMonto(totalEfPagado)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {catEfPagado.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPagado > 0 ? roundTwo((c.total / totalEfPagado) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+            {catCtPagado.length > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard size={18} className="text-emerald-600" />
+                    Repuesto Cuentas: {formatMonto(totalCtPagado)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {catCtPagado.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPagado > 0 ? roundTwo((c.total / totalCtPagado) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Desglose por categoria: Pendiente (aun no repuesto) */}
+      {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
+        <div>
+          <h3 className="text-base font-bold text-amber-700 mb-3">Desglose Pendiente por Reponer</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {categoriasEfectivo.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Wallet size={18} className="text-amber-600" />
+                    Pendiente Efectivo: {formatMonto(totalEfPend)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {categoriasEfectivo.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPend > 0 ? roundTwo((c.total / totalEfPend) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+            {categoriasCuentas.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard size={18} className="text-amber-600" />
+                    Pendiente Cuentas: {formatMonto(totalCtPend)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {categoriasCuentas.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPend > 0 ? roundTwo((c.total / totalCtPend) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 

@@ -58,6 +58,56 @@ export function useReposiciones() {
     setLoading(false);
   }, [profile]);
 
+  /**
+   * Marca como "pagado" los gastos pendientes mas antiguos cuya suma
+   * sea exactamente igual al monto de la reposicion.
+   * Va sumando gastos del mas viejo al mas nuevo hasta llegar al monto exacto.
+   */
+  const marcarGastosPagados = useCallback(async (
+    sedeId: string,
+    metodoPago: 'efectivo' | 'cuentas',
+    montoReposicion: number,
+  ) => {
+    // Obtener gastos pendientes del metodo, ordenados por fecha (mas antiguos primero)
+    const { data: pendientes } = await supabase
+      .from('gastos')
+      .select('id, monto')
+      .eq('sede_id', sedeId)
+      .eq('estado', 'pendiente')
+      .eq('metodo_pago', metodoPago)
+      .order('fecha', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (!pendientes || pendientes.length === 0) return;
+
+    let acumulado = 0;
+    const idsParaMarcar: string[] = [];
+
+    for (const g of pendientes) {
+      const monto = Number(g.monto);
+      const nuevoAcumulado = roundTwo(acumulado + monto);
+
+      if (nuevoAcumulado <= montoReposicion) {
+        idsParaMarcar.push(g.id as string);
+        acumulado = nuevoAcumulado;
+      }
+
+      // Si ya llegamos al monto exacto, dejamos de buscar
+      if (acumulado === montoReposicion) break;
+
+      // Si nos pasamos, no incluimos este gasto
+      if (nuevoAcumulado > montoReposicion) continue;
+    }
+
+    // Solo marcar si la suma coincide exactamente con el monto de reposicion
+    if (idsParaMarcar.length > 0 && acumulado === montoReposicion) {
+      await supabase
+        .from('gastos')
+        .update({ estado: 'pagado' })
+        .in('id', idsParaMarcar);
+    }
+  }, []);
+
   const createReposicion = useCallback(async (
     fecha: string,
     metodoPago: 'efectivo' | 'cuentas',
@@ -77,10 +127,13 @@ export function useReposiciones() {
 
     if (error) return { error: error.message };
 
-    // Recalcular saldo despues de insertar
+    // Marcar gastos como pagados si la suma coincide
+    await marcarGastosPagados(profile.sede_id, metodoPago, monto);
+
+    // Recalcular saldo
     await fetchSaldo(profile.sede_id);
     return { error: null };
-  }, [profile, fetchSaldo]);
+  }, [profile, fetchSaldo, marcarGastosPagados]);
 
   const deleteReposicion = useCallback(async (id: string) => {
     const { error } = await supabase.from('reposiciones').delete().eq('id', id);
