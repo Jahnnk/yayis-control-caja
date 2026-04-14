@@ -82,7 +82,7 @@ export function useGastos() {
       categoria_id: formData.categoria_id,
       metodo_pago: formData.metodo_pago,
       monto: parseFloat(formData.monto),
-      estado: formData.estado,
+      estado: 'pendiente' as const,
       notas: formData.notas.trim() || null,
       semana,
       mes,
