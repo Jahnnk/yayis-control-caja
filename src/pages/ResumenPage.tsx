@@ -266,12 +266,13 @@ export function ResumenPage() {
     }
     const idsEnDuplicados = new Set<string>();
     for (const [, gs] of dupMap) {
-      if (gs.length >= 2) {
+      if (gs.length >= 2 && gs[0]) {
+        const first = gs[0];
         revisar.push({
           tipo: 'duplicado',
           severidad: 'alta',
-          monto: gs[0].monto,
-          descripcion: gs[0].descripcion,
+          monto: first.monto,
+          descripcion: first.descripcion,
           gastos: gs.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)),
         });
         for (const g of gs) idsEnDuplicados.add(`${g.descripcion.toLowerCase()}|${g.monto.toFixed(2)}|${g.fecha}`);
@@ -292,7 +293,7 @@ export function ResumenPage() {
       if (distinctDescs.size < 2) continue; // ya cubierto por duplicado exacto
       // Filtrar gastos que ya estan en un grupo de "duplicado exacto"
       const restantes = gs.filter(g => !idsEnDuplicados.has(`${g.descripcion.toLowerCase()}|${g.monto.toFixed(2)}|${g.fecha}`));
-      if (restantes.length < 2) continue;
+      if (restantes.length < 2 || !restantes[0]) continue;
       revisar.push({
         tipo: 'monto-similar',
         severidad: 'media',
@@ -420,6 +421,8 @@ export function ResumenPage() {
       : `Sem ${s.semana}`;
     return { name, ...s.porCategoria };
   });
+
+  const ultimaReposicion = reposiciones[0];
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -902,21 +905,21 @@ export function ResumenPage() {
         {showHistorico && (
           <CardContent className="space-y-5">
             {/* Ultima reposicion registrada */}
-            {reposiciones.length > 0 && (
+            {ultimaReposicion && (
               <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
                     <CheckCircle size={16} /> Ultima reposicion registrada
                   </h4>
-                  <span className="text-xs text-emerald-700">{reposiciones[0].fecha}</span>
+                  <span className="text-xs text-emerald-700">{ultimaReposicion.fecha}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${reposiciones[0].metodo_pago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                    {reposiciones[0].metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ultimaReposicion.metodo_pago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                    {ultimaReposicion.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}
                   </span>
-                  <span className="font-bold text-emerald-800 text-lg">{formatMonto(Number(reposiciones[0].monto))}</span>
-                  {reposiciones[0].notas && (
-                    <span className="text-xs text-muted-foreground italic">"{reposiciones[0].notas}"</span>
+                  <span className="font-bold text-emerald-800 text-lg">{formatMonto(Number(ultimaReposicion.monto))}</span>
+                  {ultimaReposicion.notas && (
+                    <span className="text-xs text-muted-foreground italic">"{ultimaReposicion.notas}"</span>
                   )}
                 </div>
               </div>
