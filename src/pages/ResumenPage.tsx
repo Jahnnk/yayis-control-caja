@@ -65,6 +65,18 @@ export function ResumenPage() {
   const [totalPendiente, setTotalPendiente] = useState(0);
   const [totalPagado, setTotalPagado] = useState(0);
   const [topCategorias, setTopCategorias] = useState<{ nombre: string; total: number; porcentaje: number }[]>([]);
+  const [topItemsPorCategoria, setTopItemsPorCategoria] = useState<Array<{
+    categoria: string;
+    total: number;
+    items: Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string }>;
+  }>>([]);
+  const [valoresRevisar, setValoresRevisar] = useState<Array<{
+    tipo: 'duplicado' | 'monto-similar';
+    severidad: 'alta' | 'media';
+    monto: number;
+    descripcion?: string;
+    gastos: Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string }>;
+  }>>([]);
   const [categoriasEfectivo, setCategoriasEfectivo] = useState<{ nombre: string; total: number }[]>([]);
   const [categoriasCuentas, setCategoriasCuentas] = useState<{ nombre: string; total: number }[]>([]);
   const [catEfPagado, setCatEfPagado] = useState<{ nombre: string; total: number }[]>([]);
@@ -91,6 +103,9 @@ export function ResumenPage() {
   const [showHistorico, setShowHistorico] = useState(false);
   const [historicoPage, setHistoricoPage] = useState(0);
 
+  // Cuantos gastos mostrar en "Detalle por categoria": 5, 10 o 'todos'
+  const [topItemsCount, setTopItemsCount] = useState<5 | 10 | 'todos'>(5);
+
   const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 500;
   const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
 
@@ -101,7 +116,7 @@ export function ResumenPage() {
     // Fetch gastos
     let query = supabase
       .from('gastos')
-      .select('*, categorias(nombre)')
+      .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, categorias(nombre)')
       .eq('sede_id', profile.sede_id)
       .order('fecha', { ascending: true });
 
@@ -121,6 +136,7 @@ export function ResumenPage() {
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
+    const itemsByCategoria = new Map<string, Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string }>>();
     const catEfectivoMap = new Map<string, number>();
     const catCuentasMap = new Map<string, number>();
     const catEfPagadoMap = new Map<string, number>();
@@ -186,6 +202,16 @@ export function ResumenPage() {
 
       s.porCategoria[catName] = roundTwo((s.porCategoria[catName] ?? 0) + monto);
       catTotalMap.set(catName, roundTwo((catTotalMap.get(catName) ?? 0) + monto));
+
+      // Guardar gasto individual para el detalle "Top 5 por categoria"
+      if (!itemsByCategoria.has(catName)) itemsByCategoria.set(catName, []);
+      itemsByCategoria.get(catName)!.push({
+        descripcion: (g.descripcion as string) ?? '(sin descripcion)',
+        monto,
+        fecha: g.fecha as string,
+        metodo,
+        estado,
+      });
     }
 
     const allPeriods = Array.from(periodMap.values());
@@ -202,6 +228,85 @@ export function ResumenPage() {
       nombre, total,
       porcentaje: sumTotal > 0 ? roundTwo((total / sumTotal) * 100) : 0,
     })));
+
+    // Gastos individuales ordenados por monto desc para cada una de las top 5 categorias
+    // (guardamos todos; el slice a 5 o 10 ocurre al renderizar segun topItemsCount)
+    setTopItemsPorCategoria(sorted.slice(0, 5).map(([nombre, total]) => ({
+      categoria: nombre,
+      total,
+      items: (itemsByCategoria.get(nombre) ?? [])
+        .sort((a, b) => b.monto - a.monto),
+    })));
+
+    // ====== Deteccion de "Valores a revisar" ======
+    // Tomamos todos los gastos del periodo y buscamos:
+    //   1) Posibles duplicados: misma descripcion + mismo monto (>= 2 gastos)
+    //   2) Mismo monto, descripcion distinta (>= 2 gastos) si monto >= 30
+    type GastoFlag = { descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string };
+    const allGastosFlat: GastoFlag[] = [];
+    for (const g of (gastosData ?? []) as Array<Record<string, unknown>>) {
+      allGastosFlat.push({
+        descripcion: ((g.descripcion as string) ?? '(sin descripcion)').trim(),
+        monto: Number(g.monto),
+        fecha: g.fecha as string,
+        metodo: g.metodo_pago as string,
+        estado: g.estado as string,
+        categoria: ((g.categorias as { nombre: string } | null)?.nombre) ?? 'Otros',
+      });
+    }
+
+    const revisar: typeof valoresRevisar = [];
+
+    // 1) Duplicados exactos (misma descripcion + mismo monto)
+    const dupMap = new Map<string, GastoFlag[]>();
+    for (const g of allGastosFlat) {
+      const key = `${g.descripcion.toLowerCase()}|${g.monto.toFixed(2)}`;
+      if (!dupMap.has(key)) dupMap.set(key, []);
+      dupMap.get(key)!.push(g);
+    }
+    const idsEnDuplicados = new Set<string>();
+    for (const [, gs] of dupMap) {
+      if (gs.length >= 2) {
+        revisar.push({
+          tipo: 'duplicado',
+          severidad: 'alta',
+          monto: gs[0].monto,
+          descripcion: gs[0].descripcion,
+          gastos: gs.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        });
+        for (const g of gs) idsEnDuplicados.add(`${g.descripcion.toLowerCase()}|${g.monto.toFixed(2)}|${g.fecha}`);
+      }
+    }
+
+    // 2) Mismo monto, descripcion distinta (monto >= S/ 30)
+    const montoMap = new Map<string, GastoFlag[]>();
+    for (const g of allGastosFlat) {
+      if (g.monto < 30) continue;
+      const key = g.monto.toFixed(2);
+      if (!montoMap.has(key)) montoMap.set(key, []);
+      montoMap.get(key)!.push(g);
+    }
+    for (const [, gs] of montoMap) {
+      if (gs.length < 2) continue;
+      const distinctDescs = new Set(gs.map(x => x.descripcion.toLowerCase()));
+      if (distinctDescs.size < 2) continue; // ya cubierto por duplicado exacto
+      // Filtrar gastos que ya estan en un grupo de "duplicado exacto"
+      const restantes = gs.filter(g => !idsEnDuplicados.has(`${g.descripcion.toLowerCase()}|${g.monto.toFixed(2)}|${g.fecha}`));
+      if (restantes.length < 2) continue;
+      revisar.push({
+        tipo: 'monto-similar',
+        severidad: 'media',
+        monto: restantes[0].monto,
+        gastos: restantes.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)),
+      });
+    }
+
+    // Ordenar: alta severidad primero, dentro de cada severidad por monto desc
+    revisar.sort((a, b) => {
+      if (a.severidad !== b.severidad) return a.severidad === 'alta' ? -1 : 1;
+      return b.monto - a.monto;
+    });
+    setValoresRevisar(revisar);
 
     // Categorias por metodo de pago
     setCategoriasEfectivo(Array.from(catEfPendMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
@@ -521,6 +626,71 @@ export function ResumenPage() {
         </div>
       )}
 
+      {/* Valores a revisar (deteccion de duplicados y montos sospechosos) */}
+      {valoresRevisar.length > 0 && (
+        <Card className="border-orange-300 bg-orange-50/40">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={20} className="text-orange-600" />
+                <CardTitle className="text-orange-800">Valores a Revisar</CardTitle>
+                <span className="text-xs bg-orange-200 text-orange-800 rounded-full px-2 py-0.5 font-medium">{valoresRevisar.length}</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Posibles duplicados o gastos con el mismo monto. Verifica in situ si son errores o pagos independientes legitimos.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {valoresRevisar.map((v, idx) => {
+                const isAlta = v.severidad === 'alta';
+                return (
+                  <div
+                    key={idx}
+                    className={`rounded-lg border-2 p-3 ${isAlta ? 'border-red-300 bg-red-50/60' : 'border-amber-300 bg-amber-50/60'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isAlta ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'}`}>
+                          {isAlta ? 'Posible duplicado' : 'Mismo monto'}
+                        </span>
+                        {v.tipo === 'duplicado' && v.descripcion && (
+                          <span className="text-sm font-semibold text-yayis-dark">"{v.descripcion}"</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">— {v.gastos.length} gastos a {formatMonto(v.monto)} c/u</span>
+                      </div>
+                      <span className={`text-sm font-bold ${isAlta ? 'text-red-700' : 'text-amber-700'}`}>
+                        Total: {formatMonto(roundTwo(v.monto * v.gastos.length))}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {isAlta
+                        ? 'Misma descripcion y mismo monto — probablemente es un duplicado o un pago recurrente. Verifica.'
+                        : 'Mismo monto exacto en gastos con descripciones distintas — revisa si son pagos independientes.'}
+                    </p>
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {v.gastos.map((g, gi) => (
+                          <tr key={gi} className="border-b last:border-b-0">
+                            <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{gi + 1}</td>
+                            <td className="py-1.5 pr-2">
+                              <div className="font-medium text-yayis-dark">{g.descripcion}</div>
+                              <div className="text-[10px] text-muted-foreground">{g.fecha} · {g.categoria} · {g.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
+                            </td>
+                            <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(g.monto)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabla por semana (solo si no se filtro por semana) */}
       {filterSemana === 0 && (
         <Card>
@@ -619,27 +789,105 @@ export function ResumenPage() {
 
       {/* Top 5 */}
       {topCategorias.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Top 5 Categorias</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topCategorias.map((c, i) => (
-                <div key={c.nombre} className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-muted-foreground w-6">#{i + 1}</span>
-                  <div className="flex-1">
-                    <div className="flex justify-between mb-1">
-                      <span className="text-sm font-medium">{c.nombre}</span>
-                      <span className="text-sm font-bold">{formatMonto(c.total)} ({c.porcentaje}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div className="h-2 rounded-full" style={{ width: `${c.porcentaje}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader><CardTitle>Top 5 Categorias</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {topCategorias.map((c, i) => (
+                  <div key={c.nombre} className="flex items-center gap-4">
+                    <span className="text-sm font-bold text-muted-foreground w-6">#{i + 1}</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium">{c.nombre}</span>
+                        <span className="text-sm font-bold">{formatMonto(c.total)} ({c.porcentaje}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div className="h-2 rounded-full" style={{ width: `${c.porcentaje}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detalle: top N gastos individuales por categoria */}
+          {topItemsPorCategoria.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? 'Todos los gastos de cada categoria top, ordenados de mayor a menor' : `Los ${topItemsCount} gastos mas costosos dentro de cada categoria top`}</p>
+                  </div>
+                  <div className="inline-flex rounded-md border border-gray-200 bg-white shrink-0" role="group">
+                    <button
+                      type="button"
+                      onClick={() => setTopItemsCount(5)}
+                      className={`px-3 py-1 text-xs font-medium rounded-l-md transition-colors ${topItemsCount === 5 ? 'bg-yayis-green text-white' : 'text-muted-foreground hover:bg-gray-50'}`}
+                    >
+                      Top 5
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTopItemsCount(10)}
+                      className={`px-3 py-1 text-xs font-medium border-l border-gray-200 transition-colors ${topItemsCount === 10 ? 'bg-yayis-green text-white' : 'text-muted-foreground hover:bg-gray-50'}`}
+                    >
+                      Top 10
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTopItemsCount('todos')}
+                      className={`px-3 py-1 text-xs font-medium rounded-r-md border-l border-gray-200 transition-colors ${topItemsCount === 'todos' ? 'bg-yayis-green text-white' : 'text-muted-foreground hover:bg-gray-50'}`}
+                    >
+                      Todos
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-5">
+                  {topItemsPorCategoria.map((cat, i) => {
+                    const visibleItems = topItemsCount === 'todos' ? cat.items : cat.items.slice(0, topItemsCount);
+                    return (
+                      <div key={cat.categoria}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                            <span className="text-sm font-bold">{cat.categoria}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">Total: <strong className="text-yayis-dark">{formatMonto(cat.total)}</strong></span>
+                        </div>
+                        {visibleItems.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic pl-5">Sin gastos en el periodo</p>
+                        ) : (
+                          <table className="w-full text-xs">
+                            <tbody>
+                              {visibleItems.map((it, idx) => (
+                                <tr key={`${cat.categoria}-${idx}`} className="border-b last:border-b-0">
+                                  <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{idx + 1}</td>
+                                  <td className="py-1.5 pr-2">
+                                    <div className="font-medium text-yayis-dark">{it.descripcion}</div>
+                                    <div className="text-[10px] text-muted-foreground">{it.fecha} · {it.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {it.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
+                                  </td>
+                                  <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(it.monto)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                        {topItemsCount !== 'todos' && cat.items.length > topItemsCount && (
+                          <p className="text-[10px] text-muted-foreground italic mt-1 pl-5">+{cat.items.length - topItemsCount} gastos mas en esta categoria</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Historico de gastos pagados */}
@@ -652,8 +900,75 @@ export function ResumenPage() {
           </Button>
         </CardHeader>
         {showHistorico && (
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">Gastos ya pagados{!isAnual ? ` - ${mesLabel}` : ` - ${filterAnio}`}{filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}</p>
+          <CardContent className="space-y-5">
+            {/* Ultima reposicion registrada */}
+            {reposiciones.length > 0 && (
+              <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
+                    <CheckCircle size={16} /> Ultima reposicion registrada
+                  </h4>
+                  <span className="text-xs text-emerald-700">{reposiciones[0].fecha}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${reposiciones[0].metodo_pago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                    {reposiciones[0].metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}
+                  </span>
+                  <span className="font-bold text-emerald-800 text-lg">{formatMonto(Number(reposiciones[0].monto))}</span>
+                  {reposiciones[0].notas && (
+                    <span className="text-xs text-muted-foreground italic">"{reposiciones[0].notas}"</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Desglose Pendiente por Reponer (copia para registrar gastos en otro lado) */}
+            {(categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
+              <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
+                <h4 className="text-sm font-bold text-amber-700 mb-1">Desglose Pendiente por Reponer</h4>
+                <p className="text-xs text-muted-foreground mb-3">Lo que aun queda por reponer — util si necesitas registrar tus gastos en otro sistema.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {categoriasEfectivo.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-amber-700 mb-2 flex items-center gap-1.5">
+                        <Wallet size={14} /> Efectivo: {formatMonto(totalEfPend)}
+                      </div>
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {categoriasEfectivo.map(c => (
+                            <tr key={c.nombre} className="border-b">
+                              <td className="py-1">{c.nombre}</td>
+                              <td className="py-1 text-right font-medium">{formatMonto(c.total)}</td>
+                              <td className="py-1 text-right text-muted-foreground w-12">{totalEfPend > 0 ? roundTwo((c.total / totalEfPend) * 100) : 0}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {categoriasCuentas.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-amber-700 mb-2 flex items-center gap-1.5">
+                        <CreditCard size={14} /> Cuentas: {formatMonto(totalCtPend)}
+                      </div>
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {categoriasCuentas.map(c => (
+                            <tr key={c.nombre} className="border-b">
+                              <td className="py-1">{c.nombre}</td>
+                              <td className="py-1 text-right font-medium">{formatMonto(c.total)}</td>
+                              <td className="py-1 text-right text-muted-foreground w-12">{totalCtPend > 0 ? roundTwo((c.total / totalCtPend) * 100) : 0}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">Gastos ya pagados{!isAnual ? ` - ${mesLabel}` : ` - ${filterAnio}`}{filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}</p>
             {historicoGastos.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No hay gastos pagados en este periodo</p>
             ) : (
