@@ -229,13 +229,25 @@ export function ResumenPage() {
       porcentaje: sumTotal > 0 ? roundTwo((total / sumTotal) * 100) : 0,
     })));
 
-    // Gastos individuales ordenados por monto desc para cada una de las top 5 categorias
-    // (guardamos todos; el slice a 5 o 10 ocurre al renderizar segun topItemsCount)
-    setTopItemsPorCategoria(sorted.slice(0, 5).map(([nombre, total]) => ({
+    // Gastos PENDIENTES individuales por categoria (los que aun faltan reponerle a Luis).
+    // Filtramos a estado='pendiente', calculamos un total de pendientes por categoria,
+    // ordenamos por ese total y tomamos las top 5 categorias que tengan al menos 1 pendiente.
+    // El slice a 5/10/todos ocurre al renderizar segun topItemsCount.
+    type ItemDetalle = { descripcion: string; monto: number; fecha: string; metodo: string; estado: string };
+    const pendientesPorCategoria = new Map<string, { items: ItemDetalle[]; total: number }>();
+    for (const [cat, items] of itemsByCategoria) {
+      const soloPendientes = items.filter(it => it.estado === 'pendiente');
+      if (soloPendientes.length === 0) continue;
+      const totalPend = soloPendientes.reduce((acc, it) => roundTwo(acc + it.monto), 0);
+      pendientesPorCategoria.set(cat, { items: soloPendientes, total: totalPend });
+    }
+    const sortedPendientes = Array.from(pendientesPorCategoria.entries())
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 5);
+    setTopItemsPorCategoria(sortedPendientes.map(([nombre, { items, total }]) => ({
       categoria: nombre,
       total,
-      items: (itemsByCategoria.get(nombre) ?? [])
-        .sort((a, b) => b.monto - a.monto),
+      items: items.slice().sort((a, b) => b.monto - a.monto),
     })));
 
     // ====== Deteccion de "Valores a revisar" ======
@@ -815,15 +827,14 @@ export function ResumenPage() {
             </CardContent>
           </Card>
 
-          {/* Detalle: top N gastos individuales por categoria */}
-          {topItemsPorCategoria.length > 0 && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? 'Todos los gastos de cada categoria top, ordenados de mayor a menor' : `Los ${topItemsCount} gastos mas costosos dentro de cada categoria top`}</p>
-                  </div>
+          {/* Detalle: top N gastos PENDIENTES individuales por categoria */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? 'Todos los gastos pendientes por categoria (faltan reponer a Luis)' : `Los ${topItemsCount} gastos pendientes mas costosos por categoria (faltan reponer a Luis)`}</p>
+                </div>
                   <div className="inline-flex rounded-md border border-gray-200 bg-white shrink-0" role="group">
                     <button
                       type="button"
@@ -850,46 +861,49 @@ export function ResumenPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-5">
-                  {topItemsPorCategoria.map((cat, i) => {
-                    const visibleItems = topItemsCount === 'todos' ? cat.items : cat.items.slice(0, topItemsCount);
-                    return (
-                      <div key={cat.categoria}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                            <span className="text-sm font-bold">{cat.categoria}</span>
+                {topItemsPorCategoria.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-8">No hay gastos pendientes por reponer en este periodo</p>
+                ) : (
+                  <div className="space-y-5">
+                    {topItemsPorCategoria.map((cat, i) => {
+                      const visibleItems = topItemsCount === 'todos' ? cat.items : cat.items.slice(0, topItemsCount);
+                      return (
+                        <div key={cat.categoria}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                              <span className="text-sm font-bold">{cat.categoria}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">Total: <strong className="text-yayis-dark">{formatMonto(cat.total)}</strong></span>
                           </div>
-                          <span className="text-xs text-muted-foreground">Total: <strong className="text-yayis-dark">{formatMonto(cat.total)}</strong></span>
+                          {visibleItems.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic pl-5">Sin gastos pendientes en el periodo</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <tbody>
+                                {visibleItems.map((it, idx) => (
+                                  <tr key={`${cat.categoria}-${idx}`} className="border-b last:border-b-0">
+                                    <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{idx + 1}</td>
+                                    <td className="py-1.5 pr-2">
+                                      <div className="font-medium text-yayis-dark">{it.descripcion}</div>
+                                      <div className="text-[10px] text-muted-foreground">{it.fecha} · {it.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {it.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
+                                    </td>
+                                    <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(it.monto)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {topItemsCount !== 'todos' && cat.items.length > topItemsCount && (
+                            <p className="text-[10px] text-muted-foreground italic mt-1 pl-5">+{cat.items.length - topItemsCount} gastos pendientes mas en esta categoria</p>
+                          )}
                         </div>
-                        {visibleItems.length === 0 ? (
-                          <p className="text-xs text-muted-foreground italic pl-5">Sin gastos en el periodo</p>
-                        ) : (
-                          <table className="w-full text-xs">
-                            <tbody>
-                              {visibleItems.map((it, idx) => (
-                                <tr key={`${cat.categoria}-${idx}`} className="border-b last:border-b-0">
-                                  <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{idx + 1}</td>
-                                  <td className="py-1.5 pr-2">
-                                    <div className="font-medium text-yayis-dark">{it.descripcion}</div>
-                                    <div className="text-[10px] text-muted-foreground">{it.fecha} · {it.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {it.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
-                                  </td>
-                                  <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(it.monto)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                        {topItemsCount !== 'todos' && cat.items.length > topItemsCount && (
-                          <p className="text-[10px] text-muted-foreground italic mt-1 pl-5">+{cat.items.length - topItemsCount} gastos mas en esta categoria</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
         </div>
       )}
 
