@@ -15,9 +15,10 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes, getMesesDisponibles } from '@/lib/dates';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, Lock, Plus, Trash2, Loader2, History } from 'lucide-react';
+import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, CheckCircle2, Lock, Plus, Trash2, Loader2, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useGastos } from '@/hooks/useGastos';
-import type { MetodoPago, GastoConCategoria } from '@/types';
+import { useValoresRevisados } from '@/hooks/useValoresRevisados';
+import type { MetodoPago } from '@/types';
 
 const COLORS = ['#004C40', '#098B5F', '#10B981', '#34D399', '#6EE7B7', '#F59E0B', '#DC2626', '#8B5CF6', '#EC4899', '#06B6D4'];
 
@@ -36,6 +37,7 @@ export function ResumenPage() {
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
   const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
+  const { valores: valoresRevisados, fetchValoresRevisados, verificarGrupo, reabrirGrupo } = useValoresRevisados();
   const { addToast } = useToast();
 
   const today = getTodayLima();
@@ -75,7 +77,7 @@ export function ResumenPage() {
     severidad: 'alta' | 'media';
     monto: number;
     descripcion?: string;
-    gastos: Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string }>;
+    gastos: Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string }>;
   }>>([]);
   const [categoriasEfectivo, setCategoriasEfectivo] = useState<{ nombre: string; total: number }[]>([]);
   const [categoriasCuentas, setCategoriasCuentas] = useState<{ nombre: string; total: number }[]>([]);
@@ -105,6 +107,15 @@ export function ResumenPage() {
 
   // Cuantos gastos mostrar en "Detalle por categoria": 5, 10 o 'todos'
   const [topItemsCount, setTopItemsCount] = useState<5 | 10 | 'todos'>(5);
+
+  // ====== Valores a Revisar: estado de verificacion ======
+  const [showVerificados, setShowVerificados] = useState(false);
+  const [confirmVerificarIdx, setConfirmVerificarIdx] = useState<number | null>(null);
+  const [confirmReabrirId, setConfirmReabrirId] = useState<string | null>(null);
+  const [verificandoIdx, setVerificandoIdx] = useState<number | null>(null);
+  const [reabriendoId, setReabriendoId] = useState<string | null>(null);
+
+  const canVerificar = profile?.rol === 'owner' || profile?.rol === 'admin';
 
   const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 500;
   const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
@@ -254,10 +265,11 @@ export function ResumenPage() {
     // Tomamos todos los gastos del periodo y buscamos:
     //   1) Posibles duplicados: misma descripcion + mismo monto (>= 2 gastos)
     //   2) Mismo monto, descripcion distinta (>= 2 gastos) si monto >= 30
-    type GastoFlag = { descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string };
+    type GastoFlag = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string };
     const allGastosFlat: GastoFlag[] = [];
     for (const g of (gastosData ?? []) as Array<Record<string, unknown>>) {
       allGastosFlat.push({
+        id: g.id as string,
         descripcion: ((g.descripcion as string) ?? '(sin descripcion)').trim(),
         monto: Number(g.monto),
         fecha: g.fecha as string,
@@ -347,6 +359,11 @@ export function ResumenPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Cargar verificados (filtrados por sede via RLS). Re-cargar cuando cambia la sede.
+  useEffect(() => {
+    fetchValoresRevisados(profile?.sede_id ?? undefined);
+  }, [fetchValoresRevisados, profile?.sede_id]);
+
   // Set arqueo form values when arqueo loads
   useEffect(() => {
     if (arqueo) {
@@ -435,6 +452,90 @@ export function ResumenPage() {
   });
 
   const ultimaReposicion = reposiciones[0];
+
+  // ====== Valores a Revisar: filtrado de verificados por periodo ======
+  // Identidad del grupo: array de gasto_ids ordenado ascendente, serializado JSON.
+  const groupKey = (ids: string[]) => JSON.stringify(ids.slice().sort());
+
+  // Rango de fechas (YYYY-MM-DD) para filtrar `verificado_en`.
+  let rangoInicio = '';
+  let rangoFin = '';
+  if (isAnual) {
+    rangoInicio = `${filterAnio}-01-01`;
+    rangoFin = `${filterAnio}-12-31`;
+  } else if (filterSemana === 0) {
+    const last = new Date(filterAnio, filterMes, 0).getDate();
+    rangoInicio = `${filterAnio}-${String(filterMes).padStart(2, '0')}-01`;
+    rangoFin = `${filterAnio}-${String(filterMes).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+  } else {
+    const s = semanas.find(x => x.semana === filterSemana);
+    if (s) { rangoInicio = s.inicio; rangoFin = s.fin; }
+  }
+
+  // verificado_en (ISO con tz) -> fecha Lima YYYY-MM-DD
+  const isoToFechaLima = (iso: string) => {
+    try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }); }
+    catch { return iso.slice(0, 10); }
+  };
+
+  // Verificados en el periodo activo
+  const verificadosEnPeriodo = valoresRevisados.filter(v => {
+    const f = isoToFechaLima(v.verificado_en);
+    return f >= rangoInicio && f <= rangoFin;
+  });
+
+  // Set de keys de TODOS los verificados (no solo del periodo) para filtrar el listado activo.
+  // Esto evita que un grupo que ya verificaste reaparezca solo porque cambiaste el filtro de periodo.
+  const verificadosKeys = new Set(valoresRevisados.map(v => groupKey(v.gasto_ids)));
+
+  // Grupos activos = detectados que NO estan en verificados
+  const valoresActivos = valoresRevisar.filter(v => !verificadosKeys.has(groupKey(v.gastos.map(g => g.id))));
+
+  async function handleConfirmVerificar() {
+    if (confirmVerificarIdx === null) return;
+    const grupo = valoresRevisar[confirmVerificarIdx];
+    if (!grupo || !profile?.sede_id) { setConfirmVerificarIdx(null); return; }
+    setVerificandoIdx(confirmVerificarIdx);
+
+    // Mapeo de tipo local -> tipo BD
+    const tipoBd: 'duplicado' | 'mismo_monto' = grupo.tipo === 'duplicado' ? 'duplicado' : 'mismo_monto';
+
+    // Preview de descripcion
+    let preview: string | null = null;
+    if (grupo.tipo === 'duplicado' && grupo.descripcion) preview = grupo.descripcion;
+    else if (grupo.tipo === 'monto-similar') {
+      const uniques = Array.from(new Set(grupo.gastos.map(g => g.descripcion)));
+      preview = uniques.slice(0, 3).join(' / ');
+    }
+
+    const { error } = await verificarGrupo({
+      sedeId: profile.sede_id,
+      tipo: tipoBd,
+      gastoIds: grupo.gastos.map(g => g.id),
+      montoUnitario: grupo.monto,
+      descripcionPreview: preview,
+    });
+    setVerificandoIdx(null);
+    setConfirmVerificarIdx(null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else {
+      addToast('Grupo verificado. Movido al historico.', 'success');
+      await fetchValoresRevisados(profile.sede_id);
+    }
+  }
+
+  async function handleConfirmReabrir() {
+    if (!confirmReabrirId) return;
+    setReabriendoId(confirmReabrirId);
+    const { error } = await reabrirGrupo(confirmReabrirId);
+    setReabriendoId(null);
+    setConfirmReabrirId(null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else {
+      addToast('Grupo re-abierto.', 'success');
+      await fetchValoresRevisados(profile?.sede_id ?? undefined);
+    }
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -642,14 +743,14 @@ export function ResumenPage() {
       )}
 
       {/* Valores a revisar (deteccion de duplicados y montos sospechosos) */}
-      {valoresRevisar.length > 0 && (
+      {(valoresActivos.length > 0 || verificadosEnPeriodo.length > 0) && (
         <Card className="border-orange-300 bg-orange-50/40">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={20} className="text-orange-600" />
                 <CardTitle className="text-orange-800">Valores a Revisar</CardTitle>
-                <span className="text-xs bg-orange-200 text-orange-800 rounded-full px-2 py-0.5 font-medium">{valoresRevisar.length}</span>
+                <span className="text-xs bg-orange-200 text-orange-800 rounded-full px-2 py-0.5 font-medium">{valoresActivos.length}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -657,51 +758,130 @@ export function ResumenPage() {
             </p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {valoresRevisar.map((v, idx) => {
-                const isAlta = v.severidad === 'alta';
-                return (
-                  <div
-                    key={idx}
-                    className={`rounded-lg border-2 p-3 ${isAlta ? 'border-red-300 bg-red-50/60' : 'border-amber-300 bg-amber-50/60'}`}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isAlta ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'}`}>
-                          {isAlta ? 'Posible duplicado' : 'Mismo monto'}
-                        </span>
-                        {v.tipo === 'duplicado' && v.descripcion && (
-                          <span className="text-sm font-semibold text-yayis-dark">"{v.descripcion}"</span>
-                        )}
-                        <span className="text-xs text-muted-foreground">— {v.gastos.length} gastos a {formatMonto(v.monto)} c/u</span>
+            {valoresActivos.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-6">
+                {verificadosEnPeriodo.length > 0
+                  ? 'No hay valores nuevos por revisar. Ya verificaste todos los grupos detectados en este periodo.'
+                  : 'No hay valores sospechosos en este periodo.'}
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {valoresActivos.map((v) => {
+                  const origIdx = valoresRevisar.indexOf(v);
+                  const isAlta = v.severidad === 'alta';
+                  return (
+                    <div
+                      key={groupKey(v.gastos.map(g => g.id))}
+                      className={`rounded-lg border-2 p-3 ${isAlta ? 'border-red-300 bg-red-50/60' : 'border-amber-300 bg-amber-50/60'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isAlta ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'}`}>
+                            {isAlta ? 'Posible duplicado' : 'Mismo monto'}
+                          </span>
+                          {v.tipo === 'duplicado' && v.descripcion && (
+                            <span className="text-sm font-semibold text-yayis-dark">"{v.descripcion}"</span>
+                          )}
+                          <span className="text-xs text-muted-foreground">— {v.gastos.length} gastos a {formatMonto(v.monto)} c/u</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`text-sm font-bold ${isAlta ? 'text-red-700' : 'text-amber-700'}`}>
+                            Total: {formatMonto(roundTwo(v.monto * v.gastos.length))}
+                          </span>
+                          {canVerificar && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                              disabled={verificandoIdx === origIdx}
+                              onClick={() => setConfirmVerificarIdx(origIdx)}
+                            >
+                              {verificandoIdx === origIdx ? (
+                                <Loader2 size={14} className="animate-spin mr-1" />
+                              ) : (
+                                <CheckCircle2 size={14} className="mr-1" />
+                              )}
+                              Verificado
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <span className={`text-sm font-bold ${isAlta ? 'text-red-700' : 'text-amber-700'}`}>
-                        Total: {formatMonto(roundTwo(v.monto * v.gastos.length))}
-                      </span>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {isAlta
+                          ? 'Misma descripcion y mismo monto — probablemente es un duplicado o un pago recurrente. Verifica.'
+                          : 'Mismo monto exacto en gastos con descripciones distintas — revisa si son pagos independientes.'}
+                      </p>
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {v.gastos.map((g, gi) => (
+                            <tr key={g.id} className="border-b last:border-b-0">
+                              <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{gi + 1}</td>
+                              <td className="py-1.5 pr-2">
+                                <div className="font-medium text-yayis-dark">{g.descripcion}</div>
+                                <div className="text-[10px] text-muted-foreground">{g.fecha} · {g.categoria} · {g.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
+                              </td>
+                              <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(g.monto)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      {isAlta
-                        ? 'Misma descripcion y mismo monto — probablemente es un duplicado o un pago recurrente. Verifica.'
-                        : 'Mismo monto exacto en gastos con descripciones distintas — revisa si son pagos independientes.'}
-                    </p>
-                    <table className="w-full text-xs">
-                      <tbody>
-                        {v.gastos.map((g, gi) => (
-                          <tr key={gi} className="border-b last:border-b-0">
-                            <td className="py-1.5 pr-2 text-muted-foreground w-6 text-center">{gi + 1}</td>
-                            <td className="py-1.5 pr-2">
-                              <div className="font-medium text-yayis-dark">{g.descripcion}</div>
-                              <div className="text-[10px] text-muted-foreground">{g.fecha} · {g.categoria} · {g.metodo === 'efectivo' ? 'Efectivo' : 'Cuentas'} · {g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</div>
-                            </td>
-                            <td className="py-1.5 text-right font-bold whitespace-nowrap">{formatMonto(g.monto)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Panel colapsable de verificados (solo del periodo activo) */}
+            {verificadosEnPeriodo.length > 0 && (
+              <div className="mt-5 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowVerificados(!showVerificados)}
+                  className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-yayis-dark transition-colors"
+                >
+                  {showVerificados ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  Ver verificados ({verificadosEnPeriodo.length})
+                </button>
+                {showVerificados && (
+                  <div className="mt-3 space-y-2 bg-gray-50 rounded-lg p-3">
+                    {verificadosEnPeriodo.map(v => {
+                      const isDup = v.tipo === 'duplicado';
+                      const fechaLima = new Date(v.verificado_en).toLocaleString('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+                      // viewer NO ve boton Re-abrir; admin de otra sede tampoco
+                      const puedeReabrir = canVerificar && (profile?.rol === 'owner' || profile?.sede_id === v.sede_id);
+                      return (
+                        <div key={v.id} className="flex flex-wrap items-center gap-2 text-xs py-1">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${isDup ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                            {isDup ? 'DUPLICADO' : 'MISMO MONTO'}
+                          </span>
+                          <span className="text-yayis-dark">
+                            {v.descripcion_preview ? `"${v.descripcion_preview}"` : '—'}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {v.gasto_ids.length} gastos a {formatMonto(Number(v.monto_unitario))} c/u
+                          </span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">{fechaLima}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">{v.profiles?.nombre ?? '—'}</span>
+                          {puedeReabrir && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="ml-auto h-6 text-[10px] px-2"
+                              disabled={reabriendoId === v.id}
+                              onClick={() => setConfirmReabrirId(v.id)}
+                            >
+                              {reabriendoId === v.id ? <Loader2 size={11} className="animate-spin" /> : 'Re-abrir'}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1167,6 +1347,26 @@ export function ResumenPage() {
       )}
 
       <ConfirmDialog open={showCerrar} title="Cerrar Semana" message="Una vez cerrada, los registros no podran modificarse." confirmLabel="Cerrar Semana" onConfirm={handleCerrarSemana} onCancel={() => setShowCerrar(false)} />
+
+      {/* Confirmacion: marcar grupo como verificado */}
+      <ConfirmDialog
+        open={confirmVerificarIdx !== null}
+        title="¿Marcar este grupo como verificado?"
+        message="Se ocultara del listado activo y se guardara en el historico. Puedes re-abrirlo despues si lo necesitas."
+        confirmLabel="Si, verificado"
+        onConfirm={handleConfirmVerificar}
+        onCancel={() => setConfirmVerificarIdx(null)}
+      />
+
+      {/* Confirmacion: re-abrir verificado */}
+      <ConfirmDialog
+        open={confirmReabrirId !== null}
+        title="¿Re-abrir este grupo?"
+        message="Volvera a aparecer en el listado activo de Valores a Revisar."
+        confirmLabel="Si, re-abrir"
+        onConfirm={handleConfirmReabrir}
+        onCancel={() => setConfirmReabrirId(null)}
+      />
     </div>
   );
 }

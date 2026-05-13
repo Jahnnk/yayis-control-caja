@@ -94,6 +94,24 @@ export interface Reposicion {
   created_at: string;
 }
 
+export type TipoValorRevisado = 'duplicado' | 'mismo_monto';
+
+export interface ValorRevisado {
+  id: string;
+  sede_id: string;
+  tipo: TipoValorRevisado;
+  gasto_ids: string[];
+  monto_unitario: number;
+  descripcion_preview: string | null;
+  verificado_por: string;
+  verificado_en: string;
+  notas: string | null;
+}
+
+export interface ValorRevisadoConPerfil extends ValorRevisado {
+  profiles: { nombre: string } | null;
+}
+
 export interface SaldoReposicion {
   deudaEfectivo: number;
   deudaCuentas: number;
