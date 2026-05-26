@@ -67,6 +67,7 @@ export function useReposiciones() {
     sedeId: string,
     metodoPago: 'efectivo' | 'cuentas',
     montoReposicion: number,
+    reposicionId: string,
   ) => {
     // Obtener gastos pendientes del metodo, ordenados por fecha (mas antiguos primero)
     const { data: pendientes } = await supabase
@@ -103,7 +104,7 @@ export function useReposiciones() {
     if (idsParaMarcar.length > 0 && acumulado === montoReposicion) {
       await supabase
         .from('gastos')
-        .update({ estado: 'pagado' })
+        .update({ estado: 'pagado', reposicion_id: reposicionId })
         .in('id', idsParaMarcar);
     }
   }, []);
@@ -116,19 +117,23 @@ export function useReposiciones() {
   ) => {
     if (!profile?.sede_id) return { error: 'Sin sede' };
 
-    const { error } = await supabase.from('reposiciones').insert({
-      sede_id: profile.sede_id,
-      fecha,
-      metodo_pago: metodoPago,
-      monto,
-      notas: notas.trim() || null,
-      registrado_por: profile.id,
-    });
+    const { data: nuevaReposicion, error } = await supabase
+      .from('reposiciones')
+      .insert({
+        sede_id: profile.sede_id,
+        fecha,
+        metodo_pago: metodoPago,
+        monto,
+        notas: notas.trim() || null,
+        registrado_por: profile.id,
+      })
+      .select('id')
+      .single();
 
     if (error) return { error: error.message };
 
     // Marcar gastos como pagados si la suma coincide
-    await marcarGastosPagados(profile.sede_id, metodoPago, monto);
+    await marcarGastosPagados(profile.sede_id, metodoPago, monto, nuevaReposicion.id);
 
     // Recalcular saldo
     await fetchSaldo(profile.sede_id);

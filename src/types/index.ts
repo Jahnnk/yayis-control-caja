@@ -42,6 +42,7 @@ export interface Gasto {
   mes: string;
   sede_id: string;
   registrado_por: string;
+  reposicion_id: string | null;
   created_at: string;
   updated_at: string;
 }
