@@ -113,6 +113,13 @@ export interface ValorRevisadoConPerfil extends ValorRevisado {
   profiles: { nombre: string } | null;
 }
 
+export type DesgloseCategoria = {
+  categoriaId: string;
+  categoriaNombre: string;
+  monto: number;
+  porcentaje: number; // 0-100 con 2 decimales
+};
+
 export interface SaldoReposicion {
   deudaEfectivo: number;
   deudaCuentas: number;

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useFondos } from '@/hooks/useFondos';
 import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
+import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, CheckCircle2, Lock, Plus, Trash2, Loader2, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useGastos } from '@/hooks/useGastos';
 import { useValoresRevisados } from '@/hooks/useValoresRevisados';
-import type { MetodoPago } from '@/types';
+import type { MetodoPago, DesgloseCategoria } from '@/types';
 
 const COLORS = ['#004C40', '#098B5F', '#10B981', '#34D399', '#6EE7B7', '#F59E0B', '#DC2626', '#8B5CF6', '#EC4899', '#06B6D4'];
 
@@ -36,6 +37,7 @@ export function ResumenPage() {
   const { fondos } = useFondos();
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
+  const { fetchDesgloseReposicion } = useDesgloseReposicion();
   const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
   const { valores: valoresRevisados, fetchValoresRevisados, verificarGrupo, reabrirGrupo } = useValoresRevisados();
   const { addToast } = useToast();
@@ -104,6 +106,11 @@ export function ResumenPage() {
   // Historico
   const [showHistorico, setShowHistorico] = useState(false);
   const [historicoPage, setHistoricoPage] = useState(0);
+
+  // Desglose de la ultima reposicion (por categoria)
+  const [desgloseData, setDesgloseData] = useState<DesgloseCategoria[]>([]);
+  const [desgloseLoading, setDesgloseLoading] = useState(false);
+  const [desgloseError, setDesgloseError] = useState<string | null>(null);
 
   // Cuantos gastos mostrar en "Detalle por categoria": 5, 10 o 'todos'
   const [topItemsCount, setTopItemsCount] = useState<5 | 10 | 'todos'>(5);
@@ -432,6 +439,32 @@ export function ResumenPage() {
       pageSize: 20,
     });
   }, [showHistorico, filterSemana, mesLabel, isAnual, historicoPage, fetchHistorico]);
+
+  // Cargar desglose por categoria de la ultima reposicion cuando se abre el historico
+  const ultimaReposicionId = reposiciones[0]?.id;
+  useEffect(() => {
+    if (!showHistorico || !ultimaReposicionId) {
+      setDesgloseData([]);
+      setDesgloseError(null);
+      setDesgloseLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDesgloseLoading(true);
+    setDesgloseError(null);
+    fetchDesgloseReposicion(ultimaReposicionId).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        setDesgloseError(error);
+        setDesgloseData([]);
+        addToast(`Error: ${error}`, 'error');
+      } else {
+        setDesgloseData(data);
+      }
+      setDesgloseLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [showHistorico, ultimaReposicionId, fetchDesgloseReposicion, addToast]);
 
   if (loading) return <Loading text="Cargando resumen..." />;
 
@@ -1116,6 +1149,50 @@ export function ResumenPage() {
                     <span className="text-xs text-muted-foreground italic">"{ultimaReposicion.notas}"</span>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Desglose por categoria de la ultima reposicion */}
+            {ultimaReposicion && !desgloseError && (
+              <div className="border border-yayis-green/30 bg-yayis-cream/40 rounded-lg p-4">
+                <h4 className="text-sm font-bold text-yayis-dark mb-1">Desglose por categoria</h4>
+                <p className="text-xs text-muted-foreground mb-3">Como se distribuyo el monto de la ultima reposicion entre las categorias de gasto.</p>
+                {desgloseLoading ? (
+                  <p className="text-xs text-muted-foreground">Cargando desglose...</p>
+                ) : desgloseData.length === 0 ? (
+                  <div className="flex items-start gap-2 border border-amber-300 bg-amber-50 rounded-md p-3">
+                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800">
+                      No se pudo recuperar el desglose de esta reposicion historica (los montos no cuadran exactamente con los gastos registrados). Las reposiciones nuevas tendran desglose automaticamente.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-1.5 font-medium">Categoria</th>
+                        <th className="text-right py-1.5 font-medium">Monto</th>
+                        <th className="text-right py-1.5 font-medium w-16">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {desgloseData.map(d => (
+                        <tr key={d.categoriaId} className="border-b">
+                          <td className="py-1.5">{d.categoriaNombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(d.monto)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{d.porcentaje.toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t font-bold">
+                        <td className="py-1.5">Total</td>
+                        <td className="text-right py-1.5">
+                          {formatMonto(desgloseData.reduce((acc, d) => roundTwo(acc + d.monto), 0))}
+                        </td>
+                        <td className="text-right py-1.5">100%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
 
