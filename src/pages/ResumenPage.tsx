@@ -5,6 +5,7 @@ import { useFondos } from '@/hooks/useFondos';
 import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
+import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes, getMesesDisponibles } from '@/lib/dates';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, CheckCircle2, Lock, Plus, Trash2, Loader2, History, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Wallet, CreditCard, AlertTriangle, CheckCircle, CheckCircle2, Lock, Plus, Trash2, Loader2, History, ChevronDown, ChevronUp, FileSpreadsheet, FileText } from 'lucide-react';
 import { useGastos } from '@/hooks/useGastos';
 import { useValoresRevisados } from '@/hooks/useValoresRevisados';
 import type { MetodoPago, DesgloseCategoria } from '@/types';
@@ -74,6 +75,9 @@ export function ResumenPage() {
     total: number;
     items: Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string }>;
   }>>([]);
+  // TODOS los gastos pendientes del periodo agrupados por categoria (sin recorte top 5).
+  // Se usa para exportar a Excel/PDF, independiente del toggle de pantalla.
+  const [pendientesCompletos, setPendientesCompletos] = useState<ExportCategoria[]>([]);
   const [valoresRevisar, setValoresRevisar] = useState<Array<{
     tipo: 'duplicado' | 'monto-similar';
     severidad: 'alta' | 'media';
@@ -259,13 +263,21 @@ export function ResumenPage() {
       const totalPend = soloPendientes.reduce((acc, it) => roundTwo(acc + it.monto), 0);
       pendientesPorCategoria.set(cat, { items: soloPendientes, total: totalPend });
     }
-    const sortedPendientes = Array.from(pendientesPorCategoria.entries())
-      .sort((a, b) => b[1].total - a[1].total)
-      .slice(0, 5);
-    setTopItemsPorCategoria(sortedPendientes.map(([nombre, { items, total }]) => ({
+    const allPendientesSorted = Array.from(pendientesPorCategoria.entries())
+      .sort((a, b) => b[1].total - a[1].total);
+    setTopItemsPorCategoria(allPendientesSorted.slice(0, 5).map(([nombre, { items, total }]) => ({
       categoria: nombre,
       total,
       items: items.slice().sort((a, b) => b.monto - a.monto),
+    })));
+    // Set completo (todas las categorias, todos los items) para exportar
+    setPendientesCompletos(allPendientesSorted.map(([nombre, { items, total }]) => ({
+      categoria: nombre,
+      total,
+      items: items
+        .slice()
+        .sort((a, b) => b.monto - a.monto)
+        .map(it => ({ descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo })),
     })));
 
     // ====== Deteccion de "Valores a revisar" ======
@@ -567,6 +579,35 @@ export function ResumenPage() {
     else {
       addToast('Grupo re-abierto.', 'success');
       await fetchValoresRevisados(profile?.sede_id ?? undefined);
+    }
+  }
+
+  // Label del periodo para los reportes exportados (ej. "Mayo 2026 - Semana 5")
+  const periodoLabel = isAnual
+    ? `Año ${filterAnio}`
+    : `${mesLabel}${filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}`;
+
+  async function handleExportExcel() {
+    if (pendientesCompletos.length === 0) {
+      addToast('No hay gastos pendientes para exportar', 'warning');
+      return;
+    }
+    try {
+      await exportarGastosExcel(pendientesCompletos, { periodoLabel, fechaGeneracion: getTodayLima() });
+    } catch {
+      addToast('No se pudo generar el Excel', 'error');
+    }
+  }
+
+  async function handleExportPDF() {
+    if (pendientesCompletos.length === 0) {
+      addToast('No hay gastos pendientes para exportar', 'warning');
+      return;
+    }
+    try {
+      await exportarGastosPDF(pendientesCompletos, { periodoLabel, fechaGeneracion: getTodayLima() });
+    } catch {
+      addToast('No se pudo generar el PDF', 'error');
     }
   }
 
@@ -1048,7 +1089,8 @@ export function ResumenPage() {
                   <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? 'Todos los gastos pendientes por categoria (faltan reponer a Luis)' : `Los ${topItemsCount} gastos pendientes mas costosos por categoria (faltan reponer a Luis)`}</p>
                 </div>
-                  <div className="inline-flex rounded-md border border-gray-200 bg-white shrink-0" role="group">
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div className="inline-flex rounded-md border border-gray-200 bg-white" role="group">
                     <button
                       type="button"
                       onClick={() => setTopItemsCount(5)}
@@ -1070,6 +1112,15 @@ export function ResumenPage() {
                     >
                       Todos
                     </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportExcel} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
+                      <FileSpreadsheet size={14} className="mr-1.5" /> Exportar Excel
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportPDF} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
+                      <FileText size={14} className="mr-1.5" /> Exportar PDF
+                    </Button>
+                  </div>
                   </div>
                 </div>
               </CardHeader>
