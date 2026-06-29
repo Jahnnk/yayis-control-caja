@@ -281,12 +281,16 @@ export function ResumenPage() {
     })));
 
     // ====== Deteccion de "Valores a revisar" ======
-    // Tomamos todos los gastos del periodo y buscamos:
+    // Solo miramos gastos PENDIENTES (aun no repuestos a Luis). El proposito de
+    // esta seccion es evitar pagar/reponer dos veces el mismo gasto; si un gasto
+    // ya esta pagado, ese par ya no representa riesgo de doble reposicion, asi que
+    // no debe entrar en la comparacion.
     //   1) Posibles duplicados: misma descripcion + mismo monto (>= 2 gastos)
     //   2) Mismo monto, descripcion distinta (>= 2 gastos) si monto >= 30
     type GastoFlag = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; categoria: string };
     const allGastosFlat: GastoFlag[] = [];
     for (const g of (gastosData ?? []) as Array<Record<string, unknown>>) {
+      if ((g.estado as string) !== 'pendiente') continue; // ignorar gastos ya pagados/repuestos
       allGastosFlat.push({
         id: g.id as string,
         descripcion: ((g.descripcion as string) ?? '(sin descripcion)').trim(),
