@@ -106,6 +106,7 @@ export function ResumenPage() {
   const [repoMonto, setRepoMonto] = useState('');
   const [repoNotas, setRepoNotas] = useState('');
   const [repoSaving, setRepoSaving] = useState(false);
+  const [confirmDeleteRepoId, setConfirmDeleteRepoId] = useState<string | null>(null);
 
   // Historico
   const [showHistorico, setShowHistorico] = useState(false);
@@ -135,25 +136,40 @@ export function ResumenPage() {
     if (!profile?.sede_id || (!isAnual && !mesLabel)) return;
     setLoading(true);
 
-    // Fetch gastos
-    let query = supabase
-      .from('gastos')
-      .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, categorias(nombre)')
-      .eq('sede_id', profile.sede_id)
-      .order('fecha', { ascending: true });
+    // Fetch gastos por bloques: Supabase devuelve maximo 1000 filas por
+    // consulta, asi que leemos en paginas hasta traer todos los gastos del
+    // periodo (importante en la vista anual cuando el historico crezca).
+    const PAGE_SIZE = 1000;
+    const gastosData: Array<Record<string, unknown>> = [];
+    for (let desde = 0; ; desde += PAGE_SIZE) {
+      let query = supabase
+        .from('gastos')
+        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, categorias(nombre)')
+        .eq('sede_id', profile.sede_id)
+        .order('fecha', { ascending: true })
+        .order('id', { ascending: true })
+        .range(desde, desde + PAGE_SIZE - 1);
 
-    if (isAnual) {
-      // Filter by year using fecha range
-      query = query.gte('fecha', `${filterAnio}-01-01`).lte('fecha', `${filterAnio}-12-31`);
-    } else {
-      query = query.eq('mes', mesLabel);
+      if (isAnual) {
+        // Filter by year using fecha range
+        query = query.gte('fecha', `${filterAnio}-01-01`).lte('fecha', `${filterAnio}-12-31`);
+      } else {
+        query = query.eq('mes', mesLabel);
+      }
+
+      if (filterSemana > 0) {
+        query = query.eq('semana', filterSemana);
+      }
+
+      const { data: pagina, error: gastosError } = await query;
+      if (gastosError) {
+        addToast(`No se pudieron cargar los gastos: ${gastosError.message}`, 'error');
+        setLoading(false);
+        return;
+      }
+      gastosData.push(...(pagina ?? []));
+      if (!pagina || pagina.length < PAGE_SIZE) break;
     }
-
-    if (filterSemana > 0) {
-      query = query.eq('semana', filterSemana);
-    }
-
-    const { data: gastosData } = await query;
 
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
@@ -363,8 +379,6 @@ export function ResumenPage() {
     setCatCtPagado(Array.from(catCtPagadoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
     setTotalEfPagado(sumEfPagado);
     setTotalCtPagado(sumCtPagado);
-    setTotalEfectivo(sumEf);
-    setTotalCuentas(sumCt);
     setTotalEfPend(sumEfPend);
     setTotalCtPend(sumCtPend);
     setAllCatNames(sorted.map(([n]) => n));
@@ -378,7 +392,7 @@ export function ResumenPage() {
     await fetchSaldo(profile.sede_id);
 
     setLoading(false);
-  }, [profile, mesLabel, filterSemana, filterAnio, isAnual, semanas, fetchArqueo, fetchSaldo]);
+  }, [profile, mesLabel, filterSemana, filterAnio, isAnual, semanas, fetchArqueo, fetchSaldo, addToast]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -571,6 +585,14 @@ export function ResumenPage() {
       addToast('Grupo verificado. Movido al historico.', 'success');
       await fetchValoresRevisados(profile.sede_id);
     }
+  }
+
+  async function handleConfirmDeleteRepo() {
+    if (!confirmDeleteRepoId) return;
+    const { error } = await deleteReposicion(confirmDeleteRepoId);
+    setConfirmDeleteRepoId(null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else { addToast('Reposicion eliminada. Sus gastos volvieron a pendiente.', 'success'); loadData(); }
   }
 
   async function handleConfirmReabrir() {
@@ -1440,9 +1462,13 @@ export function ResumenPage() {
               </div>
               <Button className="mt-3" disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0} onClick={async () => {
                 setRepoSaving(true);
-                const { error } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
+                const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
                 if (error) addToast(`Error: ${error}`, 'error');
-                else { addToast('Reposicion registrada', 'success'); setRepoMonto(''); setRepoNotas(''); loadData(); }
+                else {
+                  if (warning) addToast(warning, 'warning');
+                  else addToast('Reposicion registrada', 'success');
+                  setRepoMonto(''); setRepoNotas(''); loadData();
+                }
                 setRepoSaving(false);
               }}>
                 {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
@@ -1463,11 +1489,7 @@ export function ResumenPage() {
                         <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
                         <td className="py-2 text-right font-medium">{formatMonto(Number(r.monto))}</td>
                         <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
-                        <td className="py-2"><Button variant="ghost" size="icon" className="text-red-500" onClick={async () => {
-                          const { error } = await deleteReposicion(r.id);
-                          if (error) addToast(`Error: ${error}`, 'error');
-                          else { addToast('Eliminada', 'success'); loadData(); }
-                        }}><Trash2 size={14} /></Button></td>
+                        <td className="py-2"><Button variant="ghost" size="icon" className="text-red-500" aria-label="Eliminar reposicion" onClick={() => setConfirmDeleteRepoId(r.id)}><Trash2 size={14} /></Button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1479,6 +1501,17 @@ export function ResumenPage() {
       )}
 
       <ConfirmDialog open={showCerrar} title="Cerrar Semana" message="Una vez cerrada, los registros no podran modificarse." confirmLabel="Cerrar Semana" onConfirm={handleCerrarSemana} onCancel={() => setShowCerrar(false)} />
+
+      {/* Confirmacion: eliminar reposicion */}
+      <ConfirmDialog
+        open={confirmDeleteRepoId !== null}
+        title="¿Eliminar esta reposicion?"
+        message="Los gastos que esta reposicion pago volveran a quedar como pendientes por reponer."
+        confirmLabel="Si, eliminar"
+        variant="destructive"
+        onConfirm={handleConfirmDeleteRepo}
+        onCancel={() => setConfirmDeleteRepoId(null)}
+      />
 
       {/* Confirmacion: marcar grupo como verificado */}
       <ConfirmDialog

@@ -70,7 +70,7 @@ export function useReposiciones() {
     reposicionId: string,
   ) => {
     // Obtener gastos pendientes del metodo, ordenados por fecha (mas antiguos primero)
-    const { data: pendientes } = await supabase
+    const { data: pendientes, error: fetchError } = await supabase
       .from('gastos')
       .select('id, monto')
       .eq('sede_id', sedeId)
@@ -79,7 +79,8 @@ export function useReposiciones() {
       .order('fecha', { ascending: true })
       .order('created_at', { ascending: true });
 
-    if (!pendientes || pendientes.length === 0) return;
+    if (fetchError) return { error: fetchError.message };
+    if (!pendientes || pendientes.length === 0) return { error: null };
 
     let acumulado = 0;
     const idsParaMarcar: string[] = [];
@@ -102,11 +103,13 @@ export function useReposiciones() {
 
     // Solo marcar si la suma coincide exactamente con el monto de reposicion
     if (idsParaMarcar.length > 0 && acumulado === montoReposicion) {
-      await supabase
+      const { error } = await supabase
         .from('gastos')
         .update({ estado: 'pagado', reposicion_id: reposicionId })
         .in('id', idsParaMarcar);
+      if (error) return { error: error.message };
     }
+    return { error: null };
   }, []);
 
   const createReposicion = useCallback(async (
@@ -132,15 +135,31 @@ export function useReposiciones() {
 
     if (error) return { error: error.message };
 
-    // Marcar gastos como pagados si la suma coincide
-    await marcarGastosPagados(profile.sede_id, metodoPago, monto, nuevaReposicion.id);
+    // Marcar gastos como pagados si la suma coincide.
+    // Si este paso falla, la reposicion YA quedo guardada: avisamos con un
+    // warning (no un error) para que el usuario no la registre dos veces.
+    const { error: errorMarcado } = await marcarGastosPagados(profile.sede_id, metodoPago, monto, nuevaReposicion.id);
 
     // Recalcular saldo
     await fetchSaldo(profile.sede_id);
-    return { error: null };
+    return {
+      error: null,
+      warning: errorMarcado
+        ? `La reposicion se guardo, pero no se pudieron marcar los gastos como pagados (${errorMarcado}). Recarga la pagina e intenta de nuevo.`
+        : null,
+    };
   }, [profile, fetchSaldo, marcarGastosPagados]);
 
   const deleteReposicion = useCallback(async (id: string) => {
+    // Antes de borrar la reposicion, los gastos que ella pago vuelven a
+    // "pendiente". Si no, quedarian como pagados sin reposicion que los
+    // respalde y el saldo con Luis se descuadra.
+    const { error: revertError } = await supabase
+      .from('gastos')
+      .update({ estado: 'pendiente', reposicion_id: null })
+      .eq('reposicion_id', id);
+    if (revertError) return { error: revertError.message };
+
     const { error } = await supabase.from('reposiciones').delete().eq('id', id);
     if (error) return { error: error.message };
     await fetchSaldo(profile?.sede_id ?? undefined);
