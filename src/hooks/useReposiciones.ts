@@ -59,9 +59,12 @@ export function useReposiciones() {
   }, [profile]);
 
   /**
-   * Marca como "pagado" los gastos pendientes mas antiguos cuya suma
-   * sea exactamente igual al monto de la reposicion.
-   * Va sumando gastos del mas viejo al mas nuevo hasta llegar al monto exacto.
+   * Aplica una reposicion marcando como "pagados" los gastos pendientes del
+   * metodo indicado, del mas antiguo al mas nuevo (FIFO), hasta donde alcance
+   * el monto de la reposicion. NO exige que el monto calce exacto: toma todos
+   * los gastos completos que quepan (si uno excede el monto restante lo salta y
+   * sigue con el siguiente). Un gasto nunca se paga a medias, asi que puede
+   * quedar un pequeño resto sin aplicar cuando ningun gasto restante cabe.
    */
   const marcarGastosPagados = useCallback(async (
     sedeId: string,
@@ -94,15 +97,15 @@ export function useReposiciones() {
         acumulado = nuevoAcumulado;
       }
 
-      // Si ya llegamos al monto exacto, dejamos de buscar
+      // Si ya consumimos todo el monto, no tiene sentido seguir
       if (acumulado === montoReposicion) break;
 
-      // Si nos pasamos, no incluimos este gasto
-      if (nuevoAcumulado > montoReposicion) continue;
+      // Si este gasto no cabe en el monto restante, lo saltamos y probamos el
+      // siguiente (mas nuevo) por si es mas chico y todavia entra.
     }
 
-    // Solo marcar si la suma coincide exactamente con el monto de reposicion
-    if (idsParaMarcar.length > 0 && acumulado === montoReposicion) {
+    // Marcar todos los gastos que cupieron, aunque la suma no calce exacto.
+    if (idsParaMarcar.length > 0) {
       const { error } = await supabase
         .from('gastos')
         .update({ estado: 'pagado', reposicion_id: reposicionId })
