@@ -179,9 +179,7 @@ export function ResumenPage() {
     const catCuentasMap = new Map<string, number>();
     const catEfPagadoMap = new Map<string, number>();
     const catCtPagadoMap = new Map<string, number>();
-    const catEfPendMap = new Map<string, number>();
-    const catCtPendMap = new Map<string, number>();
-    let sumEfPagado = 0, sumCtPagado = 0, sumEfPend = 0, sumCtPend = 0;
+    let sumEfPagado = 0, sumCtPagado = 0;
     let sumEf = 0, sumCt = 0, sumTotal = 0, sumPend = 0, sumPagado = 0;
 
     if (isAnual) {
@@ -227,15 +225,11 @@ export function ResumenPage() {
           sumCtPagado = roundTwo(sumCtPagado + monto);
         }
       } else {
+        // El pendiente del periodo alimenta la tabla por semana y el KPI
+        // "Total Pendiente" (analisis del mes). El desglose pendiente por
+        // categoria se calcula aparte, global (ver mas abajo).
         s.pendiente = roundTwo(s.pendiente + monto);
         sumPend = roundTwo(sumPend + monto);
-        if (metodo === 'efectivo') {
-          catEfPendMap.set(catName, roundTwo((catEfPendMap.get(catName) ?? 0) + monto));
-          sumEfPend = roundTwo(sumEfPend + monto);
-        } else {
-          catCtPendMap.set(catName, roundTwo((catCtPendMap.get(catName) ?? 0) + monto));
-          sumCtPend = roundTwo(sumCtPend + monto);
-        }
       }
 
       s.porCategoria[catName] = roundTwo((s.porCategoria[catName] ?? 0) + monto);
@@ -372,16 +366,43 @@ export function ResumenPage() {
     });
     setValoresRevisar(revisar);
 
-    // Categorias por metodo de pago
-    setCategoriasEfectivo(Array.from(catEfPendMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
-    setCategoriasCuentas(Array.from(catCtPendMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    // Desglose de lo REPUESTO (pagado) — del periodo filtrado (analisis del mes)
     setCatEfPagado(Array.from(catEfPagadoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
     setCatCtPagado(Array.from(catCtPagadoMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
     setTotalEfPagado(sumEfPagado);
     setTotalCtPagado(sumCtPagado);
-    setTotalEfPend(sumEfPend);
-    setTotalCtPend(sumCtPend);
     setAllCatNames(sorted.map(([n]) => n));
+
+    // Desglose PENDIENTE por reponer = la DEUDA REAL con Luis, que abarca TODOS
+    // los meses (no solo el periodo filtrado). Asi cuadra exacto con "Reponer" y
+    // "Deuda Total", que tambien son globales (salen de fetchSaldo). Por eso lo
+    // leemos sin filtro de mes/semana, con los MISMOS filtros que fetchSaldo.
+    const { data: pendGlobal, error: pendError } = await supabase
+      .from('gastos')
+      .select('metodo_pago, monto, categorias(nombre)')
+      .eq('sede_id', profile.sede_id)
+      .eq('estado', 'pendiente');
+    if (pendError) {
+      addToast(`No se pudo cargar el desglose pendiente: ${pendError.message}`, 'error');
+    }
+    const globalEfMap = new Map<string, number>();
+    const globalCtMap = new Map<string, number>();
+    let globalEfTotal = 0, globalCtTotal = 0;
+    for (const g of (pendGlobal ?? []) as Array<Record<string, unknown>>) {
+      const cat = ((g.categorias as { nombre: string } | null)?.nombre) ?? 'Otros';
+      const monto = Number(g.monto);
+      if ((g.metodo_pago as string) === 'efectivo') {
+        globalEfMap.set(cat, roundTwo((globalEfMap.get(cat) ?? 0) + monto));
+        globalEfTotal = roundTwo(globalEfTotal + monto);
+      } else {
+        globalCtMap.set(cat, roundTwo((globalCtMap.get(cat) ?? 0) + monto));
+        globalCtTotal = roundTwo(globalCtTotal + monto);
+      }
+    }
+    setCategoriasEfectivo(Array.from(globalEfMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setCategoriasCuentas(Array.from(globalCtMap.entries()).sort((a, b) => b[1] - a[1]).map(([nombre, total]) => ({ nombre, total })));
+    setTotalEfPend(globalEfTotal);
+    setTotalCtPend(globalCtTotal);
 
     // Arqueo (only when specific week selected)
     if (filterSemana > 0) {
@@ -684,6 +705,7 @@ export function ResumenPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} className="text-amber-500" /><span className="text-xs text-muted-foreground">Total Pendiente</span></div>
             <p className="text-xl font-bold text-amber-600">{formatMonto(totalPendiente)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con Luis esta en "Reponer".</p>
           </CardContent>
         </Card>
         <Card>
@@ -701,14 +723,14 @@ export function ResumenPage() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span></div>
               <p className="text-xl font-bold text-yayis-green">{formatMonto(saldo.deudaEfectivo)}</p>
-              <p className="text-xs text-muted-foreground">Pendiente en efectivo</p>
+              <p className="text-xs text-muted-foreground">Deuda total en efectivo (todos los meses)</p>
             </CardContent>
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer Cuentas</span></div>
               <p className="text-xl font-bold text-blue-600">{formatMonto(saldo.deudaCuentas)}</p>
-              <p className="text-xs text-muted-foreground">Pendiente en cuentas</p>
+              <p className="text-xs text-muted-foreground">Deuda total en cuentas (todos los meses)</p>
             </CardContent>
           </Card>
           <Card className={`border-2 ${cajaEfectivo >= fondoEf ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
@@ -785,10 +807,11 @@ export function ResumenPage() {
         </div>
       )}
 
-      {/* Desglose por categoria: Pendiente (aun no repuesto) */}
+      {/* Desglose por categoria: Pendiente (aun no repuesto) — DEUDA TOTAL con Luis */}
       {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
         <div>
-          <h3 className="text-base font-bold text-amber-700 mb-3">Desglose Pendiente por Reponer</h3>
+          <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con Luis por categoria</h3>
+          <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Los totales cuadran con "Reponer Efectivo/Cuentas".</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {categoriasEfectivo.length > 0 && (
               <Card className="border-amber-200 bg-amber-50/30">
@@ -1276,8 +1299,8 @@ export function ResumenPage() {
             {/* Desglose Pendiente por Reponer (copia para registrar gastos en otro lado) */}
             {(categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
               <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
-                <h4 className="text-sm font-bold text-amber-700 mb-1">Desglose Pendiente por Reponer</h4>
-                <p className="text-xs text-muted-foreground mb-3">Lo que aun queda por reponer — util si necesitas registrar tus gastos en otro sistema.</p>
+                <h4 className="text-sm font-bold text-amber-700 mb-1">Desglose de la deuda con Luis por categoria</h4>
+                <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Cuadra con "Reponer Efectivo/Cuentas".</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {categoriasEfectivo.length > 0 && (
                     <div>
