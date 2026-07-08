@@ -6,6 +6,7 @@ import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
+import { AuditoriaDeudaLuis } from '@/components/AuditoriaDeudaLuis';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1494,6 +1495,9 @@ export function ResumenPage() {
                 </div>
               </div>
             </div>
+
+            {/* Auditoria temporal del descuadre */}
+            <AuditoriaDeudaLuis />
 
             {/* Formulario */}
             <div className="border-t pt-4">
