@@ -1502,21 +1502,27 @@ export function ResumenPage() {
             {/* Historial */}
             {reposiciones.length > 0 && (
               <div className="border-t pt-4">
-                <h4 className="text-sm font-bold mb-3">Historial</h4>
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th></th></tr></thead>
-                  <tbody>
-                    {reposiciones.map(r => (
-                      <tr key={r.id} className="border-b">
-                        <td className="py-2">{r.fecha}</td>
-                        <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
-                        <td className="py-2 text-right font-medium">{formatMonto(Number(r.monto))}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
-                        <td className="py-2"><Button variant="ghost" size="icon" className="text-red-500" aria-label="Eliminar reposicion" onClick={() => setConfirmDeleteRepoId(r.id)}><Trash2 size={14} /></Button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h4 className="text-sm font-bold mb-3">Historial de reposiciones</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Accion</th></tr></thead>
+                    <tbody>
+                      {reposiciones.map(r => (
+                        <tr key={r.id} className="border-b">
+                          <td className="py-2 whitespace-nowrap">{r.fecha}</td>
+                          <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
+                          <td className="py-2 text-right font-medium whitespace-nowrap">{formatMonto(Number(r.monto))}</td>
+                          <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
+                          <td className="py-2 text-right whitespace-nowrap">
+                            <Button variant="outline" size="sm" className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setConfirmDeleteRepoId(r.id)}>
+                              <Trash2 size={14} className="mr-1" /> Eliminar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </CardContent>
