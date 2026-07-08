@@ -127,6 +127,12 @@ export interface SaldoReposicion {
   repuestoCuentas: number;
   saldoEfectivo: number;
   saldoCuentas: number;
+  // Modelo NUEVO (dinero neto): total de todos los gastos menos total repuesto.
+  // Se calcula en paralelo para validar contra el modelo viejo antes de reemplazarlo.
+  totalGastosEfectivo: number;
+  totalGastosCuentas: number;
+  deudaNetaEfectivo: number;
+  deudaNetaCuentas: number;
 }
 
 export interface GastoFormData {
