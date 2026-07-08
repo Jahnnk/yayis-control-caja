@@ -32,6 +32,14 @@ type RepoHuerfana = {
   notas: string | null;
 };
 
+type FilaMes = {
+  mes: string;       // YYYY-MM
+  gastado: number;   // gastos de cuentas del mes
+  repuesto: number;  // reposiciones de cuentas del mes
+  dif: number;       // gastado - repuesto
+  acum: number;      // saldo acumulado hasta ese mes
+};
+
 type Resultado = {
   pagadoTotalEf: number;
   pagadoTotalCt: number;
@@ -43,6 +51,7 @@ type Resultado = {
   reposHuerfanas: RepoHuerfana[];
   reposHuerfanasTotalEf: number;
   reposHuerfanasTotalCt: number;
+  conciliacion: FilaMes[];  // mes a mes en CUENTAS
 };
 
 const PAGE_SIZE = 1000;
@@ -80,6 +89,44 @@ export function AuditoriaDeudaLuis() {
       .eq('sede_id', profile.sede_id)
       .order('fecha', { ascending: true });
     if (eRepo) { setError(eRepo.message); setLoading(false); return; }
+
+    // 3. TODOS los gastos (para la conciliacion mes a mes), paginado
+    const todosGastos: Array<Record<string, unknown>> = [];
+    for (let desde = 0; ; desde += PAGE_SIZE) {
+      const { data, error: e } = await supabase
+        .from('gastos')
+        .select('fecha, monto, metodo_pago')
+        .eq('sede_id', profile.sede_id)
+        .order('fecha', { ascending: true })
+        .range(desde, desde + PAGE_SIZE - 1);
+      if (e) { setError(e.message); setLoading(false); return; }
+      todosGastos.push(...(data ?? []));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+
+    // Conciliacion mes a mes en CUENTAS: agrupar gastos y reposiciones por mes
+    const mesMap = new Map<string, { gastado: number; repuesto: number }>();
+    for (const g of todosGastos) {
+      if ((g.metodo_pago as string) !== 'cuentas') continue;
+      const mes = (g.fecha as string).slice(0, 7);
+      const acc = mesMap.get(mes) ?? { gastado: 0, repuesto: 0 };
+      acc.gastado = roundTwo(acc.gastado + Number(g.monto));
+      mesMap.set(mes, acc);
+    }
+    for (const r of reposData ?? []) {
+      if ((r.metodo_pago as string) !== 'cuentas') continue;
+      const mes = (r.fecha as string).slice(0, 7);
+      const acc = mesMap.get(mes) ?? { gastado: 0, repuesto: 0 };
+      acc.repuesto = roundTwo(acc.repuesto + Number(r.monto));
+      mesMap.set(mes, acc);
+    }
+    let acumulado = 0;
+    const conciliacion: FilaMes[] = Array.from(mesMap.keys()).sort().map(mes => {
+      const { gastado, repuesto } = mesMap.get(mes)!;
+      const dif = roundTwo(gastado - repuesto);
+      acumulado = roundTwo(acumulado + dif);
+      return { mes, gastado, repuesto, dif, acum: acumulado };
+    });
 
     // --- Totales de gastos pagados por metodo ---
     let pagadoTotalEf = 0, pagadoTotalCt = 0;
@@ -143,6 +190,7 @@ export function AuditoriaDeudaLuis() {
       repuestoTotalEf, repuestoTotalCt,
       gastosHuerfanos, huerfanosTotalEf, huerfanosTotalCt,
       reposHuerfanas, reposHuerfanasTotalEf, reposHuerfanasTotalCt,
+      conciliacion,
     });
     setLoading(false);
   }
@@ -196,6 +244,38 @@ export function AuditoriaDeudaLuis() {
           <p className="text-xs text-muted-foreground">
             El descuadre se explica por: <strong>gastos marcados pagados sin reposición que los respalde</strong> menos <strong>reposiciones sin gastos vinculados</strong>.
           </p>
+
+          {/* Conciliacion mes a mes (CUENTAS) — la clave para saber si la deuda es real */}
+          <div>
+            <p className="text-sm font-bold text-purple-800 mb-1">Conciliación mes a mes (Cuentas)</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Gastado vs repuesto cada mes. El <strong>saldo acumulado</strong> es lo que importa: si se mantiene cerca de cero y solo sube al final, la deuda es reciente. Si crece desde meses viejos, hay deuda arrastrada. (El desfase gasto/reposición entre meses vecinos es normal.)
+            </p>
+            <div className="overflow-x-auto border border-purple-200 rounded-lg bg-white">
+              <table className="w-full text-xs">
+                <thead className="bg-purple-50">
+                  <tr className="border-b">
+                    <th className="text-left px-2 py-1.5 font-medium">Mes</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Gastado</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Repuesto</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Diferencia</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Saldo acumulado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {res.conciliacion.map(f => (
+                    <tr key={f.mes} className="border-b last:border-b-0">
+                      <td className="px-2 py-1.5 whitespace-nowrap">{f.mes}</td>
+                      <td className="px-2 py-1.5 text-right">{formatMonto(f.gastado)}</td>
+                      <td className="px-2 py-1.5 text-right">{formatMonto(f.repuesto)}</td>
+                      <td className={`px-2 py-1.5 text-right ${f.dif > 0 ? 'text-red-600' : f.dif < 0 ? 'text-emerald-600' : 'text-muted-foreground'}`}>{formatMonto(f.dif)}</td>
+                      <td className={`px-2 py-1.5 text-right font-bold ${f.acum > 0.01 ? 'text-red-700' : 'text-emerald-700'}`}>{formatMonto(f.acum)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* Gastos pagados sin reposicion */}
           <div>
