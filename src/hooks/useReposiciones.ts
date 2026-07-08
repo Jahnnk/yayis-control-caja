@@ -11,8 +11,6 @@ export function useReposiciones() {
     deudaEfectivo: 0, deudaCuentas: 0,
     repuestoEfectivo: 0, repuestoCuentas: 0,
     saldoEfectivo: 0, saldoCuentas: 0,
-    totalGastosEfectivo: 0, totalGastosCuentas: 0,
-    deudaNetaEfectivo: 0, deudaNetaCuentas: 0,
   });
   const [loading, setLoading] = useState(false);
 
@@ -47,27 +45,6 @@ export function useReposiciones() {
       else repCt = roundTwo(repCt + Number(r.monto));
     }
 
-    // 3. Modelo NUEVO (dinero neto): sumar TODOS los gastos (pagados + pendientes)
-    // por metodo, sin importar estado. La deuda real con Luis = total gastos que
-    // el adelanto - total que ya le repusiste. Leemos por bloques de 1000.
-    let totalGastosEf = 0, totalGastosCt = 0;
-    const PAGE_SIZE = 1000;
-    for (let desde = 0; ; desde += PAGE_SIZE) {
-      const { data: pagina, error: gastosError } = await supabase
-        .from('gastos')
-        .select('metodo_pago, monto')
-        .eq('sede_id', sid)
-        .range(desde, desde + PAGE_SIZE - 1);
-      if (gastosError) break;
-      for (const g of pagina ?? []) {
-        if (g.metodo_pago === 'efectivo') totalGastosEf = roundTwo(totalGastosEf + Number(g.monto));
-        else totalGastosCt = roundTwo(totalGastosCt + Number(g.monto));
-      }
-      if (!pagina || pagina.length < PAGE_SIZE) break;
-    }
-    const deudaNetaEf = roundTwo(totalGastosEf - repEf);
-    const deudaNetaCt = roundTwo(totalGastosCt - repCt);
-
     setReposiciones((reposData ?? []) as Reposicion[]);
     setSaldo({
       deudaEfectivo: deudaEf,
@@ -76,10 +53,6 @@ export function useReposiciones() {
       repuestoCuentas: repCt,
       saldoEfectivo: roundTwo(deudaEf - repEf),
       saldoCuentas: roundTwo(deudaCt - repCt),
-      totalGastosEfectivo: totalGastosEf,
-      totalGastosCuentas: totalGastosCt,
-      deudaNetaEfectivo: deudaNetaEf,
-      deudaNetaCuentas: deudaNetaCt,
     });
 
     setLoading(false);

@@ -6,7 +6,6 @@ import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
-import { AuditoriaDeudaLuis } from '@/components/AuditoriaDeudaLuis';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1470,34 +1469,6 @@ export function ResumenPage() {
                 <p className="text-xs text-muted-foreground">Ef: {formatMonto(Math.max(0, saldo.saldoEfectivo))} | Ct: {formatMonto(Math.max(0, saldo.saldoCuentas))}</p>
               </div>
             </div>
-
-            {/* ===== VALIDACION: nuevo calculo de "dinero neto" (temporal) ===== */}
-            {/* Se muestra en paralelo para que Jahnn compare contra el modelo viejo.
-                Si cuadra con la realidad, en la Fase 2 reemplaza a "Deuda Total". */}
-            <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={16} className="text-indigo-600" />
-                <p className="text-sm font-bold text-indigo-800">Nuevo cálculo: deuda como dinero neto (por validar)</p>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Deuda = todos tus gastos − todo lo repuesto. Compara este número con la "Deuda Total" de arriba y dime si cuadra con lo que realmente le debes a Luis. Es solo informativo; todavía no reemplaza nada.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-white border border-indigo-200 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Efectivo</p>
-                  <p className="text-lg font-bold text-indigo-700">{formatMonto(Math.max(0, saldo.deudaNetaEfectivo))}</p>
-                  <p className="text-[11px] text-muted-foreground">Gastos {formatMonto(saldo.totalGastosEfectivo)} − Repuesto {formatMonto(saldo.repuestoEfectivo)} = {formatMonto(saldo.deudaNetaEfectivo)}</p>
-                </div>
-                <div className="bg-white border border-indigo-200 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Cuentas</p>
-                  <p className="text-lg font-bold text-indigo-700">{formatMonto(Math.max(0, saldo.deudaNetaCuentas))}</p>
-                  <p className="text-[11px] text-muted-foreground">Gastos {formatMonto(saldo.totalGastosCuentas)} − Repuesto {formatMonto(saldo.repuestoCuentas)} = {formatMonto(saldo.deudaNetaCuentas)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Auditoria temporal del descuadre */}
-            <AuditoriaDeudaLuis />
 
             {/* Formulario */}
             <div className="border-t pt-4">
