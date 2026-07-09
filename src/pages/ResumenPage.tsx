@@ -6,6 +6,7 @@ import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
+import { AjusteDeudaTemporal } from '@/components/AjusteDeudaTemporal';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1469,6 +1470,9 @@ export function ResumenPage() {
                 <p className="text-xs text-muted-foreground">Ef: {formatMonto(Math.max(0, saldo.saldoEfectivo))} | Ct: {formatMonto(Math.max(0, saldo.saldoCuentas))}</p>
               </div>
             </div>
+
+            {/* Ajuste puntual temporal (8-jul-2026) */}
+            <AjusteDeudaTemporal onDone={() => loadData()} />
 
             {/* Formulario */}
             <div className="border-t pt-4">
