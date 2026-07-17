@@ -1,18 +1,18 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGastos } from '@/hooks/useGastos';
+import { useGastos, validarConstancia } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useToast } from '@/components/ui/toast';
 import { getTodayLima } from '@/lib/dates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
-import { Loader2, Plus } from 'lucide-react';
+import { FileText, Loader2, Paperclip, Plus, X } from 'lucide-react';
 import type { GastoFormData, MetodoPago } from '@/types';
 
 interface GastoFormProps {
   onSaved: () => void;
-  editData?: GastoFormData & { id: string };
+  editData?: GastoFormData & { id: string; constancia_path: string | null };
   onCancelEdit?: () => void;
 }
 
@@ -35,6 +35,9 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     notas: editData?.notas ?? '',
   });
   const [saving, setSaving] = useState(false);
+  const [constanciaFile, setConstanciaFile] = useState<File | null>(null);
+  const [eliminarConstancia, setEliminarConstancia] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Update form when editData changes (user clicks edit on a gasto)
   useEffect(() => {
@@ -59,7 +62,27 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
         notas: '',
       });
     }
+    setConstanciaFile(null);
+    setEliminarConstancia(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }, [editData]);
+
+  function handleConstanciaChange(file?: File) {
+    if (!file) return;
+    const error = validarConstancia(file);
+    if (error) {
+      addToast(error, 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setConstanciaFile(file);
+    setEliminarConstancia(false);
+  }
+
+  function clearConstancia() {
+    setConstanciaFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
 
   function updateField<K extends keyof GastoFormData>(key: K, value: GastoFormData[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -74,7 +97,11 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     setSaving(true);
 
     if (editData?.id) {
-      const { error } = await updateGasto(editData.id, form);
+      const { error } = await updateGasto(editData.id, form, {
+        file: constanciaFile,
+        pathActual: editData.constancia_path,
+        eliminar: eliminarConstancia,
+      });
       if (error) addToast(`Error: ${error}`, 'error');
       else {
         addToast('Gasto actualizado', 'success');
@@ -82,7 +109,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
         onSaved();
       }
     } else {
-      const { error } = await createGasto(form);
+      const { error } = await createGasto(form, constanciaFile);
       if (error) addToast(`Error: ${error}`, 'error');
       else {
         addToast('Gasto registrado', 'success');
@@ -96,6 +123,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
           estado: 'pagado',
           notas: '',
         }));
+        clearConstancia();
         onSaved();
         // Reload daily summary
         const reloader = (window as unknown as Record<string, unknown>).__reloadResumenDiario;
@@ -190,6 +218,62 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
             onChange={e => updateField('notas', e.target.value)}
             className="mt-1"
           />
+        </div>
+
+        {/* Constancia */}
+        <div className="sm:col-span-2 lg:col-span-3">
+          <label className="text-sm font-medium">Constancia (opcional)</label>
+          <div className="mt-1 rounded-md border border-dashed border-gray-300 p-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={e => handleConstanciaChange(e.target.files?.[0])}
+              className="sr-only"
+              id="constancia-gasto"
+              disabled={saving}
+            />
+
+            {constanciaFile ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                  <FileText size={18} className="shrink-0 text-yayis-green" />
+                  <span className="truncate">{constanciaFile.name}</span>
+                </div>
+                <Button type="button" variant="ghost" size="icon" onClick={clearConstancia} title="Quitar archivo">
+                  <X size={16} />
+                </Button>
+              </div>
+            ) : editData?.constancia_path && !eliminarConstancia ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-sm text-yayis-dark">
+                  <FileText size={18} className="text-yayis-green" />
+                  Este gasto ya tiene una constancia
+                </span>
+                <div className="flex gap-2">
+                  <label htmlFor="constancia-gasto" className="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50">
+                    Reemplazar
+                  </label>
+                  <button type="button" onClick={() => setEliminarConstancia(true)} className="px-2 text-sm text-red-600 hover:text-red-700">
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <label htmlFor="constancia-gasto" className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50">
+                  <Paperclip size={16} className="mr-2" />
+                  Adjuntar constancia
+                </label>
+                <span className="text-xs text-muted-foreground">Foto o PDF, máximo 10 MB</span>
+                {eliminarConstancia && (
+                  <button type="button" onClick={() => setEliminarConstancia(false)} className="text-sm text-yayis-green hover:underline">
+                    Conservar la constancia anterior
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -43,6 +43,7 @@ export interface Gasto {
   sede_id: string;
   registrado_por: string;
   reposicion_id: string | null;
+  constancia_path: string | null;
   created_at: string;
   updated_at: string;
 }

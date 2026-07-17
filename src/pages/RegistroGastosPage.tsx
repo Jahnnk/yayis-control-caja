@@ -15,7 +15,7 @@ import type { GastoConCategoria, GastoFormData } from '@/types';
 
 export function RegistroGastosPage() {
   const { profile } = useAuth();
-  const { gastos, total, loading, fetchGastos, deleteGasto } = useGastos();
+  const { gastos, total, loading, fetchGastos, deleteGasto, getConstanciaUrl } = useGastos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
 
@@ -23,7 +23,7 @@ export function RegistroGastosPage() {
   const currentMes = getMesLabel(today);
   const currentSemana = calcularSemana(today);
 
-  const [editGasto, setEditGasto] = useState<(GastoFormData & { id: string }) | null>(null);
+  const [editGasto, setEditGasto] = useState<(GastoFormData & { id: string; constancia_path: string | null }) | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const pageSize = 20;
@@ -65,6 +65,7 @@ export function RegistroGastosPage() {
       monto: String(g.monto),
       estado: g.estado,
       notas: g.notas ?? '',
+      constancia_path: g.constancia_path,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -78,6 +79,25 @@ export function RegistroGastosPage() {
       loadGastos();
     }
     setDeleteId(null);
+  }
+
+  async function handleViewConstancia(gasto: GastoConCategoria) {
+    if (!gasto.constancia_path) return;
+    // Abrir la pestaña inmediatamente evita que el navegador bloquee la ventana
+    // mientras se genera el enlace privado.
+    const previewWindow = window.open('', '_blank');
+    const { url, error } = await getConstanciaUrl(gasto.constancia_path);
+    if (error || !url) {
+      previewWindow?.close();
+      addToast(`No se pudo abrir la constancia: ${error ?? 'archivo no disponible'}`, 'error');
+      return;
+    }
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.location.href = url;
+    } else {
+      addToast('El navegador bloqueó la constancia. Habilita las ventanas emergentes e inténtalo nuevamente.', 'error');
+    }
   }
 
   const isViewer = profile?.rol === 'viewer';
@@ -139,6 +159,7 @@ export function RegistroGastosPage() {
         onPageChange={setPage}
         onEdit={handleEdit}
         onDelete={id => setDeleteId(id)}
+        onViewConstancia={handleViewConstancia}
       />
 
       <ConfirmDialog

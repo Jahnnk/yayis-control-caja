@@ -4,6 +4,27 @@ import { useAuth } from '@/contexts/AuthContext';
 import { calcularSemana, getMesLabel } from '@/lib/dates';
 import type { GastoConCategoria, GastoFormData } from '@/types';
 
+const CONSTANCIAS_BUCKET = 'constancias-gastos';
+
+const EXTENSIONES_POR_TIPO: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+};
+
+export const MAX_CONSTANCIA_BYTES = 10 * 1024 * 1024;
+
+export function validarConstancia(file: File): string | null {
+  if (!EXTENSIONES_POR_TIPO[file.type]) {
+    return 'La constancia debe ser una imagen JPG, PNG, WEBP o un archivo PDF';
+  }
+  if (file.size > MAX_CONSTANCIA_BYTES) {
+    return 'La constancia no debe pesar más de 10 MB';
+  }
+  return null;
+}
+
 export function useGastos() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -60,7 +81,28 @@ export function useGastos() {
     setLoading(false);
   }, [profile]);
 
-  const createGasto = useCallback(async (formData: GastoFormData) => {
+  const uploadConstancia = useCallback(async (file: File) => {
+    if (!profile?.sede_id) return { path: null, error: 'Sin sede asignada' };
+
+    const validationError = validarConstancia(file);
+    if (validationError) return { path: null, error: validationError };
+
+    const extension = EXTENSIONES_POR_TIPO[file.type];
+    const path = `${profile.sede_id}/${profile.id}/${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage
+      .from(CONSTANCIAS_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: false });
+
+    if (error) return { path: null, error: `No se pudo guardar la constancia: ${error.message}` };
+    return { path, error: null };
+  }, [profile]);
+
+  const removeConstancia = useCallback(async (path: string) => {
+    const { error } = await supabase.storage.from(CONSTANCIAS_BUCKET).remove([path]);
+    if (error) console.error('Error deleting constancia:', error);
+  }, []);
+
+  const createGasto = useCallback(async (formData: GastoFormData, constanciaFile?: File | null) => {
     if (!profile?.sede_id) return { error: 'Sin sede asignada' };
 
     const semana = calcularSemana(formData.fecha);
@@ -75,6 +117,13 @@ export function useGastos() {
 
     if (rpcError) return { error: rpcError.message };
 
+    let constanciaPath: string | null = null;
+    if (constanciaFile) {
+      const upload = await uploadConstancia(constanciaFile);
+      if (upload.error) return { error: upload.error };
+      constanciaPath = upload.path;
+    }
+
     const { error } = await supabase.from('gastos').insert({
       numero_registro: rpcData as number,
       fecha: formData.fecha,
@@ -88,13 +137,25 @@ export function useGastos() {
       mes,
       sede_id: profile.sede_id,
       registrado_por: profile.id,
+      constancia_path: constanciaPath,
     });
 
-    if (error) return { error: error.message };
+    if (error) {
+      if (constanciaPath) await removeConstancia(constanciaPath);
+      return { error: error.message };
+    }
     return { error: null };
-  }, [profile]);
+  }, [profile, removeConstancia, uploadConstancia]);
 
-  const updateGasto = useCallback(async (id: string, formData: Partial<GastoFormData>) => {
+  const updateGasto = useCallback(async (
+    id: string,
+    formData: Partial<GastoFormData>,
+    constancia?: {
+      file?: File | null;
+      pathActual?: string | null;
+      eliminar?: boolean;
+    },
+  ) => {
     const updates: Record<string, unknown> = {};
     if (formData.descripcion !== undefined) updates.descripcion = formData.descripcion.trim();
     if (formData.categoria_id !== undefined) updates.categoria_id = formData.categoria_id;
@@ -109,15 +170,47 @@ export function useGastos() {
       updates.mes = getMesLabel(formData.fecha);
     }
 
+    let nuevaConstanciaPath: string | null = null;
+    if (constancia?.file) {
+      const upload = await uploadConstancia(constancia.file);
+      if (upload.error) return { error: upload.error };
+      nuevaConstanciaPath = upload.path;
+      updates.constancia_path = nuevaConstanciaPath;
+    } else if (constancia?.eliminar) {
+      updates.constancia_path = null;
+    }
+
     const { error } = await supabase.from('gastos').update(updates).eq('id', id);
-    if (error) return { error: error.message };
+    if (error) {
+      if (nuevaConstanciaPath) await removeConstancia(nuevaConstanciaPath);
+      return { error: error.message };
+    }
+
+    if ((nuevaConstanciaPath || constancia?.eliminar) && constancia?.pathActual) {
+      await removeConstancia(constancia.pathActual);
+    }
     return { error: null };
-  }, []);
+  }, [removeConstancia, uploadConstancia]);
 
   const deleteGasto = useCallback(async (id: string) => {
+    const { data } = await supabase
+      .from('gastos')
+      .select('constancia_path')
+      .eq('id', id)
+      .maybeSingle();
+
     const { error } = await supabase.from('gastos').delete().eq('id', id);
     if (error) return { error: error.message };
+    if (data?.constancia_path) await removeConstancia(data.constancia_path);
     return { error: null };
+  }, [removeConstancia]);
+
+  const getConstanciaUrl = useCallback(async (path: string) => {
+    const { data, error } = await supabase.storage
+      .from(CONSTANCIAS_BUCKET)
+      .createSignedUrl(path, 60);
+    if (error) return { url: null, error: error.message };
+    return { url: data.signedUrl, error: null };
   }, []);
 
   const fetchResumenDiario = useCallback(async (fecha: string) => {
@@ -152,6 +245,7 @@ export function useGastos() {
     createGasto,
     updateGasto,
     deleteGasto,
+    getConstanciaUrl,
     fetchResumenDiario,
   };
 }

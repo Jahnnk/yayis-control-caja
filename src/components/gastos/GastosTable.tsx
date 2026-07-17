@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatMonto } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Trash2 } from 'lucide-react';
 import type { GastoConCategoria, GastoFormData } from '@/types';
 
 interface GastosTableProps {
@@ -13,9 +13,10 @@ interface GastosTableProps {
   onPageChange: (page: number) => void;
   onEdit: (gasto: GastoConCategoria) => void;
   onDelete: (id: string) => void;
+  onViewConstancia: (gasto: GastoConCategoria) => void;
 }
 
-export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdit, onDelete }: GastosTableProps) {
+export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdit, onDelete, onViewConstancia }: GastosTableProps) {
   const { profile } = useAuth();
   const isOwner = profile?.rol === 'owner';
   const today = getTodayLima();
@@ -47,13 +48,14 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Monto</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Registrado por</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Constancia</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {gastos.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                <td colSpan={10} className="text-center py-8 text-muted-foreground">
                   No hay gastos registrados
                 </td>
               </tr>
@@ -80,6 +82,15 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
                   </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{g.profiles?.nombre ?? '-'}</td>
+                <td className="px-4 py-3">
+                  {g.constancia_path ? (
+                    <Button variant="ghost" size="sm" onClick={() => onViewConstancia(g)} title="Ver constancia" className="text-yayis-green">
+                      <Eye size={14} className="mr-1" /> Ver
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin archivo</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
                     {canEdit(g) && (
