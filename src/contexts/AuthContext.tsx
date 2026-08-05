@@ -10,6 +10,7 @@ interface AuthState {
   sede: Sede | null;
   loading: boolean;
   profileError: string | null;
+  authError: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sede, setSede] = useState<Sede | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
@@ -54,15 +56,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
-      } else {
+    let settled = false;
+
+    // Si getSession() se queda colgada (ej. un token guardado en el navegador
+    // quedo dañado, o hay un corte de red), no dejamos la app cargando para
+    // siempre: a los 8s mostramos una salida en vez de un spinner infinito.
+    const timeoutId = setTimeout(() => {
+      if (!settled) {
+        setAuthError('La verificación de tu sesión está tardando demasiado. Puede ser un problema de conexión o una sesión guardada dañada en este navegador.');
         setLoading(false);
       }
-    });
+    }, 8000);
+
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => {
+        settled = true;
+        clearTimeout(timeoutId);
+        setAuthError(null);
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          fetchProfile(s.user.id).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        settled = true;
+        clearTimeout(timeoutId);
+        console.error('Error al verificar sesion:', err);
+        setAuthError('No se pudo verificar tu sesión. Intenta recargar la página.');
+        setLoading(false);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
@@ -75,7 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function signIn(email: string, password: string) {
@@ -91,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, sede, loading, profileError, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, sede, loading, profileError, authError, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
