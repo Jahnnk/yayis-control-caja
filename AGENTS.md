@@ -1,7 +1,7 @@
 # AGENTS.md — Yayi's Control de Caja
 
 > Documento de contexto para cualquier agente de IA (Codex, Claude, etc.) que continúe este proyecto.
-> Léelo completo antes de tocar nada. Última actualización: 29 de septiembre de 2026 (Fase 2A pedidos y ruta).
+> Léelo completo antes de tocar nada. Última actualización: 29 de septiembre de 2026 (Fase 2B dinero, evidencias y recepción).
 
 ---
 
@@ -104,7 +104,9 @@ src/
     ├── UsuariosPage.tsx
     ├── PedidosPage.tsx          # admins arman la lista del día de compra (o urgente) y la envían
     ├── RutaComprasPage.tsx      # Compras: lo del día agrupado por proveedor, marca comprado/no había
-    └── ProveedoresPage.tsx      # proveedores (crédito solo lo define Gerencia) + catálogo de productos
+    ├── ProveedoresPage.tsx      # proveedores (crédito solo lo define Gerencia) + catálogo de productos
+    ├── RendicionPage.tsx        # Compras: su dinero entregado, compras cargadas, rendir con vuelto
+    └── RecepcionPage.tsx        # Admin: entregar dinero, cerrar rendiciones, confirmar mercadería recibida
 
 Pantallas protegidas por rol con `<SoloRoles>` (`components/layout/SoloRoles.tsx`); `/inicio` manda a cada rol a su pantalla.
 
@@ -167,6 +169,7 @@ En orden (ver `git log`):
 8. `fix`: pago progresivo FIFO en reposiciones (descrito arriba).
 9. **Episodio deuda con Luis**: se detectó que la deuda mostrada no cuadraba con la percepción de Jahnn. Se investigó a fondo (herramientas temporales de validación/auditoría/conciliación, todas ya **retiradas**). Conclusión: Luis hizo el **cuadre físico de su caja** y confirmó la deuda real (S/83.50, ya pagada). Se aplicó un ajuste puntual (botón temporal, ya retirado) que saldó todo lo anterior al 8-jul-2026 y dejó pendiente solo lo del día. **Deuda quedó cuadrada.**
 
+12. **Fase 2B dinero, evidencias y recepción (29-sep-2026)**: tablas `entregas` (abierta → rendida → cerrada), `compras` (una por proveedor y sede) y `compra_items` (con precio). Flujo: el admin entrega dinero a Compras → Compras registra cada compra desde la Ruta con fotos → rinde informando su vuelto → el admin revisa, elige la categoría de gasto de cada compra y confirma el vuelto recibido → la función `cerrar_entrega` convierte, **en un solo paso**, cada compra al contado en un **gasto pendiente** de la sede (con la foto como constancia, método = el de la entrega) para que Gerencia lo reponga. Las compras a crédito NO son gastos de caja: quedan `por_pagar` con vencimiento (las paga Finanzas; su panel es la Fase 3). **Reglas de evidencia (en la base, no solo en pantalla)**: con boleta/factura → foto del comprobante (+ captura si pagó por Yape/transferencia); **sin boleta → foto del producto + captura del Yape, y solo se permite pagando por Yape/transferencia**. Triggers: Compras solo puede informar el vuelto de una entrega (no su monto); una compra solo se carga a una entrega abierta de la misma sede; rendida la entrega, sus compras quedan congeladas. Fotos en el bucket `constancias-gastos`, carpeta `<sede>/<usuario>/compras/`. Migración: `supabase/fase2b_compras.sql`.
 11. **Fase 2A pedidos y ruta (29-sep-2026)**: tablas `proveedores`, `productos` (catálogo único que se arma solo al pedir; proveedor habitual), `pedidos` (una lista regular por sede y día + urgentes con motivo; estados borrador → enviado → comprado → recibido | cancelado) y `pedido_items` (pendiente / comprado / no_habia). Un pedido pasa solo a "comprado" cuando no le quedan líneas pendientes. Funciones de seguridad `puede_ver_sede` y `puede_pedir_en_sede`. Migración: `supabase/fase2a_pedidos.sql`. Todavía NO se registran montos ni evidencias (eso es la 2B).
 10. **Fase 1 multi-sede (29-sep-2026)**: selector de sede para Gerencia, todo filtrado por sede activa, textos con el nombre del admin real, calendario de días de compra, roles en español, rol `compras` en la base, sedes Atelier/Fonavi/Centro, constancias permitidas a Gerencia en cualquier sede. Migración: `supabase/fase1_multisede.sql`.
 
@@ -184,7 +187,7 @@ Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepci
 - **Ruta del día de Fabio**: pedidos de las sedes del día **agrupados por proveedor**.
 - **Controles para Finanzas**: compras sin evidencia, rendiciones descuadradas, urgentes, y **alerta de precio** si un producto sale bastante más caro que la última vez (catálogo de productos con último precio y proveedor).
 - Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
-- Fases: **2A** (hecha) = pedidos, ruta, proveedores y catálogo. **2B** = entregas de dinero a rendir, compras con monto y evidencia (boleta + pago) por proveedor, rendición con vuelto, recepción del admin (`pedidos.recibido_*` ya existen) y conversión a gastos de la sede. **3** = panel de Finanzas con alertas (sin evidencia, precio alto vs. última compra, urgentes, rendiciones descuadradas) y cuentas por pagar a crédito. **4** = fondo propio de Fabio.
+- Fases: **2A** y **2B** hechas. **3** = panel de Finanzas con alertas (sin evidencia, precio alto vs. última compra, urgentes, rendiciones descuadradas) y cuentas por pagar a crédito. **4** = fondo propio de Fabio.
 
 ### Estado
 - App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026. Fase 1 multi-sede en producción (29-sep-2026).

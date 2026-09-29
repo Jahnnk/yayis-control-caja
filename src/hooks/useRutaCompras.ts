@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { EstadoItemPedido, Pedido, PedidoItem, Proveedor, Sede } from '@/types';
+import type { CompraDetalle, EstadoItemPedido, Pedido, PedidoItem, Proveedor, Sede } from '@/types';
 
 export interface ItemRuta extends PedidoItem {
   productos: { nombre: string; unidad: string; proveedor_id: string | null } | null;
@@ -23,6 +23,7 @@ const SELECT_RUTA =
 export function useRutaCompras(fecha: string) {
   const [pedidos, setPedidos] = useState<PedidoRuta[]>([]);
   const [borradores, setBorradores] = useState<Pick<Pedido, 'id' | 'sede_id' | 'fecha_compra'>[]>([]);
+  const [compras, setCompras] = useState<CompraDetalle[]>([]);
   const [loading, setLoading] = useState(false);
   const ultimaFecha = useRef(fecha);
 
@@ -43,7 +44,21 @@ export function useRutaCompras(fecha: string) {
     ]);
     if (ultimaFecha.current !== fecha) return;
     if (ruta.error) console.error('Error cargando ruta:', ruta.error);
-    else setPedidos((ruta.data ?? []) as PedidoRuta[]);
+    const lista = (ruta.data ?? []) as PedidoRuta[];
+
+    // Compras ya registradas contra estos pedidos (para no registrar dos veces lo mismo).
+    let registradas: CompraDetalle[] = [];
+    if (lista.length > 0) {
+      const { data } = await supabase
+        .from('compras')
+        .select('*, proveedores(nombre), compra_items(*, productos(nombre))')
+        .in('pedido_id', lista.map(p => p.id))
+        .order('created_at', { ascending: true });
+      registradas = (data ?? []) as CompraDetalle[];
+    }
+    if (ultimaFecha.current !== fecha) return;
+    if (!ruta.error) setPedidos(lista);
+    setCompras(registradas);
     setBorradores(prep.data ?? []);
     setLoading(false);
   }, [fecha]);
@@ -92,5 +107,5 @@ export function useRutaCompras(fecha: string) {
     return { error: null };
   }, [fetchRuta]);
 
-  return { pedidos, borradores, loading, fetchRuta, marcarItem, asignarProveedor };
+  return { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor };
 }

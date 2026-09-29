@@ -228,3 +228,65 @@ export interface PedidoItemDetalle extends PedidoItem {
 export interface PedidoConItems extends Pedido {
   pedido_items: PedidoItemDetalle[];
 }
+
+export type EstadoEntrega = 'abierta' | 'rendida' | 'cerrada';
+export type TipoComprobante = 'boleta' | 'factura' | 'sin_comprobante';
+
+export interface Entrega {
+  id: string;
+  sede_id: string;
+  fecha: string;
+  monto: number;
+  /** De que caja de la sede sale el dinero. */
+  metodo_pago: MetodoPago;
+  receptor_id: string;
+  entregado_por: string;
+  notas: string | null;
+  estado: EstadoEntrega;
+  vuelto: number | null;
+  rendida_at: string | null;
+  vuelto_recibido: number | null;
+  cerrada_at: string | null;
+  cerrada_por: string | null;
+  created_at: string;
+}
+
+export interface Compra {
+  id: string;
+  sede_id: string;
+  proveedor_id: string;
+  pedido_id: string | null;
+  entrega_id: string | null;
+  fecha: string;
+  total: number;
+  condicion_pago: CondicionPago;
+  /** Como se pago: efectivo o cuentas (Yape/transferencia). Null si es a credito. */
+  metodo_pago: MetodoPago | null;
+  tipo_comprobante: TipoComprobante;
+  numero_comprobante: string | null;
+  fecha_vencimiento: string | null;
+  estado_pago: 'pagado' | 'por_pagar';
+  evidencia_comprobante_path: string | null;
+  evidencia_producto_path: string | null;
+  evidencia_pago_path: string | null;
+  categoria_id: string | null;
+  gasto_id: string | null;
+  registrado_por: string;
+  observacion: string | null;
+  created_at: string;
+}
+
+export interface CompraItem {
+  id: string;
+  compra_id: string;
+  pedido_item_id: string | null;
+  producto_id: string;
+  cantidad: number;
+  unidad: string;
+  precio_total: number;
+}
+
+export interface CompraDetalle extends Compra {
+  proveedores: { nombre: string } | null;
+  compra_items: (CompraItem & { productos: { nombre: string } | null })[];
+}
