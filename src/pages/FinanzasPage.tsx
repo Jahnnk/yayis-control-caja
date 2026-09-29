@@ -10,11 +10,12 @@ import { Modal } from '@/components/ui/modal';
 import { Loading } from '@/components/ui/loading';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { abrirEvidencia } from '@/lib/evidencias';
-import { calcularAlertas, gastadoEntrega, DIAS_AVISO_VENCIMIENTO, UMBRAL_PRECIO_MEDIO } from '@/lib/alertas';
-import { fechaCorta, fechaLarga, sumarDias } from '@/lib/compras';
+import { calcularAlertas, gastadoEntrega, itemACompraDePrecio, DIAS_AVISO_VENCIMIENTO } from '@/lib/alertas';
+import { calcularCambiosPrecio, formatPorcentaje, UMBRAL_VARIACION } from '@/lib/precios';
+import { fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, BellRing, CalendarClock, ChevronDown, CreditCard, Eye, Loader2, ShoppingBag, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BellRing, CalendarClock, ChevronDown, CreditCard, Eye, Loader2, ShoppingBag, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 function PagarFactura({ compra, onClose, onPagar }: {
   compra: CompraFinanzas;
@@ -108,6 +109,16 @@ export function FinanzasPage() {
     return Array.from(porSede.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [items, hoy]);
 
+  // Seguimiento de precios: compras del último mes que se movieron ±15% respecto al precio habitual.
+  const cambiosPrecio = useMemo(
+    () => calcularCambiosPrecio(items, itemACompraDePrecio, sumarDias(hoy, -30)).reverse(),
+    [items, hoy],
+  );
+  const subieron = cambiosPrecio.filter(c => c.variacion.tipo === 'sube');
+  const bajaron = cambiosPrecio.filter(c => c.variacion.tipo === 'baja');
+  const pagadoDeMas = subieron.reduce((s, c) => roundTwo(s + c.variacion.diferencia), 0);
+  const ahorro = bajaron.reduce((s, c) => roundTwo(s - c.variacion.diferencia), 0);
+
   function irA(sedeId: string, ruta: string) {
     cambiarSede(sedeId);
     navigate(ruta);
@@ -168,7 +179,7 @@ export function FinanzasPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><AlertTriangle size={18} className="text-orange-600" /> Para revisar</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Facturas vencidas, rendiciones que no cuadraron, dinero sin rendir, mercadería sin confirmar, urgentes de la semana y precios que subieron {Math.round(UMBRAL_PRECIO_MEDIO * 100)}% o más respecto a la compra anterior.
+            Facturas vencidas, rendiciones que no cuadraron, dinero sin rendir, mercadería sin confirmar, urgentes de la semana y precios que subieron {Math.round(UMBRAL_VARIACION * 100)}% o más sobre su precio habitual.
           </p>
         </CardHeader>
         <CardContent>
@@ -266,6 +277,46 @@ export function FinanzasPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Cambios de precio, plegado con resumen */}
+      <details className="group rounded-lg border bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 p-4">
+          <span className="flex items-center gap-2 text-sm font-bold text-yayis-dark">Cambios de precio · últimos 30 días</span>
+          {cambiosPrecio.length === 0 ? (
+            <span className="text-xs text-muted-foreground">Ningún precio se movió {Math.round(UMBRAL_VARIACION * 100)}% o más</span>
+          ) : (
+            <>
+              <span className="flex items-center gap-1 text-xs font-bold text-red-700"><TrendingUp size={14} /> {subieron.length} {subieron.length === 1 ? 'subió' : 'subieron'} · {formatMonto(pagadoDeMas)} de más</span>
+              <span className="flex items-center gap-1 text-xs font-bold text-emerald-700"><TrendingDown size={14} /> {bajaron.length} {bajaron.length === 1 ? 'bajó' : 'bajaron'} · {formatMonto(ahorro)} de ahorro</span>
+            </>
+          )}
+          <ChevronDown size={16} className="ml-auto transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-2 border-t p-4">
+          <p className="text-xs text-muted-foreground">
+            Cada compra se compara con el precio habitual del producto (el típico de sus últimas 3 compras, en la misma unidad, de cualquier sede o proveedor).
+            Rojo si salió {Math.round(UMBRAL_VARIACION * 100)}% o más caro; verde si salió {Math.round(UMBRAL_VARIACION * 100)}% o más barato.
+          </p>
+          {cambiosPrecio.map(({ item: it, unitario, habitual, variacion }) => {
+            const sube = variacion.tipo === 'sube';
+            return (
+              <div key={it.id} className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm ${sube ? 'border-red-200 bg-red-50/50' : 'border-emerald-200 bg-emerald-50/50'}`}>
+                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold text-white ${sube ? 'bg-red-600' : 'bg-emerald-600'}`}>
+                  {sube ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {formatPorcentaje(variacion.porcentaje)}
+                </span>
+                <span className="font-medium">{it.productos?.nombre ?? 'Producto'}</span>
+                <span className="rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{it.compras?.sedes?.nombre}</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatMonto(unitario)} por {it.unidad} (habitual {formatMonto(habitual.unitario)}) · {formatCantidad(Number(it.cantidad))} {it.unidad} a {it.compras?.proveedores?.nombre ?? '—'}, {it.compras ? fechaCorta(it.compras.fecha) : ''}
+                </span>
+                <span className={`ml-auto text-xs font-bold ${sube ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {sube ? `${formatMonto(variacion.diferencia)} de más` : `Ahorro ${formatMonto(-variacion.diferencia)}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </details>
 
       {/* Pagos recientes, plegado */}
       {pagadas.length > 0 && (
