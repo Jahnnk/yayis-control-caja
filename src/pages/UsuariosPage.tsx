@@ -16,6 +16,7 @@ import { ROL_LABEL, ROLES_ASIGNABLES } from '@/lib/roles';
 const ROL_AYUDA: Partial<Record<Rol, string>> = {
   owner: 'Ve y maneja todas las sedes, repone cajas y administra usuarios.',
   admin: 'Registra gastos y ve solo su sede. Su caja la repone Gerencia.',
+  compras: 'Ve los pedidos de las 3 sedes y arma la ruta de compras del día. No ve la caja de las sedes.',
   viewer: 'Solo puede mirar los datos de su sede, sin registrar nada.',
 };
 
@@ -54,12 +55,12 @@ export function UsuariosPage() {
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!email || !password || !nombre || !sedeId) {
+    if (!email || !password || !nombre || (rol !== 'compras' && !sedeId)) {
       addToast('Completa todos los campos', 'error');
       return;
     }
     setSaving(true);
-    const { error } = await createUsuario(email, password, nombre, rol, sedeId);
+    const { error } = await createUsuario(email, password, nombre, rol, rol === 'compras' ? null : sedeId);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Usuario creado exitosamente', 'success');
@@ -77,15 +78,19 @@ export function UsuariosPage() {
     setEditingId(u.id);
     setEditNombre(u.nombre);
     setEditRol(u.rol);
-    setEditSedeId(u.sede_id ?? '');
+    setEditSedeId(u.sede_id ?? sedes[0]?.id ?? '');
   }
 
   async function saveEdit() {
     if (!editingId || !editNombre.trim()) return;
+    if (editRol !== 'compras' && !editSedeId) {
+      addToast('Elige la sede de este usuario', 'error');
+      return;
+    }
     const { error } = await updateUsuario(editingId, {
       nombre: editNombre.trim(),
       rol: editRol,
-      sede_id: editSedeId,
+      sede_id: editRol === 'compras' ? null : editSedeId || null,
     });
     if (error) addToast(`Error: ${error}`, 'error');
     else {
@@ -142,11 +147,15 @@ export function UsuariosPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Sede</label>
-                <Select value={sedeId} onChange={e => setSedeId(e.target.value)} className="mt-1">
-                  {sedes.map(s => (
-                    <option key={s.id} value={s.id}>{s.nombre}</option>
-                  ))}
-                </Select>
+                {rol === 'compras' ? (
+                  <p className="mt-1 flex h-10 items-center text-sm text-muted-foreground">Todas las sedes</p>
+                ) : (
+                  <Select value={sedeId} onChange={e => setSedeId(e.target.value)} className="mt-1">
+                    {sedes.map(s => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
+                  </Select>
+                )}
               </div>
               <div className="flex items-end gap-2">
                 <Button type="submit" disabled={saving}>
@@ -178,7 +187,7 @@ export function UsuariosPage() {
                 {usuarios.map(u => {
                   const isEditing = editingId === u.id;
                   const isSelf = u.id === profile?.id;
-                  const sedeName = sedes.find(s => s.id === u.sede_id)?.nombre ?? '-';
+                  const sedeName = u.rol === 'compras' ? 'Todas' : sedes.find(s => s.id === u.sede_id)?.nombre ?? '-';
 
                   return (
                     <tr key={u.id} className="border-b">
@@ -210,7 +219,9 @@ export function UsuariosPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {isEditing ? (
+                        {isEditing && editRol === 'compras' ? (
+                          <span className="text-xs text-muted-foreground">Todas las sedes</span>
+                        ) : isEditing ? (
                           <Select
                             value={editSedeId}
                             onChange={e => setEditSedeId(e.target.value)}

@@ -9,6 +9,10 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RegistroGastosPage } from '@/pages/RegistroGastosPage';
 import { ConfiguracionPage } from '@/pages/ConfiguracionPage';
 import { UsuariosPage } from '@/pages/UsuariosPage';
+import { PedidosPage } from '@/pages/PedidosPage';
+import { RutaComprasPage } from '@/pages/RutaComprasPage';
+import { ProveedoresPage } from '@/pages/ProveedoresPage';
+import { SoloRoles, InicioSegunRol } from '@/components/layout/SoloRoles';
 
 // El Resumen carga las librerias de graficos (pesadas); se descarga solo
 // cuando el usuario entra a esa pestaña para que el resto de la app abra rapido.
@@ -25,19 +29,25 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
-              <Route path="/gastos" element={<RegistroGastosPage />} />
+              <Route path="/inicio" element={<InicioSegunRol />} />
+              <Route path="/gastos" element={<SoloRoles roles={['owner', 'admin', 'viewer']}><RegistroGastosPage /></SoloRoles>} />
               <Route path="/resumen" element={
-                <Suspense fallback={<Loading text="Cargando resumen..." />}>
-                  <ResumenPage />
-                </Suspense>
+                <SoloRoles roles={['owner', 'admin', 'viewer']}>
+                  <Suspense fallback={<Loading text="Cargando resumen..." />}>
+                    <ResumenPage />
+                  </Suspense>
+                </SoloRoles>
               } />
+              <Route path="/pedidos" element={<SoloRoles roles={['owner', 'admin']}><PedidosPage /></SoloRoles>} />
+              <Route path="/ruta" element={<SoloRoles roles={['owner', 'compras']}><RutaComprasPage /></SoloRoles>} />
+              <Route path="/proveedores" element={<SoloRoles roles={['owner', 'compras']}><ProveedoresPage /></SoloRoles>} />
               {/* Redirect old routes */}
               <Route path="/semanal" element={<Navigate to="/resumen" replace />} />
               <Route path="/mensual" element={<Navigate to="/resumen" replace />} />
               <Route path="/configuracion" element={<ConfiguracionPage />} />
               <Route path="/usuarios" element={<UsuariosPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/gastos" replace />} />
+            <Route path="*" element={<Navigate to="/inicio" replace />} />
           </Routes>
         </ToastProvider>
         </SedeActivaProvider>

@@ -162,3 +162,69 @@ export interface ResumenSemanalData {
     total: number;
   }[];
 }
+
+// ===== Compras (Fase 2) =====
+export type CondicionPago = 'contado' | 'credito';
+
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  telefono: string | null;
+  direccion: string | null;
+  condicion_pago: CondicionPago;
+  dias_credito: number;
+  notas: string | null;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface Producto {
+  id: string;
+  nombre: string;
+  unidad: string;
+  /** Proveedor habitual: a quien se le suele comprar. */
+  proveedor_id: string | null;
+  activo: boolean;
+  created_at: string;
+}
+
+export type EstadoPedido = 'borrador' | 'enviado' | 'comprado' | 'recibido' | 'cancelado';
+export type EstadoItemPedido = 'pendiente' | 'comprado' | 'no_habia';
+
+export interface Pedido {
+  id: string;
+  sede_id: string;
+  fecha_compra: string;
+  urgente: boolean;
+  motivo_urgente: string | null;
+  estado: EstadoPedido;
+  notas: string | null;
+  creado_por: string;
+  enviado_at: string | null;
+  comprado_at: string | null;
+  recibido_at: string | null;
+  recibido_por: string | null;
+  observacion_recepcion: string | null;
+  created_at: string;
+}
+
+export interface PedidoItem {
+  id: string;
+  pedido_id: string;
+  producto_id: string;
+  cantidad: number;
+  unidad: string;
+  nota: string | null;
+  proveedor_id: string | null;
+  estado: EstadoItemPedido;
+  created_at: string;
+}
+
+export interface PedidoItemDetalle extends PedidoItem {
+  productos: { nombre: string } | null;
+  proveedores: { nombre: string } | null;
+}
+
+export interface PedidoConItems extends Pedido {
+  pedido_items: PedidoItemDetalle[];
+}

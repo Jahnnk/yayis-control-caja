@@ -18,7 +18,7 @@ export function useUsuarios() {
     setLoading(false);
   }, []);
 
-  const createUsuario = useCallback(async (email: string, password: string, nombre: string, rol: Rol, sedeId: string) => {
+  const createUsuario = useCallback(async (email: string, password: string, nombre: string, rol: Rol, sedeId: string | null) => {
     // Save current session before creating new user
     const { data: currentSession } = await supabase.auth.getSession();
 
@@ -71,7 +71,7 @@ export function useUsuarios() {
     return { error: null, userId: newUserId };
   }, []);
 
-  const updateUsuario = useCallback(async (id: string, updates: { nombre?: string; rol?: Rol; sede_id?: string; activo?: boolean }) => {
+  const updateUsuario = useCallback(async (id: string, updates: { nombre?: string; rol?: Rol; sede_id?: string | null; activo?: boolean }) => {
     const { error } = await supabase
       .from('profiles')
       .update(updates)

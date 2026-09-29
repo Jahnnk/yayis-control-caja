@@ -13,7 +13,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   if (authLoading) return null;
-  if (user) return <Navigate to="/gastos" replace />;
+  if (user) return <Navigate to="/inicio" replace />;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

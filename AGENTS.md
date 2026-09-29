@@ -1,7 +1,7 @@
 # AGENTS.md — Yayi's Control de Caja
 
 > Documento de contexto para cualquier agente de IA (Codex, Claude, etc.) que continúe este proyecto.
-> Léelo completo antes de tocar nada. Última actualización: 29 de septiembre de 2026 (Fase 1 multi-sede).
+> Léelo completo antes de tocar nada. Última actualización: 29 de septiembre de 2026 (Fase 2A pedidos y ruta).
 
 ---
 
@@ -101,7 +101,12 @@ src/
     │                            #   desglose por categoría, valores a revisar,
     │                            #   histórico, arqueo semanal, y Reposiciones a Luis
     ├── ConfiguracionPage.tsx
-    └── UsuariosPage.tsx
+    ├── UsuariosPage.tsx
+    ├── PedidosPage.tsx          # admins arman la lista del día de compra (o urgente) y la envían
+    ├── RutaComprasPage.tsx      # Compras: lo del día agrupado por proveedor, marca comprado/no había
+    └── ProveedoresPage.tsx      # proveedores (crédito solo lo define Gerencia) + catálogo de productos
+
+Pantallas protegidas por rol con `<SoloRoles>` (`components/layout/SoloRoles.tsx`); `/inicio` manda a cada rol a su pantalla.
 
 supabase/                    # scripts SQL de referencia (esquema, seed, tablas)
 ```
@@ -109,7 +114,7 @@ supabase/                    # scripts SQL de referencia (esquema, seed, tablas)
 Roles de usuario (en pantalla se muestran en español):
 - `owner` = **Gerencia** (Jahnn, Kelly): ve y maneja todas las sedes, repone cajas, administra usuarios.
 - `admin` = **Administrador de sede** (Luis, Sol, Chari): registra gastos y ve solo su sede.
-- `compras` = **Compras** (Fabio): existe en la base desde la Fase 1; su pantalla llega en la Fase 2. No asignarlo antes.
+- `compras` = **Compras** (Fabio): sin sede (trabaja para las 3). Ve Ruta de compras y Proveedores; no ve cajas ni gastos. Arranca en `/ruta`.
 - `viewer` = **Solo lectura**.
 La seguridad (RLS) filtra por `sede_id`: admin/viewer solo su sede; owner todas.
 
@@ -162,6 +167,7 @@ En orden (ver `git log`):
 8. `fix`: pago progresivo FIFO en reposiciones (descrito arriba).
 9. **Episodio deuda con Luis**: se detectó que la deuda mostrada no cuadraba con la percepción de Jahnn. Se investigó a fondo (herramientas temporales de validación/auditoría/conciliación, todas ya **retiradas**). Conclusión: Luis hizo el **cuadre físico de su caja** y confirmó la deuda real (S/83.50, ya pagada). Se aplicó un ajuste puntual (botón temporal, ya retirado) que saldó todo lo anterior al 8-jul-2026 y dejó pendiente solo lo del día. **Deuda quedó cuadrada.**
 
+11. **Fase 2A pedidos y ruta (29-sep-2026)**: tablas `proveedores`, `productos` (catálogo único que se arma solo al pedir; proveedor habitual), `pedidos` (una lista regular por sede y día + urgentes con motivo; estados borrador → enviado → comprado → recibido | cancelado) y `pedido_items` (pendiente / comprado / no_habia). Un pedido pasa solo a "comprado" cuando no le quedan líneas pendientes. Funciones de seguridad `puede_ver_sede` y `puede_pedir_en_sede`. Migración: `supabase/fase2a_pedidos.sql`. Todavía NO se registran montos ni evidencias (eso es la 2B).
 10. **Fase 1 multi-sede (29-sep-2026)**: selector de sede para Gerencia, todo filtrado por sede activa, textos con el nombre del admin real, calendario de días de compra, roles en español, rol `compras` en la base, sedes Atelier/Fonavi/Centro, constancias permitidas a Gerencia en cualquier sede. Migración: `supabase/fase1_multisede.sql`.
 
 ---
@@ -178,7 +184,7 @@ Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepci
 - **Ruta del día de Fabio**: pedidos de las sedes del día **agrupados por proveedor**.
 - **Controles para Finanzas**: compras sin evidencia, rendiciones descuadradas, urgentes, y **alerta de precio** si un producto sale bastante más caro que la última vez (catálogo de productos con último precio y proveedor).
 - Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
-- Fases: **2** = pedidos, ruta, entregas/rendiciones, compras con evidencia, recepción. **3** = panel de Finanzas con alertas y cuentas por pagar. **4** = fondo propio de Fabio.
+- Fases: **2A** (hecha) = pedidos, ruta, proveedores y catálogo. **2B** = entregas de dinero a rendir, compras con monto y evidencia (boleta + pago) por proveedor, rendición con vuelto, recepción del admin (`pedidos.recibido_*` ya existen) y conversión a gastos de la sede. **3** = panel de Finanzas con alertas (sin evidencia, precio alto vs. última compra, urgentes, rendiciones descuadradas) y cuentas por pagar a crédito. **4** = fondo propio de Fabio.
 
 ### Estado
 - App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026. Fase 1 multi-sede en producción (29-sep-2026).

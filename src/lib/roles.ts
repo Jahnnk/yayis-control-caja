@@ -8,5 +8,4 @@ export const ROL_LABEL: Record<Rol, string> = {
   viewer: 'Solo lectura',
 };
 
-// Roles que se pueden asignar hoy desde Usuarios. "compras" se habilita con el modulo de Compras.
-export const ROLES_ASIGNABLES: Rol[] = ['owner', 'admin', 'viewer'];
+export const ROLES_ASIGNABLES: Rol[] = ['owner', 'admin', 'compras', 'viewer'];
