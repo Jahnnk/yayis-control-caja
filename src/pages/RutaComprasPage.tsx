@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
+import { RegistrarCompraModal, type LineaCandidata } from '@/components/compras/RegistrarCompraModal';
+import { abrirEvidencia } from '@/lib/evidencias';
+import { formatMonto } from '@/lib/utils';
 import { useRutaCompras, type ItemRuta, type PedidoRuta } from '@/hooks/useRutaCompras';
 import { useProveedores } from '@/hooks/useProveedores';
 import { useToast } from '@/components/ui/toast';
@@ -11,8 +14,8 @@ import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { getTodayLima } from '@/lib/dates';
 import { diaSemanaDe, fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
-import type { EstadoItemPedido } from '@/types';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock, MapPin, Phone, Store, X } from 'lucide-react';
+import type { EstadoItemPedido, Proveedor } from '@/types';
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock, Eye, MapPin, Phone, Receipt, Store, X } from 'lucide-react';
 
 interface LineaRuta {
   item: ItemRuta;
@@ -44,11 +47,23 @@ export function RutaComprasPage() {
   const hoy = getTodayLima();
   const [fecha, setFecha] = useState(hoy);
   const { sedes } = useSedeActiva();
-  const { pedidos, borradores, loading, marcarItem, asignarProveedor } = useRutaCompras(fecha);
+  const { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor } = useRutaCompras(fecha);
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [guardarHabitual, setGuardarHabitual] = useState(true);
+  const [registrando, setRegistrando] = useState<{
+    sedeId: string;
+    sedeNombre: string;
+    proveedor: Pick<Proveedor, 'id' | 'nombre' | 'condicion_pago' | 'dias_credito'>;
+    candidatas: LineaCandidata[];
+  } | null>(null);
+
+  // Lineas de pedido que ya forman parte de una compra registrada.
+  const yaCompradas = useMemo(
+    () => new Set(compras.flatMap(c => c.compra_items.map(i => i.pedido_item_id)).filter(Boolean)),
+    [compras],
+  );
 
   const dia = diaSemanaDe(fecha);
   const sedesDelDia = sedes.filter(s => (s.dias_compra ?? []).includes(dia));
@@ -98,6 +113,33 @@ export function RutaComprasPage() {
     setOcupado(linea.item.id);
     const { error } = await asignarProveedor(linea.item, proveedorId, guardarHabitual);
     setOcupado(null);
+    if (error) addToast(error, 'error');
+  }
+
+  // Lo que falta registrar de este proveedor para cada sede (lo "no había" no se compra).
+  function pendientesPorSede(g: GrupoProveedor) {
+    const porSede = new Map<string, { sedeNombre: string; candidatas: LineaCandidata[] }>();
+    for (const prod of g.productos) {
+      for (const { item, pedido } of prod.lineas) {
+        if (item.estado === 'no_habia' || yaCompradas.has(item.id)) continue;
+        const entrada = porSede.get(pedido.sede_id) ?? { sedeNombre: pedido.sedes?.nombre ?? '', candidatas: [] };
+        entrada.candidatas.push({
+          pedido_item_id: item.id,
+          pedido_id: pedido.id,
+          producto_id: item.producto_id,
+          nombre: prod.nombre,
+          cantidad: Number(item.cantidad),
+          unidad: item.unidad,
+        });
+        porSede.set(pedido.sede_id, entrada);
+      }
+    }
+    return Array.from(porSede.entries());
+  }
+
+  async function verFoto(path: string | null) {
+    if (!path) return;
+    const error = await abrirEvidencia(path);
     if (error) addToast(error, 'error');
   }
 
@@ -261,10 +303,60 @@ export function RutaComprasPage() {
                     </div>
                   </div>
                 ))}
+
+                {!sinProveedor && g.proveedor && (() => {
+                  const proveedor = g.proveedor;
+                  const registradasProv = compras.filter(c => c.proveedor_id === proveedor.id);
+                  const faltan = pendientesPorSede(g);
+                  return (
+                    <div className="space-y-2 border-t pt-3">
+                      {registradasProv.map(c => (
+                        <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm">
+                          <Receipt size={14} className="text-emerald-700" />
+                          <span className="font-medium">{pedidos.find(p => p.id === c.pedido_id)?.sedes?.nombre}</span>
+                          <span className="font-bold text-emerald-800">{formatMonto(Number(c.total))}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {c.tipo_comprobante === 'sin_comprobante' ? 'Sin comprobante' : c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}
+                            {c.condicion_pago === 'credito' ? ' · a crédito' : c.metodo_pago === 'cuentas' ? ' · Yape/transf.' : ' · efectivo'}
+                          </span>
+                          <Button variant="ghost" size="sm" className="ml-auto text-emerald-700" onClick={() => verFoto(c.evidencia_comprobante_path ?? c.evidencia_producto_path)}>
+                            <Eye size={14} className="mr-1" /> Ver foto
+                          </Button>
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap gap-2">
+                        {faltan.map(([sedeId, info]) => (
+                          <Button
+                            key={sedeId}
+                            size="sm"
+                            onClick={() => setRegistrando({ sedeId, sedeNombre: info.sedeNombre, proveedor, candidatas: info.candidatas })}
+                          >
+                            <Receipt size={14} className="mr-1" /> Registrar compra · {info.sedeNombre}
+                          </Button>
+                        ))}
+                      </div>
+                      {faltan.length > 1 && (
+                        <p className="text-xs text-muted-foreground">Pide una boleta separada para cada sede.</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           );
         })
+      )}
+
+      {registrando && (
+        <RegistrarCompraModal
+          open
+          onClose={() => setRegistrando(null)}
+          onGuardado={fetchRuta}
+          sedeId={registrando.sedeId}
+          sedeNombre={registrando.sedeNombre}
+          proveedor={registrando.proveedor}
+          candidatas={registrando.candidatas}
+        />
       )}
 
       {proveedoresActivos.length === 0 && grupos.length > 0 && (

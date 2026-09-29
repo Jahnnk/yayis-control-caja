@@ -110,5 +110,23 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido };
+  /** El admin confirma que la mercadería llegó (conforme o con observaciones). */
+  const confirmarRecepcion = useCallback(async (pedidoId: string, observacion: string | null) => {
+    if (!profile) return { error: 'Sin sesión' };
+    const { error } = await supabase
+      .from('pedidos')
+      .update({
+        estado: 'recibido',
+        recibido_at: new Date().toISOString(),
+        recibido_por: profile.id,
+        observacion_recepcion: observacion?.trim() || null,
+      })
+      .eq('id', pedidoId)
+      .eq('estado', 'comprado');
+    if (error) return { error: error.message };
+    await fetchPedidos();
+    return { error: null };
+  }, [profile, fetchPedidos]);
+
+  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion };
 }
