@@ -53,7 +53,7 @@ export function useFinanzas() {
     setLoading(true);
     const hoy = getTodayLima();
     const hace30 = sumarDias(hoy, -30);
-    const hace90 = sumarDias(hoy, -90);
+    const hace180 = sumarDias(hoy, -180); // historial para el precio habitual de cada producto
     const SELECT_COMPRA = '*, sedes(nombre), proveedores(nombre, telefono), compra_items(*, productos(nombre))';
 
     const [pp, pg, en, pe, it] = await Promise.all([
@@ -72,15 +72,17 @@ export function useFinanzas() {
         .order('fecha_compra', { ascending: false }),
       supabase.from('compra_items')
         .select('id, producto_id, cantidad, unidad, precio_total, created_at, productos(nombre), compras(fecha, sede_id, condicion_pago, sedes(nombre), proveedores(nombre))')
-        .gte('created_at', `${hace90}T00:00:00`)
-        .order('created_at', { ascending: true }),
+        .gte('created_at', `${hace180}T00:00:00`)
+        .order('created_at', { ascending: false })
+        .limit(1000),
     ]);
     for (const r of [pp, pg, en, pe, it]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
     setPorPagar((pp.data ?? []) as CompraFinanzas[]);
     setPagadas((pg.data ?? []) as CompraFinanzas[]);
     setEntregas((en.data ?? []) as EntregaFinanzas[]);
     setPedidos((pe.data ?? []) as unknown as PedidoFinanzas[]);
-    setItems((it.data ?? []) as unknown as ItemPrecio[]);
+    // Se piden de la más nueva a la más vieja (si hay más de 1000, se pierde lo más antiguo) y se voltean.
+    setItems(((it.data ?? []) as unknown as ItemPrecio[]).reverse());
     setLoading(false);
   }, []);
 

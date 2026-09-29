@@ -1,10 +1,10 @@
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
+import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
 import type { CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
 
 // Umbrales de control. Están aquí, a la vista, para poder explicar cada alerta.
-export const UMBRAL_PRECIO_MEDIO = 0.15;   // +15% sobre la compra anterior del mismo producto
-export const UMBRAL_PRECIO_ALTO = 0.30;    // +30%: alerta roja
+// Precios: +15% sobre el precio habitual → alerta; +30% → alerta roja (reglas en src/lib/precios.ts).
 export const DIAS_PARA_RENDIR = 2;         // dinero entregado sin rendir después de 2 días
 export const DIAS_AVISO_VENCIMIENTO = 3;   // facturas que vencen en 3 días o menos
 
@@ -31,37 +31,32 @@ export function gastadoEntrega(e: EntregaFinanzas): number {
   return e.compras.reduce((s, c) => roundTwo(s + Number(c.total)), 0);
 }
 
-/** Precio por unidad de cada compra comparado con la compra anterior del mismo producto (misma unidad). */
+/** Convierte una línea de compra del panel en el formato que usa el seguimiento de precios. */
+export function itemACompraDePrecio(it: ItemPrecio): CompraDePrecio | null {
+  if (!it.compras) return null;
+  return {
+    producto_id: it.producto_id,
+    unidad: it.unidad,
+    cantidad: Number(it.cantidad),
+    precio_total: Number(it.precio_total),
+    fecha: it.compras.fecha,
+    proveedor: it.compras.proveedores?.nombre ?? '—',
+  };
+}
+
+/** Compras de las últimas 2 semanas que salieron 15% o más caras que el precio habitual del producto. */
 export function alertasDePrecio(items: ItemPrecio[], hoy: string): Alerta[] {
-  const alertas: Alerta[] = [];
-  const ultimoPrecio = new Map<string, { unitario: number; fecha: string; proveedor: string }>();
-  const desde = sumarDias(hoy, -14);
-
-  for (const it of items) {
-    const cantidad = Number(it.cantidad);
-    if (!(cantidad > 0) || !it.compras) continue;
-    const unitario = Number(it.precio_total) / cantidad;
-    const clave = `${it.producto_id}|${it.unidad}`;
-    const anterior = ultimoPrecio.get(clave);
-    const fecha = it.compras.fecha;
-
-    if (anterior && anterior.unitario > 0 && fecha >= desde) {
-      const alza = unitario / anterior.unitario - 1;
-      if (alza >= UMBRAL_PRECIO_MEDIO) {
-        alertas.push({
-          clave: `precio-${it.id}`,
-          nivel: alza >= UMBRAL_PRECIO_ALTO ? 'alta' : 'media',
-          tipo: 'Precio alto',
-          sedeId: it.compras.sede_id,
-          sedeNombre: it.compras.sedes?.nombre ?? '',
-          titulo: `${it.productos?.nombre ?? 'Producto'}: +${Math.round(alza * 100)}% vs. la compra anterior`,
-          detalle: `${formatMonto(unitario)} por ${it.unidad} (${formatCantidad(cantidad)} ${it.unidad} a ${it.compras.proveedores?.nombre ?? '—'}, ${fechaCorta(fecha)}). Antes: ${formatMonto(anterior.unitario)} a ${anterior.proveedor}, ${fechaCorta(anterior.fecha)}.`,
-        });
-      }
-    }
-    ultimoPrecio.set(clave, { unitario, fecha, proveedor: it.compras.proveedores?.nombre ?? '—' });
-  }
-  return alertas;
+  return calcularCambiosPrecio(items, itemACompraDePrecio, sumarDias(hoy, -14))
+    .filter(c => c.variacion.tipo === 'sube')
+    .map(({ item: it, unitario, habitual, variacion }) => ({
+      clave: `precio-${it.id}`,
+      nivel: variacion.fuerte ? 'alta' as const : 'media' as const,
+      tipo: 'Precio alto',
+      sedeId: it.compras!.sede_id,
+      sedeNombre: it.compras!.sedes?.nombre ?? '',
+      titulo: `${it.productos?.nombre ?? 'Producto'}: ${formatPorcentaje(variacion.porcentaje)} sobre su precio habitual`,
+      detalle: `${formatMonto(unitario)} por ${it.unidad} (${formatCantidad(Number(it.cantidad))} ${it.unidad} a ${it.compras!.proveedores?.nombre ?? '—'}, ${fechaCorta(it.compras!.fecha)}). Habitual: ${formatMonto(habitual.unitario)} por ${it.unidad}. Se pagaron ${formatMonto(variacion.diferencia)} de más.`,
+    }));
 }
 
 export function calcularAlertas(

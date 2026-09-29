@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
+import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
+import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
+import { claveProducto } from '@/lib/precios';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { UNIDADES, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
@@ -116,6 +119,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     return roundTwo(deLista + deExtras);
   }, [candidatas, lineas, extras]);
 
+  // Precio habitual de lo que está en la lista y de lo agregado que ya existe en el catálogo.
+  const productoDeExtra = (nombre: string) => productos.find(p => p.nombre.toLowerCase() === nombre.trim().toLowerCase());
+  const habituales = usePreciosHabituales(open ? [
+    ...candidatas.map(c => c.producto_id),
+    ...extras.map(e => productoDeExtra(e.nombre)?.id).filter((id): id is string => !!id),
+  ] : []);
+
   const entrega = entregas.find(e => e.id === entregaId);
   const saldoEntrega = entrega
     ? roundTwo(Number(entrega.monto) - entrega.compras.reduce((s, c) => s + Number(c.total), 0))
@@ -193,6 +203,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
         {/* Productos y precios */}
         <section>
           <p className="mb-2 text-sm font-bold text-yayis-dark">¿Qué compraste y cuánto pagaste por cada cosa?</p>
+          <p className="-mt-1 mb-2 text-xs text-muted-foreground">Debajo de cada producto verás su precio habitual: en rojo si pagas bastante más, en verde si consigues un mejor precio.</p>
           <div className="divide-y rounded-md border">
             {candidatas.map(c => {
               const l = lineas[c.pedido_item_id];
@@ -210,6 +221,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                   <span className="text-xs text-muted-foreground">S/</span>
                   <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Precio" className="h-8 w-24" value={l.precio} disabled={!l.incluir}
                     onChange={e => cambiarLinea(c.pedido_item_id, { precio: e.target.value })} aria-label={`Precio total de ${c.nombre}`} />
+                  {l.incluir && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
                 </div>
               );
             })}
@@ -226,6 +238,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Precio" className="h-8 w-24" value={e.precio}
                   onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, precio: ev.target.value } : x))} aria-label="Precio total" />
                 <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="text-red-500"><Trash2 size={14} /></button>
+                {productoDeExtra(e.nombre) && (
+                  <AvisoPrecio habitual={habituales.get(claveProducto(productoDeExtra(e.nombre)!.id, e.unidad))} cantidad={e.cantidad} precio={e.precio} unidad={e.unidad} />
+                )}
               </div>
             ))}
           </div>
