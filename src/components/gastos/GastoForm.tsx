@@ -67,6 +67,12 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [editData]);
 
+  useEffect(() => {
+    if (form.categoria_id && categorias.length > 0 && !categorias.some(c => c.id === form.categoria_id)) {
+      setForm(prev => ({ ...prev, categoria_id: '' }));
+    }
+  }, [categorias, form.categoria_id]);
+
   function handleConstanciaChange(file?: File) {
     if (!file) return;
     const error = validarConstancia(file);

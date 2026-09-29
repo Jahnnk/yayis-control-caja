@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { calcularSemana, getMesLabel } from '@/lib/dates';
 import type { GastoConCategoria, GastoFormData } from '@/types';
 
@@ -27,6 +28,7 @@ export function validarConstancia(file: File): string | null {
 
 export function useGastos() {
   const { profile } = useAuth();
+  const { sedeId } = useSedeActiva();
   const [loading, setLoading] = useState(false);
   const [gastos, setGastos] = useState<GastoConCategoria[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,7 +44,7 @@ export function useGastos() {
     page?: number;
     pageSize?: number;
   }) => {
-    if (!profile) return;
+    if (!profile || !sedeId) return;
     setLoading(true);
 
     const page = filters?.page ?? 0;
@@ -54,11 +56,8 @@ export function useGastos() {
       .from('gastos')
       .select('*, categorias(nombre), profiles(nombre)', { count: 'exact' })
       .order('fecha', { ascending: false })
-      .order('created_at', { ascending: false });
-
-    if (profile.rol !== 'owner' && profile.sede_id) {
-      query = query.eq('sede_id', profile.sede_id);
-    }
+      .order('created_at', { ascending: false })
+      .eq('sede_id', sedeId);
 
     if (filters?.fecha) query = query.eq('fecha', filters.fecha);
     if (filters?.semana !== undefined && filters?.mes) {
@@ -79,23 +78,23 @@ export function useGastos() {
       setTotal(count ?? 0);
     }
     setLoading(false);
-  }, [profile]);
+  }, [profile, sedeId]);
 
   const uploadConstancia = useCallback(async (file: File) => {
-    if (!profile?.sede_id) return { path: null, error: 'Sin sede asignada' };
+    if (!profile || !sedeId) return { path: null, error: 'Sin sede asignada' };
 
     const validationError = validarConstancia(file);
     if (validationError) return { path: null, error: validationError };
 
     const extension = EXTENSIONES_POR_TIPO[file.type];
-    const path = `${profile.sede_id}/${profile.id}/${crypto.randomUUID()}.${extension}`;
+    const path = `${sedeId}/${profile.id}/${crypto.randomUUID()}.${extension}`;
     const { error } = await supabase.storage
       .from(CONSTANCIAS_BUCKET)
       .upload(path, file, { contentType: file.type, upsert: false });
 
     if (error) return { path: null, error: `No se pudo guardar la constancia: ${error.message}` };
     return { path, error: null };
-  }, [profile]);
+  }, [profile, sedeId]);
 
   const removeConstancia = useCallback(async (path: string) => {
     const { error } = await supabase.storage.from(CONSTANCIAS_BUCKET).remove([path]);
@@ -103,7 +102,7 @@ export function useGastos() {
   }, []);
 
   const createGasto = useCallback(async (formData: GastoFormData, constanciaFile?: File | null) => {
-    if (!profile?.sede_id) return { error: 'Sin sede asignada' };
+    if (!profile || !sedeId) return { error: 'Sin sede asignada' };
 
     const semana = calcularSemana(formData.fecha);
     const mes = getMesLabel(formData.fecha);
@@ -112,7 +111,7 @@ export function useGastos() {
     const { data: rpcData, error: rpcError } = await supabase
       .rpc('get_next_numero_registro', {
         p_fecha: formData.fecha,
-        p_sede_id: profile.sede_id,
+        p_sede_id: sedeId,
       });
 
     if (rpcError) return { error: rpcError.message };
@@ -135,7 +134,7 @@ export function useGastos() {
       notas: formData.notas.trim() || null,
       semana,
       mes,
-      sede_id: profile.sede_id,
+      sede_id: sedeId,
       registrado_por: profile.id,
       constancia_path: constanciaPath,
     });
@@ -145,7 +144,7 @@ export function useGastos() {
       return { error: error.message };
     }
     return { error: null };
-  }, [profile, removeConstancia, uploadConstancia]);
+  }, [profile, sedeId, removeConstancia, uploadConstancia]);
 
   const updateGasto = useCallback(async (
     id: string,
@@ -214,12 +213,12 @@ export function useGastos() {
   }, []);
 
   const fetchResumenDiario = useCallback(async (fecha: string) => {
-    if (!profile?.sede_id) return { efectivo: 0, cuentas: 0, total: 0 };
+    if (!sedeId) return { efectivo: 0, cuentas: 0, total: 0 };
 
     const { data } = await supabase
       .from('gastos')
       .select('metodo_pago, monto')
-      .eq('sede_id', profile.sede_id)
+      .eq('sede_id', sedeId)
       .eq('fecha', fecha);
 
     let efectivo = 0;
@@ -235,7 +234,7 @@ export function useGastos() {
       cuentas: Math.round(cuentas * 100) / 100,
       total: Math.round((efectivo + cuentas) * 100) / 100,
     };
-  }, [profile]);
+  }, [sedeId]);
 
   return {
     gastos,

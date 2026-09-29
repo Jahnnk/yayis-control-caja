@@ -1,16 +1,18 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import type { ArqueoSemanal } from '@/types';
 import { roundTwo } from '@/lib/utils';
 
 export function useArqueo() {
   const { profile } = useAuth();
+  const { sedeId: sedeActivaId } = useSedeActiva();
   const [arqueo, setArqueo] = useState<ArqueoSemanal | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchArqueo = useCallback(async (semana: number, mes: string, anio: number, sedeId?: string) => {
-    const sid = sedeId ?? profile?.sede_id;
+    const sid = sedeId ?? sedeActivaId;
     if (!sid) return null;
     setLoading(true);
 
@@ -27,7 +29,7 @@ export function useArqueo() {
     setArqueo(data as ArqueoSemanal | null);
     setLoading(false);
     return data as ArqueoSemanal | null;
-  }, [profile]);
+  }, [sedeActivaId]);
 
   const saveArqueo = useCallback(async (data: Omit<ArqueoSemanal, 'id' | 'created_at'>) => {
     const { data: existing } = await supabase
@@ -60,9 +62,9 @@ export function useArqueo() {
    *
    * Ejemplo: Fondo=500, Gastos efectivo=1400, Ventas efectivo=1000
    *
-   * - Luis usa sus 500 de caja + 900 de ventas para cubrir 1400 de gastos
+   * - El administrador usa sus 500 de caja + 900 de ventas para cubrir 1400 de gastos
    * - Efectivo usado de ventas = max(0, gastos - fondo) = 900
-   * - Efectivo que Luis debe entregar = ventas - efectivo usado de ventas = 100
+   * - Efectivo que el administrador debe entregar = ventas - efectivo usado de ventas = 100
    * - Diferencia = entregado real - lo que debia entregar (>0 sobrante, <0 faltante)
    * - Reponer efectivo = siempre el fondo (500) para dejarlo completo
    * - Reponer cuentas = lo gastado en cuentas
@@ -78,9 +80,9 @@ export function useArqueo() {
   ) => {
     if (!profile) return { error: 'No autenticado' };
 
-    // Cuanto de las ventas uso Luis para cubrir gastos
+    // Cuanto de las ventas uso el administrador para cubrir gastos
     const efectivoUsadoDeVentas = roundTwo(Math.max(0, gastadoEfectivo - fondoInicialEfectivo));
-    // Cuanto deberia entregar Luis (ventas menos lo que uso)
+    // Cuanto deberia entregar el administrador (ventas menos lo que uso)
     const debiaEntregar = roundTwo(ventasEfectivo - efectivoUsadoDeVentas);
     // Diferencia: positivo=sobrante, negativo=faltante
     const diferencia = roundTwo(efectivoEntregado - debiaEntregar);
@@ -110,7 +112,7 @@ export function useArqueo() {
   }, [profile]);
 
   const fetchArqueosMes = useCallback(async (mes: string, anio: number, sedeId?: string) => {
-    const sid = sedeId ?? profile?.sede_id;
+    const sid = sedeId ?? sedeActivaId;
     if (!sid) return [];
 
     const { data } = await supabase
@@ -122,7 +124,7 @@ export function useArqueo() {
       .order('semana', { ascending: true });
 
     return (data ?? []) as ArqueoSemanal[];
-  }, [profile]);
+  }, [sedeActivaId]);
 
   return { arqueo, loading, fetchArqueo, saveArqueo, cerrarSemana, fetchArqueosMes };
 }

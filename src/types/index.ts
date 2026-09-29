@@ -1,4 +1,4 @@
-export type Rol = 'owner' | 'admin' | 'viewer';
+export type Rol = 'owner' | 'admin' | 'compras' | 'viewer';
 export type MetodoPago = 'efectivo' | 'cuentas';
 export type EstadoGasto = 'pagado' | 'pendiente';
 
@@ -6,6 +6,8 @@ export interface Sede {
   id: string;
   nombre: string;
   activa: boolean;
+  /** Dias de compra programados (0 = domingo ... 6 = sabado). Vacio si aun no se configuro. */
+  dias_compra?: number[] | null;
   created_at: string;
 }
 

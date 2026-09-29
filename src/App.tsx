@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { SedeActivaProvider } from '@/contexts/SedeActivaContext';
 import { ToastProvider } from '@/components/ui/toast';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Loading } from '@/components/ui/loading';
@@ -19,6 +20,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <SedeActivaProvider>
         <ToastProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -38,6 +40,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/gastos" replace />} />
           </Routes>
         </ToastProvider>
+        </SedeActivaProvider>
       </AuthProvider>
     </BrowserRouter>
   );
