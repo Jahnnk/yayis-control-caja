@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useFondos } from '@/hooks/useFondos';
 import { useSedes } from '@/hooks/useSedes';
@@ -8,11 +9,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatMonto } from '@/lib/utils';
-import { Plus, Check, X, ToggleLeft, ToggleRight, MapPin } from 'lucide-react';
+import { DIAS_SEMANA } from '@/lib/dates';
+import { Plus, Check, X, ToggleLeft, ToggleRight, MapPin, CalendarDays } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export function ConfiguracionPage() {
   const { profile } = useAuth();
+  const { sedeId, sedeActiva, recargarSedes } = useSedeActiva();
   const { categorias, fetchCategorias, createCategoria, updateCategoria } = useCategorias();
   const { fondos, updateFondos, fetchHistorial, historialFondos } = useFondos();
   const { sedes, createSede, updateSede } = useSedes();
@@ -31,20 +34,18 @@ export function ConfiguracionPage() {
   useEffect(() => {
     fetchCategorias(false);
     fetchHistorial();
-  }, []);
+  }, [fetchCategorias, fetchHistorial]);
 
   useEffect(() => {
-    if (fondos) {
-      setFondoEfectivo(String(fondos.fondo_efectivo));
-      setFondoCuentas(String(fondos.fondo_cuentas));
-    }
+    setFondoEfectivo(fondos ? String(fondos.fondo_efectivo) : '');
+    setFondoCuentas(fondos ? String(fondos.fondo_cuentas) : '');
   }, [fondos]);
 
   if (profile?.rol !== 'owner') return <Navigate to="/gastos" replace />;
 
   async function handleAddCategoria() {
-    if (!newCat.trim() || !profile?.sede_id) return;
-    const { error } = await createCategoria(newCat, profile.sede_id);
+    if (!newCat.trim() || !sedeId) return;
+    const { error } = await createCategoria(newCat, sedeId);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Categoria creada', 'success');
@@ -69,12 +70,12 @@ export function ConfiguracionPage() {
   }
 
   async function handleSaveFondos() {
-    if (!profile?.sede_id || !fondoVigente) {
+    if (!sedeId || !fondoVigente) {
       addToast('Selecciona la fecha desde cuando aplican los nuevos fondos', 'error');
       return;
     }
     const { error } = await updateFondos(
-      profile.sede_id,
+      sedeId,
       parseFloat(fondoEfectivo) || 0,
       parseFloat(fondoCuentas) || 0,
       fondoVigente,
@@ -94,7 +95,23 @@ export function ConfiguracionPage() {
     else {
       addToast('Sede creada', 'success');
       setNewSede('');
+      recargarSedes();
     }
+  }
+
+  async function handleToggleSede(id: string, activa: boolean) {
+    const { error } = await updateSede(id, { activa: !activa });
+    if (error) addToast(`Error: ${error}`, 'error');
+    else recargarSedes();
+  }
+
+  async function handleToggleDiaCompra(id: string, diasActuales: number[], dia: number) {
+    const dias = diasActuales.includes(dia)
+      ? diasActuales.filter(d => d !== dia)
+      : [...diasActuales, dia].sort((a, b) => a - b);
+    const { error } = await updateSede(id, { dias_compra: dias });
+    if (error) addToast(`Error: ${error}`, 'error');
+    else recargarSedes();
   }
 
   return (
@@ -104,7 +121,7 @@ export function ConfiguracionPage() {
       {/* Categorías */}
       <Card>
         <CardHeader>
-          <CardTitle>Gestion de Categorias</CardTitle>
+          <CardTitle>Categorías de gasto{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -169,7 +186,8 @@ export function ConfiguracionPage() {
       {/* Fondos */}
       <Card>
         <CardHeader>
-          <CardTitle>Configuracion de Fondos</CardTitle>
+          <CardTitle>Fondo de caja chica{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
+          <p className="text-xs text-muted-foreground">Para cambiar de sede, usa el selector de arriba.</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -234,7 +252,8 @@ export function ConfiguracionPage() {
       {/* Sedes */}
       <Card>
         <CardHeader>
-          <CardTitle>Gestion de Sedes</CardTitle>
+          <CardTitle>Sedes y días de compra</CardTitle>
+          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -249,12 +268,32 @@ export function ConfiguracionPage() {
             </Button>
           </div>
           <div className="divide-y">
-            {sedes.map(s => (
-              <div key={s.id} className="flex items-center justify-between py-2">
-                <span className={`text-sm ${!s.activa ? 'text-muted-foreground line-through' : ''}`}>
+            {sedes.map(s => {
+              const dias = s.dias_compra ?? [];
+              return (
+              <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <span className={`text-sm font-medium min-w-[6rem] ${!s.activa ? 'text-muted-foreground line-through' : ''}`}>
                   {s.nombre}
                 </span>
-                <button onClick={() => updateSede(s.id, { activa: !s.activa })}>
+                <div className="flex items-center gap-1" role="group" aria-label={`Días de compra de ${s.nombre}`}>
+                  <CalendarDays size={15} className="text-muted-foreground mr-1" />
+                  {DIAS_SEMANA.map(d => {
+                    const activo = dias.includes(d.valor);
+                    return (
+                      <button
+                        key={d.valor}
+                        type="button"
+                        onClick={() => handleToggleDiaCompra(s.id, dias, d.valor)}
+                        aria-pressed={activo}
+                        title={`Compra los ${d.largo}`}
+                        className={`w-10 rounded-md border px-1 py-1 text-xs font-medium transition-colors ${activo ? 'border-yayis-green bg-yayis-green text-white' : 'border-gray-200 text-muted-foreground hover:bg-gray-50'}`}
+                      >
+                        {d.corto}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button onClick={() => handleToggleSede(s.id, s.activa)} title={s.activa ? 'Desactivar sede' : 'Activar sede'}>
                   {s.activa ? (
                     <ToggleRight size={24} className="text-emerald-500" />
                   ) : (
@@ -262,7 +301,8 @@ export function ConfiguracionPage() {
                   )}
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

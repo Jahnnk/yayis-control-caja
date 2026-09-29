@@ -1,7 +1,7 @@
 # AGENTS.md — Yayi's Control de Caja
 
 > Documento de contexto para cualquier agente de IA (Codex, Claude, etc.) que continúe este proyecto.
-> Léelo completo antes de tocar nada. Última actualización: 8 de julio de 2026.
+> Léelo completo antes de tocar nada. Última actualización: 29 de septiembre de 2026 (Fase 1 multi-sede).
 
 ---
 
@@ -19,12 +19,14 @@
 
 ## 2. Qué es este proyecto
 
-**Yayi's Control de Caja** es una app web para registrar y controlar los **gastos de caja chica** de la panadería. El flujo del negocio:
+**Yayi's Control de Caja** es una app web para registrar y controlar los **gastos de caja chica** de las 3 sedes de la panadería. El flujo del negocio:
 
-- **Luis** es la persona que maneja la caja/cuenta y **paga los gastos** del día a día (insumos, fletes, deliverys, packaging, etc.).
-- Luis tiene un **fondo de caja chica** (ej. S/ 800 en la cuenta bancaria). Paga gastos de ahí.
-- **Jahnn le repone** a Luis (semanalmente) lo que gastó, para que su caja vuelva al fondo.
-- La app registra los **gastos** (lo que Luis paga) y las **reposiciones** (lo que Jahnn le devuelve a Luis), y calcula cuánto le falta reponer.
+- Cada sede tiene un **administrador** que maneja su caja chica y **paga los gastos** del día a día:
+  **Luis → Atelier**, **Sol → Fonavi**, **Chari → Centro**.
+- Cada admin tiene un **fondo de caja chica** (ej. S/ 800). Paga gastos de ahí.
+- **Gerencia de Finanzas (Kelly)** — y Jahnn como dueño — les repone lo gastado para que su caja vuelva al fondo.
+- La app registra los **gastos** y las **reposiciones** por sede, y calcula cuánto falta reponer.
+- **Fabio (Compras)** se incorpora en la Fase 2: hace las compras programadas a proveedores para las 3 sedes (ver sección 8).
 
 **Está en producción, funcionando, usado a diario.** Cualquier cambio va a la app real que Jahnn y su equipo usan.
 
@@ -37,7 +39,7 @@
 - **Supabase** (Postgres + Auth + RLS) como backend — cliente en `src/lib/supabase.ts`
 - **lucide-react** para iconos, **recharts** para gráficos
 - **Deploy en Vercel** (auto-despliega al hacer push a `main`)
-- **GitHub**: repo `Jahnnk/yayis-control-caja`, **rama única `main`**
+- **GitHub**: repo `Jahnnk/yayis-control-caja`. Se trabaja en ramas + Pull Request hacia `main`.
 - Cálculos financieros: helper `roundTwo` en `src/lib/utils.ts` (redondeo a 2 decimales). Formato de moneda: `formatMonto` (mismo archivo).
 
 ### Variables de entorno (`.env`, NO está en el repo)
@@ -58,10 +60,14 @@ npm run dev          # servidor de desarrollo (necesita .env con credenciales)
 ```
 
 - **Nota de entorno del dueño:** su caché de npm (`~/.npm`) tiene permisos rotos de una instalación vieja con sudo. Si `npm install` falla con `EACCES`, usar una caché temporal: `npm install --cache /tmp/npm-cache-yayis`. No usar sudo.
-- **Reglas de despliegue (IMPORTANTE):**
-  1. Correr `npm run build` **completo** (no solo `tsc --noEmit`) y que pase sin errores antes de pushear.
-  2. **Pedir autorización explícita a Jahnn antes de cada `git push origin main`.** Él revisa y da el "sí".
-  3. Mensajes de commit descriptivos, en español.
+- **Reglas de despliegue (IMPORTANTE, vigente desde ago-2026):**
+  1. Correr `npm run build` **completo** (no solo `tsc --noEmit`) y que pase sin errores.
+  2. Trabajar en una rama, abrir un **Pull Request** y **el agente hace el merge él mismo** (`gh pr merge <n> --merge`). Jahnn pidió explícitamente no pedirle que mergee.
+  3. Las **migraciones SQL** (carpeta `supabase/`) las ejecuta Jahnn en el SQL Editor de Supabase (no hay credenciales de base de datos en el `.env`). Darle el archivo exacto y qué debe ver al final.
+  4. Seguir pidiendo confirmación antes de cualquier cambio de datos de producción que no venga de una migración del propio PR.
+  5. Mensajes de commit descriptivos, en español.
+- **Supabase está en plan gratuito**: el proyecto se **pausa solo** tras ~7 días sin uso (pasó en jul y sep-2026). Síntoma: nadie puede entrar y la app muestra "No se pudo verificar tu sesión". Arreglo: supabase.com → proyecto → botón "Resume project" (en español sale mal traducido como "Proyecto de currículum"). Con 5+ usuarios diarios ya no debería pasar.
+- **Crear usuarios**: el plan gratuito limita los correos de confirmación ("email rate limit exceeded"). Desactivar "Confirm email" en Authentication → Providers → Email antes de crear varios usuarios.
 - `npm audit`: hay 2 vulnerabilidades moderadas en dependencias transitivas de `exceljs` (export a Excel). No tienen fix no-breaking a jul-2026; riesgo bajo. No romper el build por eso.
 
 ---
@@ -72,11 +78,14 @@ npm run dev          # servidor de desarrollo (necesita .env con credenciales)
 src/
 ├── App.tsx                  # rutas (react-router). ResumenPage carga con lazy()
 ├── main.tsx                 # entry, envuelto en <ErrorBoundary>
-├── contexts/AuthContext.tsx # login, perfil, sede del usuario
+├── contexts/
+│   ├── AuthContext.tsx       # login, perfil del usuario
+│   └── SedeActivaContext.tsx # ★ sede con la que se trabaja (ver sección 6)
 ├── lib/
 │   ├── supabase.ts          # cliente Supabase
 │   ├── utils.ts             # formatMonto, roundTwo, cn
-│   ├── dates.ts             # getTodayLima, calcularSemana, getMesLabel, semanas del mes
+│   ├── dates.ts             # getTodayLima, calcularSemana, getMesLabel, semanas del mes, DIAS_SEMANA
+│   ├── roles.ts             # nombres de roles en español (ROL_LABEL) y roles asignables
 │   └── exportGastos.ts      # export a Excel (exceljs) y PDF (jspdf) — carga dinámica
 ├── types/index.ts           # todos los tipos (Gasto, Reposicion, SaldoReposicion, etc.)
 ├── hooks/                   # un hook por entidad (useGastos, useReposiciones, useArqueo...)
@@ -97,7 +106,12 @@ src/
 supabase/                    # scripts SQL de referencia (esquema, seed, tablas)
 ```
 
-Roles de usuario: `owner` (Jahnn, ve todo), `admin`, `viewer`. Se filtra por `sede_id` vía RLS (viewer/admin solo su sede; owner ve su sede).
+Roles de usuario (en pantalla se muestran en español):
+- `owner` = **Gerencia** (Jahnn, Kelly): ve y maneja todas las sedes, repone cajas, administra usuarios.
+- `admin` = **Administrador de sede** (Luis, Sol, Chari): registra gastos y ve solo su sede.
+- `compras` = **Compras** (Fabio): existe en la base desde la Fase 1; su pantalla llega en la Fase 2. No asignarlo antes.
+- `viewer` = **Solo lectura**.
+La seguridad (RLS) filtra por `sede_id`: admin/viewer solo su sede; owner todas.
 
 ---
 
@@ -107,6 +121,14 @@ Roles de usuario: `owner` (Jahnn, ve todo), `admin`, `viewer`. Se filtra por `se
 - **`gastos`**: cada gasto que paga Luis. Campos clave: `fecha`, `descripcion`, `categoria_id`, `metodo_pago` (`'efectivo'` | `'cuentas'`), `monto`, `estado` (`'pendiente'` | `'pagado'`), `semana`, `mes`, `sede_id`, `reposicion_id` (FK a la reposición que lo pagó, o null).
 - **`reposiciones`**: cada vez que Jahnn le repone dinero a Luis. Campos: `fecha`, `metodo_pago`, `monto`, `notas`, `sede_id`.
 - Otras: `sedes`, `profiles`, `categorias`, `arqueos_semanales`, `configuracion_fondos` (el fondo de caja de Luis), `valores_revisados`.
+
+### Concepto clave: la "sede activa" (desde la Fase 1)
+- Todas las pantallas trabajan con **una sede a la vez**: la que da `useSedeActiva()` (`src/contexts/SedeActivaContext.tsx`).
+- **Gerencia** la elige en el selector de arriba (se recuerda en el navegador). **Admins** quedan fijos en su propia sede.
+- Nunca usar `profile.sede_id` para filtrar o guardar datos: usar `sedeId` de `useSedeActiva()`. Si una función de un hook usa `sedeId`, debe estar en sus dependencias de `useCallback` (si no, al cambiar de sede seguiría usando la anterior — p. ej. una reposición caería en la caja equivocada).
+- `responsable` = nombre del admin de la sede activa; los textos dicen "Caja de Sol", "Reposiciones a Chari", etc.
+- `sedes.dias_compra` (`SMALLINT[]`, 0=domingo…6=sábado): calendario de compras por sede, editable en Configuración.
+- Historia: la sede original se llamaba "Fonavi" pero sus datos eran de Atelier (Luis). La migración `fase1_multisede.sql` la renombró a **Atelier** y creó **Fonavi** y **Centro** nuevas.
 
 ### Concepto clave: qué es la "deuda con Luis"
 - **`estado='pendiente'`** = gasto que Luis pagó y Jahnn **aún NO le ha repuesto**.
@@ -140,12 +162,26 @@ En orden (ver `git log`):
 8. `fix`: pago progresivo FIFO en reposiciones (descrito arriba).
 9. **Episodio deuda con Luis**: se detectó que la deuda mostrada no cuadraba con la percepción de Jahnn. Se investigó a fondo (herramientas temporales de validación/auditoría/conciliación, todas ya **retiradas**). Conclusión: Luis hizo el **cuadre físico de su caja** y confirmó la deuda real (S/83.50, ya pagada). Se aplicó un ajuste puntual (botón temporal, ya retirado) que saldó todo lo anterior al 8-jul-2026 y dejó pendiente solo lo del día. **Deuda quedó cuadrada.**
 
+10. **Fase 1 multi-sede (29-sep-2026)**: selector de sede para Gerencia, todo filtrado por sede activa, textos con el nombre del admin real, calendario de días de compra, roles en español, rol `compras` en la base, sedes Atelier/Fonavi/Centro, constancias permitidas a Gerencia en cualquier sede. Migración: `supabase/fase1_multisede.sql`.
+
 ---
 
 ## 8. Estado actual y pendientes (backlog)
 
+### Plan del módulo de Compras (decisiones de Jahnn, 29-sep-2026)
+Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepción → Finanzas (Kelly) revisa y repone.**
+- **Calendario**: Atelier lunes/jueves, Fonavi lunes/miércoles, Centro martes/viernes (para no juntar compras ni pagos en un día).
+- **Urgencias**: se permite pedir fuera del día programado marcándolo "urgente"; queda como alerta para Finanzas.
+- **Dinero de Fabio (al inicio)**: cada sede le **entrega dinero a rendir**; Fabio rinde con boletas + vuelto y el sistema verifica que *gastado + vuelto = entregado*. Lo comprado se vuelve gasto de la sede y Kelly repone la caja del admin. **Más adelante** (cuando Fabio gane confianza) pasará a un **fondo propio de compras**: diseñar para que sea un cambio de configuración, no una reescritura.
+- **Proveedores a crédito**: existen. Las compras a crédito no salen de ninguna caja; van a **cuentas por pagar** con vencimiento, y las paga **Finanzas desde la cuenta del negocio**.
+- **Evidencias obligatorias**: foto de boleta/factura + comprobante de pago por compra.
+- **Ruta del día de Fabio**: pedidos de las sedes del día **agrupados por proveedor**.
+- **Controles para Finanzas**: compras sin evidencia, rendiciones descuadradas, urgentes, y **alerta de precio** si un producto sale bastante más caro que la última vez (catálogo de productos con último precio y proveedor).
+- Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
+- Fases: **2** = pedidos, ruta, entregas/rendiciones, compras con evidencia, recepción. **3** = panel de Finanzas con alertas y cuentas por pagar. **4** = fondo propio de Fabio.
+
 ### Estado
-- App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026.
+- App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026. Fase 1 multi-sede en producción (29-sep-2026).
 - No quedan herramientas temporales en el código (todas retiradas).
 
 ### Backlog / mejoras pospuestas (preguntar a Jahnn antes de hacer)
@@ -164,6 +200,6 @@ En orden (ver `git log`):
 ## 9. Checklist antes de cerrar cualquier cambio
 1. ¿Corrí `npm run build` completo y pasó?
 2. ¿El cambio toca dinero/datos? → doble verificación + explicar impacto a Jahnn en español simple.
-3. ¿Pedí autorización antes de `git push origin main`?
+3. ¿Trabajé en rama + PR, hice el merge y le di a Jahnn la migración SQL si hacía falta?
 4. ¿Dejé alguna herramienta temporal? → retirarla cuando cumpla su función.
 5. ¿Expliqué en español simple qué cambió y qué debe probar Jahnn?

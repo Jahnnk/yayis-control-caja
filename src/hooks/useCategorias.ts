@@ -1,25 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import type { Categoria } from '@/types';
 
 export function useCategorias() {
-  const { profile } = useAuth();
+  const { sedeId } = useSedeActiva();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchCategorias = useCallback(async (soloActivas = true) => {
-    if (!profile) return;
+    if (!sedeId) { setCategorias([]); return; }
     setLoading(true);
 
     let query = supabase
       .from('categorias')
       .select('*')
+      .eq('sede_id', sedeId)
       .order('orden', { ascending: true });
-
-    if (profile.rol !== 'owner' && profile.sede_id) {
-      query = query.eq('sede_id', profile.sede_id);
-    }
 
     if (soloActivas) {
       query = query.eq('activa', true);
@@ -29,11 +26,11 @@ export function useCategorias() {
     if (error) console.error('Error fetching categorias:', error);
     else setCategorias((data ?? []) as Categoria[]);
     setLoading(false);
-  }, [profile]);
+  }, [sedeId]);
 
   useEffect(() => {
-    if (profile) fetchCategorias();
-  }, [profile, fetchCategorias]);
+    fetchCategorias();
+  }, [fetchCategorias]);
 
   const createCategoria = useCallback(async (nombre: string, sedeId: string) => {
     const maxOrden = categorias.reduce((max, c) => Math.max(max, c.orden), 0);

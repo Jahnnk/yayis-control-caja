@@ -1,17 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import type { ConfiguracionFondos } from '@/types';
 
 export function useFondos() {
-  const { profile } = useAuth();
+  const { sedeId: sedeActivaId } = useSedeActiva();
   const [fondos, setFondos] = useState<ConfiguracionFondos | null>(null);
   const [historialFondos, setHistorialFondos] = useState<ConfiguracionFondos[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchFondosVigentes = useCallback(async (sedeId?: string) => {
-    const sid = sedeId ?? profile?.sede_id;
-    if (!sid) return;
+    const sid = sedeId ?? sedeActivaId;
+    if (!sid) { setFondos(null); return; }
     setLoading(true);
 
     const { data, error } = await supabase
@@ -28,7 +28,7 @@ export function useFondos() {
     }
     setFondos(data as ConfiguracionFondos | null);
     setLoading(false);
-  }, [profile]);
+  }, [sedeActivaId]);
 
   const fetchFondosParaFecha = useCallback(async (sedeId: string, fecha: string) => {
     const { data } = await supabase
@@ -44,8 +44,8 @@ export function useFondos() {
   }, []);
 
   const fetchHistorial = useCallback(async (sedeId?: string) => {
-    const sid = sedeId ?? profile?.sede_id;
-    if (!sid) return;
+    const sid = sedeId ?? sedeActivaId;
+    if (!sid) { setHistorialFondos([]); return; }
 
     const { data } = await supabase
       .from('configuracion_fondos')
@@ -54,11 +54,11 @@ export function useFondos() {
       .order('vigente_desde', { ascending: false });
 
     setHistorialFondos((data ?? []) as ConfiguracionFondos[]);
-  }, [profile]);
+  }, [sedeActivaId]);
 
   useEffect(() => {
-    if (profile) fetchFondosVigentes();
-  }, [profile, fetchFondosVigentes]);
+    fetchFondosVigentes();
+  }, [fetchFondosVigentes]);
 
   const updateFondos = useCallback(async (sedeId: string, efectivo: number, cuentas: number, vigente: string) => {
     const { error } = await supabase.from('configuracion_fondos').insert({

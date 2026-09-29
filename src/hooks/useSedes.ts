@@ -29,7 +29,7 @@ export function useSedes() {
     return { error: null };
   }, [fetchSedes]);
 
-  const updateSede = useCallback(async (id: string, updates: { nombre?: string; activa?: boolean }) => {
+  const updateSede = useCallback(async (id: string, updates: { nombre?: string; activa?: boolean; dias_compra?: number[] }) => {
     const { error } = await supabase.from('sedes').update(updates).eq('id', id);
     if (error) return { error: error.message };
     await fetchSedes();

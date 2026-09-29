@@ -10,7 +10,7 @@ export function ResumenDiario() {
 
   useEffect(() => {
     loadResumen();
-  }, []);
+  }, [fetchResumenDiario]); // se recarga al cambiar de sede
 
   async function loadResumen() {
     const r = await fetchResumenDiario(getTodayLima());

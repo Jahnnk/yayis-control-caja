@@ -1,11 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { roundTwo } from '@/lib/utils';
 import type { Reposicion, SaldoReposicion } from '@/types';
 
 export function useReposiciones() {
   const { profile } = useAuth();
+  const { sedeId: sedeActivaId } = useSedeActiva();
   const [reposiciones, setReposiciones] = useState<Reposicion[]>([]);
   const [saldo, setSaldo] = useState<SaldoReposicion>({
     deudaEfectivo: 0, deudaCuentas: 0,
@@ -13,10 +15,13 @@ export function useReposiciones() {
     saldoEfectivo: 0, saldoCuentas: 0,
   });
   const [loading, setLoading] = useState(false);
+  // Si gerencia cambia de sede mientras carga, la respuesta vieja no debe pisar a la nueva.
+  const ultimaSedePedida = useRef<string | null>(null);
 
   const fetchSaldo = useCallback(async (sedeId?: string) => {
-    const sid = sedeId ?? profile?.sede_id;
+    const sid = sedeId ?? sedeActivaId;
     if (!sid) return;
+    ultimaSedePedida.current = sid;
     setLoading(true);
 
     // 1. Total deuda: suma de gastos PENDIENTES por metodo
@@ -45,6 +50,7 @@ export function useReposiciones() {
       else repCt = roundTwo(repCt + Number(r.monto));
     }
 
+    if (ultimaSedePedida.current !== sid) return;
     setReposiciones((reposData ?? []) as Reposicion[]);
     setSaldo({
       deudaEfectivo: deudaEf,
@@ -56,7 +62,7 @@ export function useReposiciones() {
     });
 
     setLoading(false);
-  }, [profile]);
+  }, [sedeActivaId]);
 
   /**
    * Aplica una reposicion marcando como "pagados" los gastos pendientes del
@@ -121,12 +127,12 @@ export function useReposiciones() {
     monto: number,
     notas: string,
   ) => {
-    if (!profile?.sede_id) return { error: 'Sin sede' };
+    if (!profile || !sedeActivaId) return { error: 'Sin sede' };
 
     const { data: nuevaReposicion, error } = await supabase
       .from('reposiciones')
       .insert({
-        sede_id: profile.sede_id,
+        sede_id: sedeActivaId,
         fecha,
         metodo_pago: metodoPago,
         monto,
@@ -141,22 +147,22 @@ export function useReposiciones() {
     // Marcar gastos como pagados si la suma coincide.
     // Si este paso falla, la reposicion YA quedo guardada: avisamos con un
     // warning (no un error) para que el usuario no la registre dos veces.
-    const { error: errorMarcado } = await marcarGastosPagados(profile.sede_id, metodoPago, monto, nuevaReposicion.id);
+    const { error: errorMarcado } = await marcarGastosPagados(sedeActivaId, metodoPago, monto, nuevaReposicion.id);
 
     // Recalcular saldo
-    await fetchSaldo(profile.sede_id);
+    await fetchSaldo(sedeActivaId);
     return {
       error: null,
       warning: errorMarcado
         ? `La reposicion se guardo, pero no se pudieron marcar los gastos como pagados (${errorMarcado}). Recarga la pagina e intenta de nuevo.`
         : null,
     };
-  }, [profile, fetchSaldo, marcarGastosPagados]);
+  }, [profile, sedeActivaId, fetchSaldo, marcarGastosPagados]);
 
   const deleteReposicion = useCallback(async (id: string) => {
     // Antes de borrar la reposicion, los gastos que ella pago vuelven a
     // "pendiente". Si no, quedarian como pagados sin reposicion que los
-    // respalde y el saldo con Luis se descuadra.
+    // respalde y el saldo de la caja se descuadra.
     const { error: revertError } = await supabase
       .from('gastos')
       .update({ estado: 'pendiente', reposicion_id: null })
@@ -165,9 +171,9 @@ export function useReposiciones() {
 
     const { error } = await supabase.from('reposiciones').delete().eq('id', id);
     if (error) return { error: error.message };
-    await fetchSaldo(profile?.sede_id ?? undefined);
+    await fetchSaldo(sedeActivaId ?? undefined);
     return { error: null };
-  }, [profile, fetchSaldo]);
+  }, [sedeActivaId, fetchSaldo]);
 
   return { reposiciones, saldo, loading, fetchSaldo, createReposicion, deleteReposicion };
 }

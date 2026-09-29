@@ -11,6 +11,13 @@ import { Loading } from '@/components/ui/loading';
 import { Navigate } from 'react-router-dom';
 import { UserPlus, ToggleLeft, ToggleRight, Loader2, Pencil, X, Check } from 'lucide-react';
 import type { Rol, Profile } from '@/types';
+import { ROL_LABEL, ROLES_ASIGNABLES } from '@/lib/roles';
+
+const ROL_AYUDA: Partial<Record<Rol, string>> = {
+  owner: 'Ve y maneja todas las sedes, repone cajas y administra usuarios.',
+  admin: 'Registra gastos y ve solo su sede. Su caja la repone Gerencia.',
+  viewer: 'Solo puede mirar los datos de su sede, sin registrar nada.',
+};
 
 export function UsuariosPage() {
   const { profile } = useAuth();
@@ -127,10 +134,11 @@ export function UsuariosPage() {
               <div>
                 <label className="text-sm font-medium">Rol</label>
                 <Select value={rol} onChange={e => setRol(e.target.value as Rol)} className="mt-1">
-                  <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
-                  <option value="owner">Owner</option>
+                  {ROLES_ASIGNABLES.map(r => (
+                    <option key={r} value={r}>{ROL_LABEL[r]}</option>
+                  ))}
                 </Select>
+                {ROL_AYUDA[rol] && <p className="text-xs text-muted-foreground mt-1">{ROL_AYUDA[rol]}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Sede</label>
@@ -191,14 +199,14 @@ export function UsuariosPage() {
                           <Select
                             value={editRol}
                             onChange={e => setEditRol(e.target.value as Rol)}
-                            className="w-28 h-8 text-xs"
+                            className="w-44 h-8 text-xs"
                           >
-                            <option value="admin">Admin</option>
-                            <option value="viewer">Viewer</option>
-                            <option value="owner">Owner</option>
+                            {ROLES_ASIGNABLES.map(r => (
+                              <option key={r} value={r}>{ROL_LABEL[r]}</option>
+                            ))}
                           </Select>
                         ) : (
-                          <span className={`capitalize font-medium ${isSelf ? 'text-yayis-green' : ''}`}>{u.rol}</span>
+                          <span className={`font-medium ${isSelf ? 'text-yayis-green' : ''}`}>{ROL_LABEL[u.rol] ?? u.rol}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">

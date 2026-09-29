@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useMemo, type FormEvent } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { supabase } from '@/lib/supabase';
 import { useFondos } from '@/hooks/useFondos';
 import { useArqueo } from '@/hooks/useArqueo';
@@ -35,6 +36,9 @@ interface SemanaRow {
 
 export function ResumenPage() {
   const { profile } = useAuth();
+  const { sedeId, sedeActiva, responsable } = useSedeActiva();
+  // Nombre de quien maneja la caja de la sede que se esta viendo (Luis, Sol, Chari...)
+  const encargado = responsable ?? 'el administrador';
   const { fondos } = useFondos();
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
@@ -129,11 +133,15 @@ export function ResumenPage() {
 
   const canVerificar = profile?.rol === 'owner' || profile?.rol === 'admin';
 
-  const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 500;
-  const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 500;
+  const fondoEf = fondos ? Number(fondos.fondo_efectivo) : 0;
+  const fondoCt = fondos ? Number(fondos.fondo_cuentas) : 0;
+
+  // Si gerencia cambia de sede mientras carga, se descarta lo que llegue de la sede anterior.
+  const ultimaCarga = useRef(0);
 
   const loadData = useCallback(async () => {
-    if (!profile?.sede_id || (!isAnual && !mesLabel)) return;
+    if (!sedeId || (!isAnual && !mesLabel)) return;
+    const cargaId = ++ultimaCarga.current;
     setLoading(true);
 
     // Fetch gastos por bloques: Supabase devuelve maximo 1000 filas por
@@ -145,7 +153,7 @@ export function ResumenPage() {
       let query = supabase
         .from('gastos')
         .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, categorias(nombre)')
-        .eq('sede_id', profile.sede_id)
+        .eq('sede_id', sedeId)
         .order('fecha', { ascending: true })
         .order('id', { ascending: true })
         .range(desde, desde + PAGE_SIZE - 1);
@@ -170,6 +178,7 @@ export function ResumenPage() {
       gastosData.push(...(pagina ?? []));
       if (!pagina || pagina.length < PAGE_SIZE) break;
     }
+    if (cargaId !== ultimaCarga.current) return;
 
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
@@ -261,7 +270,7 @@ export function ResumenPage() {
       porcentaje: sumTotal > 0 ? roundTwo((total / sumTotal) * 100) : 0,
     })));
 
-    // Gastos PENDIENTES individuales por categoria (los que aun faltan reponerle a Luis).
+    // Gastos PENDIENTES individuales por categoria (los que aun faltan reponerle al administrador).
     // Filtramos a estado='pendiente', calculamos un total de pendientes por categoria,
     // ordenamos por ese total y tomamos las top 5 categorias que tengan al menos 1 pendiente.
     // El slice a 5/10/todos ocurre al renderizar segun topItemsCount.
@@ -291,7 +300,7 @@ export function ResumenPage() {
     })));
 
     // ====== Deteccion de "Valores a revisar" ======
-    // Solo miramos gastos PENDIENTES (aun no repuestos a Luis). El proposito de
+    // Solo miramos gastos PENDIENTES (aun no repuestos al administrador). El proposito de
     // esta seccion es evitar pagar/reponer dos veces el mismo gasto; si un gasto
     // ya esta pagado, ese par ya no representa riesgo de doble reposicion, asi que
     // no debe entrar en la comparacion.
@@ -373,15 +382,16 @@ export function ResumenPage() {
     setTotalCtPagado(sumCtPagado);
     setAllCatNames(sorted.map(([n]) => n));
 
-    // Desglose PENDIENTE por reponer = la DEUDA REAL con Luis, que abarca TODOS
+    // Desglose PENDIENTE por reponer = la DEUDA REAL con el administrador, que abarca TODOS
     // los meses (no solo el periodo filtrado). Asi cuadra exacto con "Reponer" y
     // "Deuda Total", que tambien son globales (salen de fetchSaldo). Por eso lo
     // leemos sin filtro de mes/semana, con los MISMOS filtros que fetchSaldo.
     const { data: pendGlobal, error: pendError } = await supabase
       .from('gastos')
       .select('metodo_pago, monto, categorias(nombre)')
-      .eq('sede_id', profile.sede_id)
+      .eq('sede_id', sedeId)
       .eq('estado', 'pendiente');
+    if (cargaId !== ultimaCarga.current) return;
     if (pendError) {
       addToast(`No se pudo cargar el desglose pendiente: ${pendError.message}`, 'error');
     }
@@ -406,21 +416,21 @@ export function ResumenPage() {
 
     // Arqueo (only when specific week selected)
     if (filterSemana > 0) {
-      await fetchArqueo(filterSemana, mesLabel, filterAnio, profile.sede_id);
+      await fetchArqueo(filterSemana, mesLabel, filterAnio, sedeId);
     }
 
     // Saldo reposiciones (global)
-    await fetchSaldo(profile.sede_id);
+    await fetchSaldo(sedeId);
 
     setLoading(false);
-  }, [profile, mesLabel, filterSemana, filterAnio, isAnual, semanas, fetchArqueo, fetchSaldo, addToast]);
+  }, [sedeId, mesLabel, filterSemana, filterAnio, isAnual, semanas, fetchArqueo, fetchSaldo, addToast]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   // Cargar verificados (filtrados por sede via RLS). Re-cargar cuando cambia la sede.
   useEffect(() => {
-    fetchValoresRevisados(profile?.sede_id ?? undefined);
-  }, [fetchValoresRevisados, profile?.sede_id]);
+    fetchValoresRevisados(sedeId ?? undefined);
+  }, [fetchValoresRevisados, sedeId]);
 
   // Set arqueo form values when arqueo loads
   useEffect(() => {
@@ -432,14 +442,14 @@ export function ResumenPage() {
 
   // Ensure arqueo record exists for selected week
   useEffect(() => {
-    if (!profile?.sede_id || !fondos || loading || filterSemana === 0) return;
+    if (!sedeId || !fondos || loading || filterSemana === 0) return;
     if (arqueo) return;
 
     const semanaInfo = semanas.find(s => s.semana === filterSemana);
     if (!semanaInfo) return;
 
     saveArqueo({
-      sede_id: profile.sede_id,
+      sede_id: sedeId,
       semana: filterSemana,
       mes: mesLabel,
       anio: filterAnio,
@@ -452,8 +462,8 @@ export function ResumenPage() {
       monto_reponer_efectivo: 0, monto_reponer_cuentas: 0,
       diferencia_caja: 0,
       cerrado: false, cerrado_por: null, cerrado_at: null,
-    }).then(() => fetchArqueo(filterSemana, mesLabel, filterAnio, profile.sede_id ?? undefined));
-  }, [arqueo, profile, fondos, loading, filterSemana, mesLabel, filterAnio, semanas, fondoEf, fondoCt, saveArqueo, fetchArqueo]);
+    }).then(() => fetchArqueo(filterSemana, mesLabel, filterAnio, sedeId));
+  }, [arqueo, sedeId, fondos, loading, filterSemana, mesLabel, filterAnio, semanas, fondoEf, fondoCt, saveArqueo, fetchArqueo]);
 
   // Arqueo calculations
   const gastadoEfSemana = totalEfectivo;
@@ -475,7 +485,7 @@ export function ResumenPage() {
     setShowCerrar(false);
   }
 
-  // Caja de Luis
+  // Caja del administrador de la sede
   const cajaEfectivo = roundTwo(fondoEf - saldo.deudaEfectivo + saldo.repuestoEfectivo);
   const cajaCuentas = roundTwo(fondoCt - saldo.deudaCuentas + saldo.repuestoCuentas);
 
@@ -578,7 +588,7 @@ export function ResumenPage() {
   async function handleConfirmVerificar() {
     if (confirmVerificarIdx === null) return;
     const grupo = valoresRevisar[confirmVerificarIdx];
-    if (!grupo || !profile?.sede_id) { setConfirmVerificarIdx(null); return; }
+    if (!grupo || !sedeId) { setConfirmVerificarIdx(null); return; }
     setVerificandoIdx(confirmVerificarIdx);
 
     // Mapeo de tipo local -> tipo BD
@@ -593,7 +603,7 @@ export function ResumenPage() {
     }
 
     const { error } = await verificarGrupo({
-      sedeId: profile.sede_id,
+      sedeId,
       tipo: tipoBd,
       gastoIds: grupo.gastos.map(g => g.id),
       montoUnitario: grupo.monto,
@@ -604,7 +614,7 @@ export function ResumenPage() {
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Grupo verificado. Movido al historico.', 'success');
-      await fetchValoresRevisados(profile.sede_id);
+      await fetchValoresRevisados(sedeId);
     }
   }
 
@@ -625,14 +635,15 @@ export function ResumenPage() {
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Grupo re-abierto.', 'success');
-      await fetchValoresRevisados(profile?.sede_id ?? undefined);
+      await fetchValoresRevisados(sedeId ?? undefined);
     }
   }
 
   // Label del periodo para los reportes exportados (ej. "Mayo 2026 - Semana 5")
-  const periodoLabel = isAnual
+  const periodoTexto = isAnual
     ? `Año ${filterAnio}`
     : `${mesLabel}${filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}`;
+  const periodoLabel = sedeActiva ? `${sedeActiva.nombre} — ${periodoTexto}` : periodoTexto;
 
   async function handleExportExcel() {
     if (pendientesCompletos.length === 0) {
@@ -705,7 +716,7 @@ export function ResumenPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} className="text-amber-500" /><span className="text-xs text-muted-foreground">Total Pendiente</span></div>
             <p className="text-xl font-bold text-amber-600">{formatMonto(totalPendiente)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con Luis esta en "Reponer".</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con {encargado} esta en "Reponer".</p>
           </CardContent>
         </Card>
         <Card>
@@ -716,7 +727,7 @@ export function ResumenPage() {
         </Card>
       </div>
 
-      {/* Reponer + Caja de Luis */}
+      {/* Reponer + Caja del administrador */}
       {isOwner && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-yayis-green/30 bg-yayis-cream">
@@ -735,16 +746,16 @@ export function ResumenPage() {
           </Card>
           <Card className={`border-2 ${cajaEfectivo >= fondoEf ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><Wallet size={16} /><span className="text-xs font-medium">Caja Luis Efectivo</span></div>
+              <div className="flex items-center gap-2 mb-1"><Wallet size={16} /><span className="text-xs font-medium">Caja {encargado} Efectivo</span></div>
               <p className={`text-xl font-bold ${cajaEfectivo >= fondoEf ? 'text-emerald-700' : 'text-amber-700'}`}>{formatMonto(cajaEfectivo)}</p>
-              <p className="text-xs text-muted-foreground">Fondo: {formatMonto(fondoEf)}</p>
+              <p className="text-xs text-muted-foreground">{fondos ? `Fondo: ${formatMonto(fondoEf)}` : 'Fondo sin configurar (ver Configuración)'}</p>
             </CardContent>
           </Card>
           <Card className={`border-2 ${cajaCuentas >= fondoCt ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} /><span className="text-xs font-medium">Caja Luis Cuentas</span></div>
+              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} /><span className="text-xs font-medium">Caja {encargado} Cuentas</span></div>
               <p className={`text-xl font-bold ${cajaCuentas >= fondoCt ? 'text-emerald-700' : 'text-amber-700'}`}>{formatMonto(cajaCuentas)}</p>
-              <p className="text-xs text-muted-foreground">Fondo: {formatMonto(fondoCt)}</p>
+              <p className="text-xs text-muted-foreground">{fondos ? `Fondo: ${formatMonto(fondoCt)}` : 'Fondo sin configurar (ver Configuración)'}</p>
             </CardContent>
           </Card>
         </div>
@@ -807,10 +818,10 @@ export function ResumenPage() {
         </div>
       )}
 
-      {/* Desglose por categoria: Pendiente (aun no repuesto) — DEUDA TOTAL con Luis */}
+      {/* Desglose por categoria: Pendiente (aun no repuesto) — DEUDA TOTAL con el administrador */}
       {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
         <div>
-          <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con Luis por categoria</h3>
+          <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con {encargado} por categoria</h3>
           <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Los totales cuadran con "Reponer Efectivo/Cuentas".</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {categoriasEfectivo.length > 0 && (
@@ -971,7 +982,7 @@ export function ResumenPage() {
                       const isDup = v.tipo === 'duplicado';
                       const fechaLima = new Date(v.verificado_en).toLocaleString('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
                       // viewer NO ve boton Re-abrir; admin de otra sede tampoco
-                      const puedeReabrir = canVerificar && (profile?.rol === 'owner' || profile?.sede_id === v.sede_id);
+                      const puedeReabrir = canVerificar && (profile?.rol === 'owner' || sedeId === v.sede_id);
                       return (
                         <div key={v.id} className="flex flex-wrap items-center gap-2 text-xs py-1">
                           <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${isDup ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
@@ -1136,7 +1147,7 @@ export function ResumenPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? 'Todos los gastos pendientes por categoria (faltan reponer a Luis)' : `Los ${topItemsCount} gastos pendientes mas costosos por categoria (faltan reponer a Luis)`}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? `Todos los gastos pendientes por categoria (faltan reponer a ${encargado})` : `Los ${topItemsCount} gastos pendientes mas costosos por categoria (faltan reponer a ${encargado})`}</p>
                 </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                   <div className="inline-flex rounded-md border border-gray-200 bg-white" role="group">
@@ -1299,7 +1310,7 @@ export function ResumenPage() {
             {/* Desglose Pendiente por Reponer (copia para registrar gastos en otro lado) */}
             {(categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
               <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
-                <h4 className="text-sm font-bold text-amber-700 mb-1">Desglose de la deuda con Luis por categoria</h4>
+                <h4 className="text-sm font-bold text-amber-700 mb-1">Desglose de la deuda con {encargado} por categoria</h4>
                 <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Cuadra con "Reponer Efectivo/Cuentas".</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {categoriasEfectivo.length > 0 && (
@@ -1407,7 +1418,7 @@ export function ResumenPage() {
                   <tr className="border-b bg-red-50/50"><td className="py-2 font-medium">Gastado efectivo</td><td className="py-2 text-right font-bold text-red-600">{formatMonto(gastadoEfSemana)}</td></tr>
                   <tr className="border-b bg-red-50/50"><td className="py-2 font-medium">Gastado cuentas</td><td className="py-2 text-right font-bold text-red-600">{formatMonto(gastadoCtSemana)}</td></tr>
                   {efectivoUsadoDeVentas > 0 && (
-                    <tr className="border-b bg-amber-50"><td className="py-2 text-amber-700">Luis uso de ventas para gastos</td><td className="py-2 text-right font-bold text-amber-700">{formatMonto(efectivoUsadoDeVentas)}</td></tr>
+                    <tr className="border-b bg-amber-50"><td className="py-2 text-amber-700">{encargado} usó de ventas para gastos</td><td className="py-2 text-right font-bold text-amber-700">{formatMonto(efectivoUsadoDeVentas)}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1421,13 +1432,13 @@ export function ResumenPage() {
                     <Input type="number" step="0.01" placeholder="0.00" value={ventasPos} onChange={e => setVentasPos(e.target.value)} className="mt-1" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Efectivo que Luis entrega (S/)</label>
+                    <label className="text-sm font-medium">Efectivo que entrega {encargado} (S/)</label>
                     <Input type="number" step="0.01" placeholder="0.00" value={efectivoEntregado} onChange={e => setEfectivoEntregado(e.target.value)} className="mt-1" />
                   </div>
                 </div>
                 {ventasNum > 0 && (
                   <div className="bg-white border rounded-lg p-4 space-y-2 text-sm">
-                    <p>Luis deberia entregar: <strong>{formatMonto(debiaEntregar)}</strong></p>
+                    <p>{encargado} debería entregar: <strong>{formatMonto(debiaEntregar)}</strong></p>
                     {entregadoNum > 0 && (
                       <p className={diferenciaCaja >= 0 ? 'text-emerald-700' : 'text-red-700'}>
                         {diferenciaCaja === 0 ? 'Caja cuadrada' : diferenciaCaja > 0 ? `Sobrante: ${formatMonto(diferenciaCaja)}` : `Faltante: ${formatMonto(Math.abs(diferenciaCaja))}`}
@@ -1447,7 +1458,7 @@ export function ResumenPage() {
       {/* Reposiciones */}
       {isOwner && (
         <Card>
-          <CardHeader><CardTitle>Reposiciones a Luis</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Reposiciones a {encargado}{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             {/* Saldo */}
             <div className="grid grid-cols-3 gap-3">
@@ -1472,7 +1483,8 @@ export function ResumenPage() {
 
             {/* Formulario */}
             <div className="border-t pt-4">
-              <h4 className="text-sm font-bold mb-3">Registrar Reposicion</h4>
+              <h4 className="text-sm font-bold mb-1">Registrar Reposición</h4>
+              <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}.</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div><label className="text-xs font-medium">Fecha</label><Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" /></div>
                 <div><label className="text-xs font-medium">Tipo</label>

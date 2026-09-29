@@ -94,3 +94,14 @@ export function getMesesDisponibles(): { label: string; anio: number; mes: numbe
   }
   return meses;
 }
+
+// Numeracion de getDay(): 0 = domingo ... 6 = sabado. Se muestra de lunes a domingo.
+export const DIAS_SEMANA = [
+  { valor: 1, corto: 'Lun', largo: 'lunes' },
+  { valor: 2, corto: 'Mar', largo: 'martes' },
+  { valor: 3, corto: 'Mié', largo: 'miércoles' },
+  { valor: 4, corto: 'Jue', largo: 'jueves' },
+  { valor: 5, corto: 'Vie', largo: 'viernes' },
+  { valor: 6, corto: 'Sáb', largo: 'sábado' },
+  { valor: 0, corto: 'Dom', largo: 'domingo' },
+] as const;
