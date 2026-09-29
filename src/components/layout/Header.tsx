@@ -36,7 +36,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         ) : (
           <span className="flex items-center gap-1.5 text-sm font-bold text-yayis-green">
             <MapPin size={16} className="shrink-0" />
-            {sedeActiva?.nombre ?? 'Sin sede'}
+            {profile?.rol === 'compras' ? 'Todas las sedes' : sedeActiva?.nombre ?? 'Sin sede'}
           </span>
         )}
       </div>
