@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProveedores } from '@/hooks/useProveedores';
 import { useProductos } from '@/hooks/useProductos';
+import { useHistorialPrecios } from '@/hooks/useHistorialPrecios';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
-import { UNIDADES } from '@/lib/compras';
+import { UNIDADES, fechaCorta, sumarDias } from '@/lib/compras';
+import { getTodayLima } from '@/lib/dates';
+import { formatMonto } from '@/lib/utils';
+import { claveProducto, formatPorcentaje, ofertasPorProveedor, precioHabitual, DIAS_MEJOR_PROVEEDOR } from '@/lib/precios';
 import { Check, ChevronDown, Loader2, Package, Pencil, Plus, Store, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import type { CondicionPago, Proveedor } from '@/types';
 
@@ -37,6 +41,8 @@ export function ProveedoresPage() {
   const esGerencia = profile?.rol === 'owner';
   const { proveedores, loading, crearProveedor, actualizarProveedor } = useProveedores();
   const { productos, actualizarProducto } = useProductos();
+  const historial = useHistorialPrecios();
+  const desdeMejor = sumarDias(getTodayLima(), -DIAS_MEJOR_PROVEEDOR);
   const { addToast } = useToast();
 
   const [form, setForm] = useState<FormProveedor>(VACIO);
@@ -205,6 +211,8 @@ export function ProveedoresPage() {
         <div className="space-y-3 border-t p-4">
           <p className="text-xs text-muted-foreground">
             El catálogo se arma solo con lo que piden las sedes. Aquí puedes corregir la unidad y elegir el proveedor habitual de cada producto: así la ruta de compras ya sale agrupada.
+            <br />
+            <strong>Precio habitual</strong>: el precio típico de las últimas 3 compras. <strong>Mejor proveedor</strong>: el que dio el último precio más bajo en los últimos {DIAS_MEJOR_PROVEEDOR} días.
           </p>
           <Input placeholder="Buscar producto..." value={filtroProducto} onChange={e => setFiltroProducto(e.target.value)} className="max-w-xs" aria-label="Buscar producto" />
           {productosFiltrados.length === 0 ? (
@@ -217,11 +225,20 @@ export function ProveedoresPage() {
                     <th className="py-2 font-medium">Producto</th>
                     <th className="py-2 font-medium">Unidad</th>
                     <th className="py-2 font-medium">Proveedor habitual</th>
+                    <th className="min-w-[9rem] py-2 font-medium">Precio habitual</th>
+                    <th className="min-w-[16rem] py-2 font-medium">Mejor proveedor ({DIAS_MEJOR_PROVEEDOR} días)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {productosFiltrados.map(prod => (
-                    <tr key={prod.id} className="border-b last:border-b-0">
+                  {productosFiltrados.map(prod => {
+                    const compras = historial.get(claveProducto(prod.id, prod.unidad)) ?? [];
+                    const habitual = precioHabitual(compras);
+                    const ofertas = ofertasPorProveedor(compras, desdeMejor);
+                    const mejor = ofertas[0];
+                    const delHabitual = ofertas.find(o => o.proveedor_id === prod.proveedor_id);
+                    const ahorro = mejor && delHabitual && mejor !== delHabitual ? mejor.unitario / delHabitual.unitario - 1 : null;
+                    return (
+                    <tr key={prod.id} className="border-b align-top last:border-b-0">
                       <td className="py-2 pr-2 font-medium">{prod.nombre}</td>
                       <td className="py-2 pr-2">
                         <Select className="h-8 w-28 text-xs" value={prod.unidad} onChange={e => handleProducto(prod.id, { unidad: e.target.value })} aria-label={`Unidad de ${prod.nombre}`}>
@@ -243,8 +260,33 @@ export function ProveedoresPage() {
                         </Select>
                         {prod.proveedor_id && !nombreProveedor(prod.proveedor_id) && <span className="ml-2 text-xs text-muted-foreground">(proveedor no disponible)</span>}
                       </td>
+                      <td className="py-2 pr-2 text-xs">
+                        {habitual ? (
+                          <>
+                            <span className="font-bold text-yayis-dark">{formatMonto(habitual.unitario)}</span> por {prod.unidad}
+                            <span className="block text-muted-foreground">{habitual.compras === 1 ? '1 compra' : `últimas ${habitual.compras} compras`}</span>
+                          </>
+                        ) : <span className="text-muted-foreground">Sin compras en {prod.unidad}</span>}
+                      </td>
+                      <td className="py-2 text-xs">
+                        {mejor ? (
+                          <>
+                            <span className={`font-bold ${habitual && mejor.unitario < habitual.unitario ? 'text-emerald-700' : 'text-yayis-dark'}`}>{formatMonto(mejor.unitario)}</span> por {prod.unidad} · {mejor.proveedor}
+                            <span className="block text-muted-foreground">
+                              {fechaCorta(mejor.fecha)}
+                              {ofertas.length === 1 ? ' · único proveedor: busca otra opción' : ` · ${ofertas.length} proveedores comparados`}
+                            </span>
+                            {ahorro !== null && ahorro < 0 && (
+                              <span className="mt-0.5 inline-block rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">
+                                {formatPorcentaje(ahorro)} vs. el proveedor habitual ({formatMonto(delHabitual!.unitario)})
+                              </span>
+                            )}
+                          </>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

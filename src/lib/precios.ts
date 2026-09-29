@@ -9,6 +9,9 @@ import { roundTwo } from '@/lib/utils';
 export const COMPRAS_PARA_HABITUAL = 3;
 export const UMBRAL_VARIACION = 0.15;   // ±15%: se avisa
 export const UMBRAL_VARIACION_FUERTE = 0.30; // ±30%: aviso fuerte
+// "Mejor proveedor" = el que dio el último precio más bajo en los últimos 90 días
+// (se usa el último precio de cada proveedor para que una oferta vieja no engañe).
+export const DIAS_MEJOR_PROVEEDOR = 90;
 
 export interface CompraDePrecio {
   producto_id: string;
@@ -17,6 +20,7 @@ export interface CompraDePrecio {
   precio_total: number;
   fecha: string;
   proveedor: string;
+  proveedor_id?: string;
 }
 
 export interface PrecioHabitual {
@@ -126,4 +130,25 @@ export function calcularCambiosPrecio<T>(
     previas.set(k, [...antes, c]);
   }
   return cambios;
+}
+
+export interface OfertaProveedor {
+  proveedor: string;
+  proveedor_id?: string;
+  unitario: number;
+  fecha: string;
+}
+
+/**
+ * Último precio de cada proveedor desde `desde` (compras de la más vieja a la más nueva, mismo producto y unidad),
+ * ordenado del más barato al más caro. El primero es el mejor proveedor.
+ */
+export function ofertasPorProveedor(compras: CompraDePrecio[], desde: string): OfertaProveedor[] {
+  const ultima = new Map<string, OfertaProveedor>();
+  for (const c of compras) {
+    const unitario = precioUnitario(c.precio_total, c.cantidad);
+    if (unitario === null || c.fecha < desde) continue;
+    ultima.set(c.proveedor_id ?? c.proveedor, { proveedor: c.proveedor, proveedor_id: c.proveedor_id, unitario, fecha: c.fecha });
+  }
+  return Array.from(ultima.values()).sort((a, b) => a.unitario - b.unitario);
 }
