@@ -7,37 +7,44 @@ import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ESTADO_ITEM, ESTADO_PEDIDO, UNIDADES, fechaLarga, formatCantidad } from '@/lib/compras';
 import { AlertTriangle, Loader2, Plus, Send, Trash2 } from 'lucide-react';
-import type { PedidoConItems, Producto } from '@/types';
+import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
 
 interface Props {
   pedido: PedidoConItems;
   productos: Producto[];
+  proveedores: Proveedor[];
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
-  onActualizar: (itemId: string, cambios: { cantidad?: number }) => Promise<{ error: string | null }>;
+  onActualizar: (itemId: string, cambios: { cantidad?: number; proveedor_id?: string | null }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [unidad, setUnidad] = useState<string>('kg');
   const [nota, setNota] = useState('');
+  const [proveedorId, setProveedorId] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [confirmCancelar, setConfirmCancelar] = useState(false);
 
   const enviado = pedido.estado === 'enviado';
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const datalistId = `productos-${pedido.id}`;
+  const proveedoresActivos = proveedores.filter(p => p.activo);
+  const sinProveedor = items.filter(i => i.estado === 'pendiente' && !i.proveedor_id).length;
 
   function handleNombre(valor: string) {
     setNombre(valor);
     const conocido = productos.find(p => p.nombre.toLowerCase() === valor.trim().toLowerCase());
-    if (conocido) setUnidad(conocido.unidad);
+    if (conocido) {
+      setUnidad(conocido.unidad);
+      setProveedorId(conocido.proveedor_id ?? '');
+    }
   }
 
   async function handleAgregar() {
@@ -60,19 +67,25 @@ export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onAc
       cantidad: cant,
       unidad,
       nota: nota.trim() || null,
-      proveedor_id: producto.proveedor_id,
+      proveedor_id: proveedorId || producto.proveedor_id,
     });
     setGuardando(false);
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
     setNombre('');
     setCantidad('');
     setNota('');
+    setProveedorId('');
   }
 
   async function handleCantidad(itemId: string, actual: number, valor: string) {
     const cant = parseFloat(valor);
     if (!cant || cant <= 0 || cant === Number(actual)) return;
     const { error } = await onActualizar(itemId, { cantidad: cant });
+    if (error) addToast(`Error: ${error}`, 'error');
+  }
+
+  async function handleProveedor(itemId: string, valor: string) {
+    const { error } = await onActualizar(itemId, { proveedor_id: valor || null });
     if (error) addToast(`Error: ${error}`, 'error');
   }
 
@@ -155,7 +168,14 @@ export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onAc
               {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
             </Select>
           </div>
-          <div className="col-span-2 sm:col-span-3">
+          <div className="col-span-2 sm:col-span-5">
+            <label className="text-xs font-medium" htmlFor={`prov-${pedido.id}`}>Proveedor (a quién se le compra)</label>
+            <Select id={`prov-${pedido.id}`} value={proveedorId} onChange={e => setProveedorId(e.target.value)} className="mt-1">
+              <option value="">Sin proveedor todavía</option>
+              {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </Select>
+          </div>
+          <div className="col-span-2 sm:col-span-7">
             <label className="text-xs font-medium" htmlFor={`nota-${pedido.id}`}>Nota (opcional)</label>
             <Input
               id={`nota-${pedido.id}`}
@@ -184,6 +204,7 @@ export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onAc
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="py-2 font-medium">Producto</th>
                   <th className="py-2 font-medium">Cantidad</th>
+                  <th className="py-2 font-medium">Proveedor</th>
                   <th className="py-2 font-medium">Nota</th>
                   {enviado && <th className="py-2 font-medium">Estado</th>}
                   <th className="py-2"></th>
@@ -212,6 +233,24 @@ export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onAc
                         <span>{formatCantidad(i.cantidad)} {i.unidad}</span>
                       )}
                     </td>
+                    <td className="py-2 pr-2">
+                      {i.estado === 'pendiente' ? (
+                        <Select
+                          className={`h-8 w-44 text-xs ${i.proveedor_id ? '' : 'border-amber-400'}`}
+                          value={i.proveedor_id ?? ''}
+                          onChange={e => handleProveedor(i.id, e.target.value)}
+                          aria-label={`Proveedor de ${i.productos?.nombre ?? 'producto'}`}
+                        >
+                          <option value="">Elegir proveedor…</option>
+                          {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          {i.proveedor_id && !proveedoresActivos.some(p => p.id === i.proveedor_id) && (
+                            <option value={i.proveedor_id}>{i.proveedores?.nombre ?? 'Proveedor'}</option>
+                          )}
+                        </Select>
+                      ) : (
+                        <span className="text-xs">{i.proveedores?.nombre ?? '—'}</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
                     {enviado && (
                       <td className="py-2 pr-2">
@@ -232,6 +271,12 @@ export function PedidoEditor({ pedido, productos, obtenerOCrear, onAgregar, onAc
               </tbody>
             </table>
           </div>
+        )}
+
+        {sinProveedor > 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {sinProveedor === 1 ? '1 producto' : `${sinProveedor} productos`} sin proveedor. Elígelo en la columna <strong>Proveedor</strong> para que Compras vea la lista ya agrupada por proveedor; si no, tendrá que asignarlo él.
+          </p>
         )}
 
         {/* Acciones */}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { usePedidos } from '@/hooks/usePedidos';
 import { useProductos } from '@/hooks/useProductos';
+import { useProveedores } from '@/hooks/useProveedores';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
   const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido } = usePedidos();
   const { productos, obtenerOCrear } = useProductos();
+  const { proveedores } = useProveedores();
   const { addToast } = useToast();
 
   const hoy = getTodayLima();
@@ -79,6 +81,7 @@ export function PedidosPage() {
           key={p.id}
           pedido={p}
           productos={productos}
+          proveedores={proveedores}
           obtenerOCrear={obtenerOCrear}
           onAgregar={agregarItem}
           onActualizar={actualizarItem}
