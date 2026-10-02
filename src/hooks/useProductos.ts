@@ -54,5 +54,16 @@ export function useProductos() {
     return { error: null };
   }, [fetchProductos]);
 
-  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto };
+  /**
+   * Recuerda el proveedor habitual de un producto (lo puede hacer el administrador, Compras y Gerencia).
+   * Se actualiza la lista local para que el siguiente producto que se agregue ya salga con su proveedor.
+   */
+  const recordarProveedor = useCallback(async (productoId: string, proveedorId: string) => {
+    const { error } = await supabase.rpc('recordar_proveedor_producto', { p_producto: productoId, p_proveedor: proveedorId });
+    if (error) return { error: error.message };
+    setProductos(prev => prev.map(p => (p.id === productoId ? { ...p, proveedor_id: proveedorId } : p)));
+    return { error: null };
+  }, []);
+
+  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto, recordarProveedor };
 }
