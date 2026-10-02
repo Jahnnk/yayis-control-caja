@@ -17,7 +17,7 @@ interface Props {
   onRecordarProveedor: (productoId: string, proveedorId: string) => Promise<{ error: string | null }>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
-  onActualizar: (itemId: string, cambios: { cantidad?: number; proveedor_id?: string | null }) => Promise<{ error: string | null }>;
+  onActualizar: (itemId: string, cambios: { cantidad?: number; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
@@ -30,6 +30,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const [unidad, setUnidad] = useState<string>('kg');
   const [nota, setNota] = useState('');
   const [proveedorId, setProveedorId] = useState('');
+  const [urgenteNuevo, setUrgenteNuevo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [confirmCancelar, setConfirmCancelar] = useState(false);
 
@@ -37,6 +38,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const datalistId = `productos-${pedido.id}`;
   const proveedoresActivos = proveedores.filter(p => p.activo);
+  const urgentes = items.filter(i => i.estado === 'pendiente' && i.urgente).length;
   const sinProveedor = items.filter(i => i.estado === 'pendiente' && !i.proveedor_id).length;
   // Productos de la lista sin proveedor que el sistema ya sabe a quién se le compran.
   const recordables = items.filter(i => {
@@ -75,6 +77,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
       unidad,
       nota: nota.trim() || null,
       proveedor_id: proveedorId || producto.proveedor_id,
+      urgente: urgenteNuevo,
     });
     setGuardando(false);
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
@@ -83,6 +86,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     setCantidad('');
     setNota('');
     setProveedorId('');
+    setUrgenteNuevo(false);
   }
 
   async function handleCantidad(itemId: string, actual: number, valor: string) {
@@ -121,6 +125,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
       completados += 1;
     }
     addToast(`Se completó el proveedor de ${completados} producto(s)`, 'success');
+  }
+
+  async function handleUrgente(itemId: string, valor: boolean) {
+    const { error } = await onActualizar(itemId, { urgente: valor });
+    if (error) addToast(`Error: ${error}`, 'error');
   }
 
   async function handleEliminar(itemId: string) {
@@ -220,7 +229,12 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
               className="mt-1"
             />
           </div>
-          <div className="col-span-2 sm:col-span-12">
+          <div className="col-span-2 flex flex-wrap items-center gap-4 sm:col-span-12">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input type="checkbox" checked={urgenteNuevo} onChange={e => setUrgenteNuevo(e.target.checked)} />
+              <span className="font-medium text-red-700">⚡ Urgente</span>
+              <span className="text-xs text-muted-foreground">(Compras lo compra primero)</span>
+            </label>
             <Button size="sm" onClick={handleAgregar} disabled={guardando}>
               {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Plus size={14} className="mr-1" />}
               Agregar a la lista
@@ -239,6 +253,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                   <th className="py-2 font-medium">Producto</th>
                   <th className="py-2 font-medium">Cantidad</th>
                   <th className="py-2 font-medium">Proveedor</th>
+                  <th className="py-2 text-center font-medium">⚡ Urgente</th>
                   <th className="py-2 font-medium">Nota</th>
                   {enviado && <th className="py-2 font-medium">Estado</th>}
                   <th className="py-2"></th>
@@ -246,7 +261,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
               </thead>
               <tbody>
                 {items.map(i => (
-                  <tr key={i.id} className="border-b last:border-b-0">
+                  <tr key={i.id} className={`border-b last:border-b-0 ${i.urgente && i.estado === 'pendiente' ? 'bg-red-50/60' : ''}`}>
                     <td className="py-2 pr-2 font-medium">{i.productos?.nombre ?? '—'}</td>
                     <td className="py-2 pr-2 whitespace-nowrap">
                       {i.estado === 'pendiente' ? (
@@ -285,6 +300,19 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                         <span className="text-xs">{i.proveedores?.nombre ?? '—'}</span>
                       )}
                     </td>
+                    <td className="py-2 pr-2 text-center">
+                      {i.estado === 'pendiente' ? (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 cursor-pointer accent-red-600"
+                          checked={!!i.urgente}
+                          onChange={e => handleUrgente(i.id, e.target.checked)}
+                          aria-label={`Marcar ${i.productos?.nombre ?? 'producto'} como urgente`}
+                        />
+                      ) : (
+                        i.urgente && <span className="text-xs font-bold text-red-700">⚡</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
                     {enviado && (
                       <td className="py-2 pr-2">
@@ -305,6 +333,12 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
               </tbody>
             </table>
           </div>
+        )}
+
+        {urgentes > 0 && (
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+            ⚡ {urgentes === 1 ? '1 producto urgente' : `${urgentes} productos urgentes`}: Compras {pedido.estado === 'borrador' ? 'los verá primero cuando envíes la lista' : 'ya los ve primero en su ruta'}.
+          </p>
         )}
 
         {sinProveedor > 0 && (

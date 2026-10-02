@@ -185,6 +185,7 @@ En orden (ver `git log`):
 Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepción → Finanzas (Kelly) revisa y repone.**
 - **Calendario**: Atelier lunes/jueves, Fonavi lunes/miércoles, Centro martes/viernes (para no juntar compras ni pagos en un día).
 - **Urgencias**: se permite pedir fuera del día programado marcándolo "urgente"; queda como alerta para Finanzas.
+- **Productos urgentes dentro de una lista (2-oct-2026)**: el administrador marca líneas puntuales como ⚡ urgentes (columna Urgente en Pedidos de compra, `pedido_items.urgente`, `supabase/urgente_por_producto.sql`), también en listas ya enviadas. La ruta de Fabio los muestra arriba en una tarjeta roja, con etiqueta en cada línea, y los ordena primero dentro de cada proveedor. No genera alerta a Finanzas (es prioridad dentro del día de compra, no un pedido fuera de calendario).
 - **Dinero de Fabio (al inicio)**: cada sede le **entrega dinero a rendir**; Fabio rinde con boletas + vuelto y el sistema verifica que *gastado + vuelto = entregado*. Lo comprado se vuelve gasto de la sede y Kelly repone la caja del admin. **Más adelante** (cuando Fabio gane confianza) pasará a un **fondo propio de compras**: diseñar para que sea un cambio de configuración, no una reescritura.
 - **Proveedores a crédito**: existen. Las compras a crédito no salen de ninguna caja; van a **cuentas por pagar** con vencimiento, y las paga **Finanzas desde la cuenta del negocio**.
 - **Evidencias obligatorias**: foto de boleta/factura + comprobante de pago por compra.
