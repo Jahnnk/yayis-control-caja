@@ -17,7 +17,7 @@ const navItems = [
   { to: '/pedidos', label: 'Pedidos de compra', icon: ShoppingCart, roles: ['owner', 'admin'] },
   { to: '/recepcion', label: 'Entregas y recepción', icon: PackageCheck, roles: ['owner', 'admin'] },
   { to: '/rendicion', label: 'Dinero en Compras', icon: Wallet, roles: ['owner'] },
-  { to: '/proveedores', label: 'Proveedores', icon: Store, roles: ['owner', 'compras'] },
+  { to: '/proveedores', label: 'Proveedores', icon: Store, roles: ['owner', 'admin', 'compras'] },
   { to: '/configuracion', label: 'Configuracion', icon: Settings, roles: ['owner'] },
   { to: '/usuarios', label: 'Usuarios', icon: Users, roles: ['owner'] },
 ] as const;

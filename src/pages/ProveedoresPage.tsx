@@ -39,6 +39,8 @@ function aForm(p: Proveedor): FormProveedor {
 export function ProveedoresPage() {
   const { profile } = useAuth();
   const esGerencia = profile?.rol === 'owner';
+  // El catálogo de productos (unidad y proveedor habitual) afecta a las 3 sedes: lo manejan Gerencia y Compras.
+  const veCatalogo = profile?.rol === 'owner' || profile?.rol === 'compras';
   const { proveedores, loading, crearProveedor, actualizarProveedor } = useProveedores();
   const { productos, actualizarProducto } = useProductos();
   const historial = useHistorialPrecios();
@@ -90,7 +92,7 @@ export function ProveedoresPage() {
     if (error) addToast(`Error: ${error}`, 'error');
   }
 
-  // Compras no puede tocar proveedores a crédito (lo define Gerencia).
+  // Compras y los administradores no pueden tocar proveedores a crédito (lo define Gerencia).
   const puedeEditar = (p: Proveedor) => esGerencia || p.condicion_pago === 'contado';
   const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(filtroProducto.trim().toLowerCase()));
   const nombreProveedor = (id: string | null) => proveedores.find(p => p.id === id)?.nombre;
@@ -203,7 +205,7 @@ export function ProveedoresPage() {
       </Card>
 
       {/* Catalogo de productos: plegado por defecto */}
-      <details className="group rounded-lg border bg-white shadow-sm">
+      {veCatalogo && <details className="group rounded-lg border bg-white shadow-sm">
         <summary className="flex cursor-pointer list-none items-center justify-between p-4">
           <span className="flex items-center gap-2 text-base font-bold text-yayis-dark"><Package size={18} /> Catálogo de productos ({productos.length})</span>
           <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
@@ -292,7 +294,7 @@ export function ProveedoresPage() {
             </div>
           )}
         </div>
-      </details>
+      </details>}
     </div>
   );
 }
