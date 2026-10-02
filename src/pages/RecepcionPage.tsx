@@ -14,7 +14,7 @@ import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
-import { ESTADO_ITEM, fechaCorta, formatCantidad } from '@/lib/compras';
+import { ESTADO_ITEM, diferenciaDeCierre, fechaCorta, formatCantidad } from '@/lib/compras';
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
 
@@ -22,11 +22,13 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
   entrega: EntregaDetalle;
   categoriasSede: { id: string; nombre: string }[];
   onDevolver: (e: EntregaDetalle) => void;
-  onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>) => void;
+  onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua: number) => void;
 }) {
   const porDefecto = categoriasSede.find(c => c.nombre.trim().toLowerCase() === 'insumos')?.id ?? categoriasSede[0]?.id ?? '';
   const [categorias, setCategorias] = useState<Record<string, string>>({});
   const [vueltoRecibido, setVueltoRecibido] = useState(String(Number(entrega.vuelto ?? 0)));
+  // Lo que Fabio no devolvió puede seguir con él para la semana siguiente (no es un faltante).
+  const [sigueConFabio, setSigueConFabio] = useState(false);
 
   useEffect(() => {
     setCategorias(Object.fromEntries(entrega.compras.map(c => [c.id, c.categoria_id ?? porDefecto])));
@@ -35,7 +37,9 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
   const gastado = gastadoDe(entrega);
   const vueltoEsperado = roundTwo(Number(entrega.monto) - gastado);
   const recibido = parseFloat(vueltoRecibido);
-  const diferencia = roundTwo(Number(entrega.monto) - gastado - (recibido || 0));
+  const diferenciaBruta = roundTwo(Number(entrega.monto) - gastado - (recibido || 0));
+  const saldoContinua = sigueConFabio && diferenciaBruta > 0 ? diferenciaBruta : 0;
+  const diferencia = roundTwo(diferenciaBruta - saldoContinua);
 
   return (
     <Card className="border-blue-300">
@@ -72,18 +76,28 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
           </div>
           <p className={`pb-2 text-sm font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
             {diferencia === 0
-              ? '✓ Cuadra al céntimo'
+              ? (saldoContinua > 0 ? `✓ Cuadra: ${formatMonto(saldoContinua)} siguen con Fabio` : '✓ Cuadra al céntimo')
               : diferencia > 0
                 ? `Faltan ${formatMonto(diferencia)}`
                 : `La sede le debe ${formatMonto(-diferencia)} a Compras (puso de su bolsillo)`}
           </p>
         </div>
 
+        {diferenciaBruta > 0 && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-sm">
+            <input type="checkbox" className="mt-1" checked={sigueConFabio} onChange={e => setSigueConFabio(e.target.checked)} />
+            <span>
+              <strong>Fabio se queda con {formatMonto(diferenciaBruta)} para la próxima semana.</strong>
+              <span className="block text-xs text-muted-foreground">Marca esto si ese dinero no es un faltante: sigue con Fabio para sus próximas compras. Se abre una entrega nueva con ese saldo y la próxima semana solo le completas hasta el monto semanal.</span>
+            </span>
+          </label>
+        )}
+
         <div className="flex flex-wrap justify-end gap-2 border-t pt-3">
           <Button variant="outline" size="sm" onClick={() => onDevolver(entrega)}>
             <Undo2 size={14} className="mr-1" /> Devolver a Compras para corregir
           </Button>
-          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias)} disabled={!(recibido >= 0)}>
+          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias, saldoContinua)} disabled={!(recibido >= 0)}>
             <CheckCircle2 size={14} className="mr-1" /> Confirmar y cerrar
           </Button>
         </div>
@@ -105,7 +119,8 @@ export function RecepcionPage() {
   const [receptores, setReceptores] = useState<{ id: string; nombre: string }[]>([]);
   const [receptorId, setReceptorId] = useState('');
   const [monto, setMonto] = useState('');
-  const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
+  // El dinero para compras se transfiere por Yape/Plin: «Cuentas» sale por defecto.
+  const [metodo, setMetodo] = useState<MetodoPago>('cuentas');
   const [nota, setNota] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -134,11 +149,15 @@ export function RecepcionPage() {
   }, [idsPorRecibir]);
 
   const [observaciones, setObservaciones] = useState<Record<string, string>>({});
-  const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string> } | null>(null);
+  const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string>; saldoContinua: number } | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
   const categoriasSede = useMemo(() => categorias.filter(c => c.activa).map(c => ({ id: c.id, nombre: c.nombre })), [categorias]);
   const abiertas = entregas.filter(e => e.estado === 'abierta');
+  // Monto semanal de la sede y cuánto le falta a Fabio para completarlo (lo que ya tiene sin gastar cuenta).
+  const montoSemanal = Number(sedeActiva?.monto_semanal_compras ?? 0);
+  const enManosDeFabio = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
+  const paraCompletar = Math.max(roundTwo(montoSemanal - enManosDeFabio), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
 
   async function handleEntregar() {
@@ -169,7 +188,7 @@ export function RecepcionPage() {
   async function confirmarCierre() {
     if (!porCerrar) return;
     setCerrando(true);
-    const { error, resultado } = await cerrarEntrega(porCerrar.entrega, porCerrar.vuelto, porCerrar.categorias);
+    const { error, resultado } = await cerrarEntrega(porCerrar.entrega, porCerrar.vuelto, porCerrar.categorias, porCerrar.saldoContinua);
     setCerrando(false);
     setPorCerrar(null);
     if (error) return addToast(`Error: ${error}`, 'error');
@@ -193,6 +212,16 @@ export function RecepcionPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={18} /> Entregar dinero a Compras</CardTitle>
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
+          {montoSemanal > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
+              <span>Monto semanal para compras: <strong>{formatMonto(montoSemanal)}</strong></span>
+              <span>Fabio tiene sin gastar: <strong>{formatMonto(enManosDeFabio)}</strong></span>
+              <span>Para completar: <strong className="text-yayis-dark">{formatMonto(paraCompletar)}</strong></span>
+              {paraCompletar > 0 && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(paraCompletar))}>Usar {formatMonto(paraCompletar)}</Button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {receptores.length === 0 ? (
@@ -212,8 +241,8 @@ export function RecepcionPage() {
               <div>
                 <label className="text-xs font-medium" htmlFor="metodo-entrega">Sale de</label>
                 <Select id="metodo-entrega" value={metodo} onChange={e => setMetodo(e.target.value as MetodoPago)} className="mt-1 w-36">
+                  <option value="cuentas">Cuentas (Yape / Plin)</option>
                   <option value="efectivo">Efectivo</option>
-                  <option value="cuentas">Cuentas</option>
                 </Select>
               </div>
               <Input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} className="w-48" aria-label="Nota" />
@@ -259,10 +288,10 @@ export function RecepcionPage() {
           entrega={e}
           categoriasSede={categoriasSede}
           onDevolver={handleDevolver}
-          onCerrar={(ent, vuelto, cats) => {
+          onCerrar={(ent, vuelto, cats, saldoContinua) => {
             if (!(vuelto >= 0)) return addToast('Escribe el vuelto que recibiste (0 si no hubo)', 'error');
             if (ent.compras.some(c => !cats[c.id])) return addToast('Elige la categoría de cada compra', 'error');
-            setPorCerrar({ entrega: ent, vuelto, categorias: cats });
+            setPorCerrar({ entrega: ent, vuelto, categorias: cats, saldoContinua });
           }}
         />
       ))}
@@ -317,11 +346,11 @@ export function RecepcionPage() {
           </summary>
           <div className="divide-y border-t text-sm">
             {cerradas.map(e => {
-              const diferencia = roundTwo(Number(e.monto) - gastadoDe(e) - Number(e.vuelto_recibido ?? 0));
+              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
                   <span className="capitalize">{fechaCorta(e.fecha)}</span>
-                  <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}</span>
+                  <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Fabio ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
                   </span>
@@ -336,7 +365,7 @@ export function RecepcionPage() {
         open={porCerrar !== null}
         title="¿Confirmar y cerrar esta rendición?"
         message={porCerrar
-          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y registras que recibiste ${formatMonto(porCerrar.vuelto)} de vuelto. Esto no se puede deshacer.`
+          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y registras que recibiste ${formatMonto(porCerrar.vuelto)} de vuelto.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Fabio: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
           : ''}
         confirmLabel={cerrando ? 'Cerrando...' : 'Sí, cerrar'}
         onConfirm={confirmarCierre}

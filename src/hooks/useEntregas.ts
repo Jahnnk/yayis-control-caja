@@ -103,7 +103,7 @@ export function useEntregas(modo: 'sede' | 'mias') {
    * Cierra la rendición: guarda la categoría de cada compra y la base de datos, en un solo
    * paso, convierte las compras en gastos pendientes de la sede y cierra la entrega.
    */
-  const cerrarEntrega = useCallback(async (entrega: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>) => {
+  const cerrarEntrega = useCallback(async (entrega: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua = 0) => {
     for (const compra of entrega.compras) {
       const categoria = categorias[compra.id];
       if (!categoria) return { error: 'Elige la categoría de cada compra.', resultado: null };
@@ -112,7 +112,10 @@ export function useEntregas(modo: 'sede' | 'mias') {
         if (error) return { error: error.message, resultado: null };
       }
     }
-    const { data, error } = await supabase.rpc('cerrar_entrega', { p_entrega: entrega.id, p_vuelto_recibido: vueltoRecibido });
+    // Con saldo que sigue con Compras: se cierra y se abre una entrega nueva con ese saldo, todo en un solo paso.
+    const { data, error } = saldoContinua > 0
+      ? await supabase.rpc('cerrar_entrega_con_saldo', { p_entrega: entrega.id, p_vuelto_recibido: vueltoRecibido, p_saldo_continua: saldoContinua })
+      : await supabase.rpc('cerrar_entrega', { p_entrega: entrega.id, p_vuelto_recibido: vueltoRecibido });
     if (error) return { error: error.message, resultado: null };
     await fetchEntregas();
     return { error: null, resultado: data as { gastos_creados: number; total_gastado: number; diferencia: number } };
