@@ -88,14 +88,22 @@ export function RutaComprasPage() {
         if (item.estado !== 'pendiente') grupo.resueltos += 1;
       }
     }
-    for (const g of porProveedor.values()) g.productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    // Lo urgente (y todavía por comprar) va primero, dentro del proveedor y entre proveedores.
+    const esUrgente = (prod: GrupoProducto) => prod.lineas.some(l => l.item.urgente && l.item.estado === 'pendiente');
+    for (const g of porProveedor.values()) g.productos.sort((a, b) => Number(esUrgente(b)) - Number(esUrgente(a)) || a.nombre.localeCompare(b.nombre));
     // Primero lo que falta asignar, luego por nombre de proveedor.
+    const conUrgente = (g: GrupoProveedor) => g.productos.some(esUrgente);
     return Array.from(porProveedor.values()).sort((a, b) => {
       if (a.clave === 'sin-proveedor') return -1;
       if (b.clave === 'sin-proveedor') return 1;
-      return (a.proveedor?.nombre ?? '').localeCompare(b.proveedor?.nombre ?? '');
+      return Number(conUrgente(b)) - Number(conUrgente(a)) || (a.proveedor?.nombre ?? '').localeCompare(b.proveedor?.nombre ?? '');
     });
   }, [pedidos]);
+
+  // Todo lo urgente que falta comprar, para mostrarlo arriba de todo.
+  const urgentesPendientes = useMemo(() => grupos.flatMap(g => g.productos.flatMap(prod => prod.lineas
+    .filter(l => l.item.urgente && l.item.estado === 'pendiente')
+    .map(l => ({ ...l, producto: prod.nombre, proveedor: g.clave === 'sin-proveedor' ? null : g.proveedor?.nombre ?? null })))), [grupos]);
 
   const totalLineas = grupos.reduce((s, g) => s + g.total, 0);
   const totalResueltas = grupos.reduce((s, g) => s + g.resueltos, 0);
@@ -204,6 +212,25 @@ export function RutaComprasPage() {
         </CardContent>
       </Card>
 
+      {urgentesPendientes.length > 0 && (
+        <Card className="border-red-300 bg-red-50/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base text-red-800">⚡ Urgente: cómpralo primero ({urgentesPendientes.length})</CardTitle>
+            <p className="text-xs text-red-800">Lo marcó el administrador de cada sede. Está también dentro de cada proveedor, con su etiqueta roja.</p>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {urgentesPendientes.map(u => (
+              <div key={u.item.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-yayis-dark">{u.pedido.sedes?.nombre}</span>
+                <span className="font-bold">{formatCantidad(u.item.cantidad)} {u.item.unidad}</span>
+                <span>{u.producto}</span>
+                <span className="text-xs text-muted-foreground">→ {u.proveedor ?? 'sin proveedor asignado'}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {loading && pedidos.length === 0 ? (
         <Loading text="Cargando ruta..." />
       ) : grupos.length === 0 ? (
@@ -258,6 +285,7 @@ export function RutaComprasPage() {
                           <div key={item.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
                             <span className="min-w-[4.5rem] rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{pedido.sedes?.nombre}</span>
                             <span className="font-medium">{formatCantidad(item.cantidad)} {item.unidad}</span>
+                            {item.urgente && item.estado === 'pendiente' && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
                             {etiquetaPedido(pedido)}
                             {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}
                             <div className="ml-auto flex items-center gap-1">

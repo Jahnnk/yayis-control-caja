@@ -12,6 +12,7 @@ export interface NuevoItem {
   unidad: string;
   nota: string | null;
   proveedor_id: string | null;
+  urgente?: boolean;
 }
 
 function mensajeError(message: string): string {
@@ -72,7 +73,7 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  const actualizarItem = useCallback(async (itemId: string, cambios: { cantidad?: number; unidad?: string; nota?: string | null; proveedor_id?: string | null }) => {
+  const actualizarItem = useCallback(async (itemId: string, cambios: { cantidad?: number; unidad?: string; nota?: string | null; proveedor_id?: string | null; urgente?: boolean }) => {
     const { error } = await supabase.from('pedido_items').update(cambios).eq('id', itemId);
     if (error) return { error: error.message };
     await fetchPedidos();

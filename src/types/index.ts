@@ -216,6 +216,8 @@ export interface PedidoItem {
   unidad: string;
   nota: string | null;
   proveedor_id: string | null;
+  /** El administrador la marcó como urgente (se compra primero). */
+  urgente: boolean;
   estado: EstadoItemPedido;
   created_at: string;
 }
