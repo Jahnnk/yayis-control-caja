@@ -132,7 +132,8 @@ DECLARE
   v_fabio UUID;
   v_liq UUID;
 BEGIN
-  IF NOT puede_pedir_en_sede(p_sede) THEN
+  -- IS NOT TRUE (y no NOT ...): sin sesión el permiso da NULL y debe rechazarse igual.
+  IF puede_pedir_en_sede(p_sede) IS NOT TRUE THEN
     RAISE EXCEPTION 'No tienes permiso para recibir dinero de esta sede.';
   END IF;
   IF p_ids IS NULL OR array_length(p_ids, 1) IS NULL THEN
