@@ -189,6 +189,7 @@ Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepci
 - **Proveedores a crédito**: existen. Las compras a crédito no salen de ninguna caja; van a **cuentas por pagar** con vencimiento, y las paga **Finanzas desde la cuenta del negocio**.
 - **Evidencias obligatorias**: foto de boleta/factura + comprobante de pago por compra.
 - **Ruta del día de Fabio**: pedidos de las sedes del día **agrupados por proveedor**.
+- **Proveedor por producto (2-oct-2026)**: el administrador elige a quién se le compra cada producto al armar su lista (columna Proveedor en Pedidos de compra, se guarda en `pedido_items.proveedor_id`); Fabio ve la ruta ya agrupada. Lo que quede sin proveedor lo asigna Fabio en su ruta ("Sin proveedor asignado"). Sin cambios de base de datos: las reglas de `pedido_items` ya permitían al administrador actualizar.
 - **Controles para Finanzas**: compras sin evidencia, rendiciones descuadradas, urgentes, y **alerta de precio** si un producto sale bastante más caro que la última vez (catálogo de productos con último precio y proveedor).
 - Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
 - Fases: **2A**, **2B** y **3** hechas. **4** (pendiente, cuando Jahnn lo decida) = fondo propio de Fabio: pasar de "entregas por sede" a una caja de Compras que Gerencia repone directamente.
