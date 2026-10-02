@@ -1,5 +1,5 @@
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
+import { diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
 import type { CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
@@ -7,7 +7,7 @@ import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
 
 // Umbrales de control. Están aquí, a la vista, para poder explicar cada alerta.
 // Precios: +15% sobre el precio habitual → alerta; +30% → alerta roja (reglas en src/lib/precios.ts).
-export const DIAS_PARA_RENDIR = 2;         // dinero entregado sin rendir después de 2 días
+export const DIAS_PARA_RENDIR = 8;         // dinero entregado sin rendir: Compras rinde una vez por semana, se alerta pasada una semana
 export const DIAS_AVISO_VENCIMIENTO = 3;   // facturas que vencen en 3 días o menos
 
 export type NivelAlerta = 'alta' | 'media';
@@ -124,7 +124,7 @@ export function calcularAlertas(
   for (const e of entregas) {
     const sede = e.sedes?.nombre ?? '';
     if (e.estado === 'cerrada') {
-      const diferencia = roundTwo(Number(e.monto) - gastadoEntrega(e) - Number(e.vuelto_recibido ?? 0));
+      const diferencia = diferenciaDeCierre(e.monto, gastadoEntrega(e), e.vuelto_recibido, e.saldo_continua);
       if (diferencia !== 0) {
         alertas.push({
           clave: `descuadre-${e.id}`, nivel: diferencia > 0 ? 'alta' : 'media', tipo: 'Rendición descuadrada',

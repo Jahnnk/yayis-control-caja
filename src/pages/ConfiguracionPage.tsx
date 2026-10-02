@@ -53,6 +53,15 @@ export function ConfiguracionPage() {
     }
   }
 
+  async function handleMontoSemanal(id: string, valor: string, actual: number | null) {
+    const nuevo = valor.trim() === '' ? null : parseFloat(valor);
+    if (nuevo !== null && (Number.isNaN(nuevo) || nuevo < 0)) return addToast('Escribe un monto válido', 'error');
+    if (nuevo === actual) return;
+    const { error } = await updateSede(id, { monto_semanal_compras: nuevo });
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast('Monto semanal guardado', 'success');
+  }
+
   async function handleSaveCategoria(id: string) {
     if (!editCatName.trim()) return;
     const { error } = await updateCategoria(id, { nombre: editCatName.trim() });
@@ -253,7 +262,7 @@ export function ConfiguracionPage() {
       <Card>
         <CardHeader>
           <CardTitle>Sedes y días de compra</CardTitle>
-          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día.</p>
+          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Fabio cada semana.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -293,6 +302,16 @@ export function ConfiguracionPage() {
                     );
                   })}
                 </div>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Dinero semanal que el administrador maneja para las compras de Fabio">
+                  Monto semanal para compras S/
+                  <Input
+                    key={`${s.id}-${s.monto_semanal_compras ?? ''}`}
+                    type="number" inputMode="decimal" min="0" step="0.01" className="h-8 w-24"
+                    defaultValue={s.monto_semanal_compras ?? ''}
+                    onBlur={e => handleMontoSemanal(s.id, e.target.value, s.monto_semanal_compras ?? null)}
+                    aria-label={`Monto semanal para compras de ${s.nombre}`}
+                  />
+                </label>
                 <button onClick={() => handleToggleSede(s.id, s.activa)} title={s.activa ? 'Desactivar sede' : 'Activar sede'}>
                   {s.activa ? (
                     <ToggleRight size={24} className="text-emerald-500" />

@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { fechaCorta } from '@/lib/compras';
+import { diferenciaDeCierre, fechaCorta } from '@/lib/compras';
 import { ChevronDown, Clock, Wallet } from 'lucide-react';
 
 function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra }: {
@@ -139,12 +139,12 @@ export function RendicionPage() {
           </summary>
           <div className="divide-y border-t text-sm">
             {cerradas.map(e => {
-              const diferencia = roundTwo(Number(e.monto) - gastadoDe(e) - Number(e.vuelto_recibido ?? 0));
+              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
                   <span className="font-medium">{e.sedes?.nombre}</span>
                   <span className="capitalize text-muted-foreground">{fechaCorta(e.fecha)}</span>
-                  <span>Recibido {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}</span>
+                  <span>Recibido {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · sigue contigo ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Sobraron ${formatMonto(-diferencia)}`}
                   </span>

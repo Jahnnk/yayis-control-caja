@@ -1,6 +1,15 @@
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { roundTwo } from '@/lib/utils';
 import type { EstadoItemPedido, EstadoPedido } from '@/types';
+
+/**
+ * Diferencia de una rendición cerrada: > 0 faltó dinero · < 0 Compras puso de su bolsillo.
+ * Lo que sigue con Compras para la semana siguiente NO es faltante.
+ */
+export function diferenciaDeCierre(monto: number, gastado: number, vueltoRecibido: number | null, saldoContinua: number | null): number {
+  return roundTwo(Number(monto) - gastado - Number(vueltoRecibido ?? 0) - Number(saldoContinua ?? 0));
+}
 
 export const UNIDADES = [
   'kg', 'g', 'L', 'ml', 'unidad', 'docena', 'paquete', 'bolsa', 'saco', 'caja', 'lata', 'botella', 'atado', 'rollo', 'manojo', 'sol',

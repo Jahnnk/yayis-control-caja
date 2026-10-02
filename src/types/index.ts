@@ -8,6 +8,8 @@ export interface Sede {
   activa: boolean;
   /** Dias de compra programados (0 = domingo ... 6 = sabado). Vacio si aun no se configuro. */
   dias_compra?: number[] | null;
+  /** Dinero semanal que el administrador maneja para las compras de Fabio. */
+  monto_semanal_compras?: number | null;
   created_at: string;
 }
 
@@ -248,6 +250,8 @@ export interface Entrega {
   vuelto: number | null;
   rendida_at: string | null;
   vuelto_recibido: number | null;
+  /** Lo que no se devolvió y sigue con Compras para la semana siguiente. */
+  saldo_continua: number;
   cerrada_at: string | null;
   cerrada_por: string | null;
   created_at: string;
