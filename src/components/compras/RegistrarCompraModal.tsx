@@ -14,7 +14,7 @@ import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { claveProducto } from '@/lib/precios';
 import { alCambiarCantidad, alEscribirTotal, alEscribirUnitario, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { UNIDADES, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
+import { fechaCorta, formatCantidad, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import type { MetodoPago, Proveedor, TipoComprobante } from '@/types';
@@ -172,12 +172,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     const lineasExtra = [];
     for (const e of extras) {
       if (!e.nombre.trim()) continue;
-      const { producto, error } = await obtenerOCrear(e.nombre, e.unidad);
+      const unidadExtra = normalizarUnidad(e.unidad) || 'unidad';
+      const { producto, error } = await obtenerOCrear(e.nombre, unidadExtra);
       if (error || !producto) {
         setGuardando(false);
         return addToast(`Error con "${e.nombre}": ${error ?? 'no se pudo guardar'}`, 'error');
       }
-      lineasExtra.push({ pedido_item_id: null, producto_id: producto.id, cantidad: parseFloat(e.cantidad) || 0, unidad: e.unidad, precio_total: parseFloat(e.precio) });
+      lineasExtra.push({ pedido_item_id: null, producto_id: producto.id, cantidad: parseFloat(e.cantidad) || 0, unidad: unidadExtra, precio_total: parseFloat(e.precio) });
     }
 
     const incluidas = candidatas.filter(c => lineas[c.pedido_item_id]?.incluir);
@@ -257,9 +258,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                   onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value } : x))} aria-label="Producto adicional" />
                 <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-8 w-20" value={e.cantidad}
                   onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value) } : x))} aria-label="Cantidad" />
-                <Select className="h-8 w-24 text-xs" value={e.unidad} onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, unidad: ev.target.value } : x))} aria-label="Unidad">
-                  {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                </Select>
+                <Input list="unidades-compra" className="h-8 w-24 text-xs" value={e.unidad} autoComplete="off" placeholder="unidad"
+                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, unidad: ev.target.value } : x))} aria-label="Unidad" />
                 <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="text-red-500"><Trash2 size={14} /></button>
                 <CamposDePrecio campos={e} unidad={e.unidad} nombre={e.nombre || 'el producto'}
                   onChange={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...n } : x))} />
@@ -270,6 +270,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             ))}
           </div>
           <datalist id="catalogo-compra">{productos.map(p => <option key={p.id} value={p.nombre} />)}</datalist>
+          <datalist id="unidades-compra">{unidadesSugeridas(productos).map(x => <option key={x} value={x} />)}</datalist>
           <div className="mt-2 flex items-center justify-between">
             <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '', unit: '', ultimo: null }])}>
               <Plus size={14} className="mr-1" /> Agregar algo que no estaba en la lista

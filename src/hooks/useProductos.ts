@@ -65,5 +65,13 @@ export function useProductos() {
     return { error: null };
   }, []);
 
-  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto, recordarProveedor };
+  /** Recuerda la unidad habitual de un producto (administradores, Compras y Gerencia). */
+  const recordarUnidad = useCallback(async (productoId: string, unidad: string) => {
+    const { error } = await supabase.rpc('recordar_unidad_producto', { p_producto: productoId, p_unidad: unidad });
+    if (error) return { error: error.message };
+    setProductos(prev => prev.map(p => (p.id === productoId ? { ...p, unidad } : p)));
+    return { error: null };
+  }, []);
+
+  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto, recordarProveedor, recordarUnidad };
 }

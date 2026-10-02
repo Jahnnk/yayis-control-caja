@@ -17,7 +17,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
   const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido } = usePedidos();
-  const { productos, obtenerOCrear, recordarProveedor } = useProductos();
+  const { productos, obtenerOCrear, recordarProveedor, recordarUnidad } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
 
@@ -83,6 +83,7 @@ export function PedidosPage() {
           productos={productos}
           proveedores={proveedores}
           onRecordarProveedor={recordarProveedor}
+          onRecordarUnidad={recordarUnidad}
           obtenerOCrear={obtenerOCrear}
           onAgregar={agregarItem}
           onActualizar={actualizarItem}

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ESTADO_ITEM, ESTADO_PEDIDO, UNIDADES, fechaLarga, formatCantidad } from '@/lib/compras';
+import { AYUDA_UNIDAD_SOL, ESTADO_ITEM, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
 import { AlertTriangle, Loader2, Plus, Send, Trash2 } from 'lucide-react';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
@@ -15,15 +15,16 @@ interface Props {
   productos: Producto[];
   proveedores: Proveedor[];
   onRecordarProveedor: (productoId: string, proveedorId: string) => Promise<{ error: string | null }>;
+  onRecordarUnidad: (productoId: string, unidad: string) => Promise<{ error: string | null }>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
-  onActualizar: (itemId: string, cambios: { cantidad?: number; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
+  onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -38,6 +39,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const datalistId = `productos-${pedido.id}`;
   const proveedoresActivos = proveedores.filter(p => p.activo);
+  const sugeridas = unidadesSugeridas(productos);
+  const datalistUnidades = `unidades-${pedido.id}`;
   const urgentes = items.filter(i => i.estado === 'pendiente' && i.urgente).length;
   const sinProveedor = items.filter(i => i.estado === 'pendiente' && !i.proveedor_id).length;
   // Productos de la lista sin proveedor que el sistema ya sabe a quién se le compran.
@@ -62,7 +65,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (!cant || cant <= 0) return addToast('La cantidad debe ser mayor a 0', 'error');
 
     setGuardando(true);
-    const { producto, error } = await obtenerOCrear(nombre, unidad);
+    const unidadFinal = normalizarUnidad(unidad);
+    if (!unidadFinal) return addToast('Escribe la unidad (kg, unidad, sol…)', 'error');
+    const { producto, error } = await obtenerOCrear(nombre, unidadFinal);
     if (error || !producto) {
       setGuardando(false);
       return addToast(`Error: ${error ?? 'no se pudo guardar el producto'}`, 'error');
@@ -74,7 +79,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     const { error: errItem } = await onAgregar(pedido.id, {
       producto_id: producto.id,
       cantidad: cant,
-      unidad,
+      unidad: unidadFinal,
       nota: nota.trim() || null,
       proveedor_id: proveedorId || producto.proveedor_id,
       urgente: urgenteNuevo,
@@ -82,6 +87,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     setGuardando(false);
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
     if (proveedorId && proveedorId !== producto.proveedor_id) await recordar(producto.id, producto.nombre, proveedorId);
+    if (unidadFinal !== producto.unidad) await recordarUnidadDe(producto.id, producto.nombre, unidadFinal);
     setNombre('');
     setCantidad('');
     setNota('');
@@ -102,6 +108,22 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (error) return addToast(`Se guardó en esta lista, pero no se pudo recordar: ${error}`, 'warning');
     const nombreProveedor = proveedores.find(p => p.id === proveedorElegido)?.nombre ?? 'ese proveedor';
     addToast(`Recordado: la próxima vez, ${nombreProducto} saldrá con ${nombreProveedor}`, 'success');
+  }
+
+  async function recordarUnidadDe(productoId: string, nombreProducto: string, unidadElegida: string) {
+    const { error } = await onRecordarUnidad(productoId, unidadElegida);
+    if (error) return addToast(`Se guardó en esta lista, pero no se pudo recordar la unidad: ${error}`, 'warning');
+    addToast(`Recordado: ${nombreProducto} se pedirá en «${unidadElegida}»`, 'success');
+  }
+
+  async function handleUnidad(itemId: string, valor: string) {
+    const item = items.find(i => i.id === itemId);
+    const nueva = normalizarUnidad(valor);
+    if (!item || !nueva || nueva === item.unidad) return;
+    const { error } = await onActualizar(itemId, { unidad: nueva });
+    if (error) return addToast(`Error: ${error}`, 'error');
+    const catalogo = productos.find(p => p.id === item.producto_id)?.unidad;
+    if (catalogo !== nueva) await recordarUnidadDe(item.producto_id, item.productos?.nombre ?? 'el producto', nueva);
   }
 
   async function handleProveedor(itemId: string, valor: string) {
@@ -207,9 +229,19 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-medium" htmlFor={`uni-${pedido.id}`}>Unidad</label>
-            <Select id={`uni-${pedido.id}`} value={unidad} onChange={e => setUnidad(e.target.value)} className="mt-1">
-              {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-            </Select>
+            <Input
+              id={`uni-${pedido.id}`}
+              list={datalistUnidades}
+              value={unidad}
+              onChange={e => setUnidad(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAgregar()}
+              className="mt-1"
+              autoComplete="off"
+              placeholder="kg, sol…"
+            />
+            <datalist id={datalistUnidades}>
+              {sugeridas.map(u => <option key={u} value={u} />)}
+            </datalist>
           </div>
           <div className="col-span-2 sm:col-span-5">
             <label className="text-xs font-medium" htmlFor={`prov-${pedido.id}`}>Proveedor (a quién se le compra)</label>
@@ -241,6 +273,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             </Button>
           </div>
         </div>
+
+        <p className="-mt-1 text-xs text-muted-foreground">💡 {AYUDA_UNIDAD_SOL}</p>
 
         {/* Lista */}
         {items.length === 0 ? (
@@ -276,7 +310,16 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                             className="h-8 w-20"
                             aria-label={`Cantidad de ${i.productos?.nombre ?? 'producto'}`}
                           />
-                          <span className="text-xs text-muted-foreground">{i.unidad}</span>
+                          <Input
+                            key={`${i.id}-${i.unidad}`}
+                            list={datalistUnidades}
+                            defaultValue={i.unidad}
+                            onBlur={e => { handleUnidad(i.id, e.target.value); if (!e.target.value.trim()) e.target.value = i.unidad; }}
+                            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                            className="h-8 w-24 text-xs"
+                            autoComplete="off"
+                            aria-label={`Unidad de ${i.productos?.nombre ?? 'producto'}`}
+                          />
                         </span>
                       ) : (
                         <span>{formatCantidad(i.cantidad)} {i.unidad}</span>

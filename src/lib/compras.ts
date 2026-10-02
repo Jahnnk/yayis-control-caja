@@ -3,8 +3,25 @@ import { es } from 'date-fns/locale';
 import type { EstadoItemPedido, EstadoPedido } from '@/types';
 
 export const UNIDADES = [
-  'kg', 'g', 'L', 'ml', 'unidad', 'docena', 'paquete', 'bolsa', 'saco', 'caja', 'lata', 'botella', 'atado', 'rollo',
+  'kg', 'g', 'L', 'ml', 'unidad', 'docena', 'paquete', 'bolsa', 'saco', 'caja', 'lata', 'botella', 'atado', 'rollo', 'manojo', 'sol',
 ] as const;
+
+/**
+ * «sol» sirve para lo que el mercado vende por monto: 2 sol de albahaca = lo que se compra con S/ 2.
+ * Las unidades son libres: se sugieren las de la lista y las que ya usa algún producto del catálogo.
+ */
+export const AYUDA_UNIDAD_SOL = 'Si se vende por monto (por ejemplo albahaca a S/ 1 o S/ 2), usa la unidad «sol»: 2 sol = S/ 2.';
+
+/** Mismo formato siempre (sin espacios de más y en minúsculas, salvo «L») para no repetir unidades. */
+export function normalizarUnidad(u: string): string {
+  const t = u.trim().replace(/\s+/g, ' ');
+  return t.toLowerCase() === 'l' ? 'L' : t.toLowerCase();
+}
+
+/** Unidades para sugerir: las de la lista y las que ya usa algún producto. */
+export function unidadesSugeridas(productos: { unidad: string }[]): string[] {
+  return Array.from(new Set([...UNIDADES, ...productos.map(p => p.unidad).filter(Boolean)]));
+}
 
 export const ESTADO_PEDIDO: Record<EstadoPedido, { label: string; clase: string }> = {
   borrador: { label: 'En preparación', clase: 'bg-gray-100 text-gray-700' },
