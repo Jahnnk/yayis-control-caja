@@ -104,7 +104,7 @@ src/
     ├── UsuariosPage.tsx
     ├── PedidosPage.tsx          # admins arman la lista del día de compra (o urgente) y la envían
     ├── RutaComprasPage.tsx      # Compras: lo del día agrupado por proveedor, marca comprado/no había
-    ├── ProveedoresPage.tsx      # proveedores (crédito solo lo define Gerencia) + catálogo de productos
+    ├── ProveedoresPage.tsx      # proveedores: Gerencia, Compras y administradores los registran al contado (el crédito solo lo define Gerencia); el catálogo de productos solo lo ven Gerencia y Compras
     ├── RendicionPage.tsx        # Compras: su dinero entregado, compras cargadas, rendir con vuelto
     ├── RecepcionPage.tsx        # Admin: entregar dinero, cerrar rendiciones, confirmar mercadería recibida
     ├── DeliverysPage.tsx        # Fabio: registra deliverys y ve su efectivo por entregar. Admin/Gerencia: reciben el efectivo y ven el resumen de la sede

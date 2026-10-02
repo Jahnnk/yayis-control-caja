@@ -45,7 +45,7 @@ export default function App() {
               } />
               <Route path="/pedidos" element={<SoloRoles roles={['owner', 'admin']}><PedidosPage /></SoloRoles>} />
               <Route path="/ruta" element={<SoloRoles roles={['owner', 'compras']}><RutaComprasPage /></SoloRoles>} />
-              <Route path="/proveedores" element={<SoloRoles roles={['owner', 'compras']}><ProveedoresPage /></SoloRoles>} />
+              <Route path="/proveedores" element={<SoloRoles roles={['owner', 'admin', 'compras']}><ProveedoresPage /></SoloRoles>} />
               <Route path="/rendicion" element={<SoloRoles roles={['owner', 'compras']}><RendicionPage /></SoloRoles>} />
               <Route path="/deliverys" element={<SoloRoles roles={['owner', 'admin', 'compras']}><DeliverysPage /></SoloRoles>} />
               <Route path="/recepcion" element={<SoloRoles roles={['owner', 'admin']}><RecepcionPage /></SoloRoles>} />
