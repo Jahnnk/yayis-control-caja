@@ -107,7 +107,8 @@ src/
     ├── ProveedoresPage.tsx      # proveedores (crédito solo lo define Gerencia) + catálogo de productos
     ├── RendicionPage.tsx        # Compras: su dinero entregado, compras cargadas, rendir con vuelto
     ├── RecepcionPage.tsx        # Admin: entregar dinero, cerrar rendiciones, confirmar mercadería recibida
-    └── FinanzasPage.tsx         # ★ Gerencia (entra aquí): alertas, cuentas por pagar a crédito, dinero en Compras
+    ├── DeliverysPage.tsx        # Fabio: registra deliverys y ve su efectivo por entregar. Admin/Gerencia: reciben el efectivo y ven el resumen de la sede
+    └── FinanzasPage.tsx         # ★ Gerencia (entra aquí): alertas, cuentas por pagar a crédito, dinero en Compras, deliverys
 
 Pantallas protegidas por rol con `<SoloRoles>` (`components/layout/SoloRoles.tsx`); `/inicio` manda a cada rol a su pantalla.
 
@@ -191,6 +192,16 @@ Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepci
 - **Controles para Finanzas**: compras sin evidencia, rendiciones descuadradas, urgentes, y **alerta de precio** si un producto sale bastante más caro que la última vez (catálogo de productos con último precio y proveedor).
 - Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
 - Fases: **2A**, **2B** y **3** hechas. **4** (pendiente, cuando Jahnn lo decida) = fondo propio de Fabio: pasar de "entregas por sede" a una caja de Compras que Gerencia repone directamente.
+
+### Deliverys de Compras (decisiones de Jahnn, 2-oct-2026)
+Fabio también entrega productos de Yayi's a clientes. Se controla cuántos hace y el dinero que cobra. Tablas `deliverys` y `liquidaciones_delivery`, función `recibir_efectivo_delivery` (`supabase/deliverys.sql`, la ejecuta Jahnn). **No mueve la caja chica**: no crea gastos ni reposiciones.
+- **Quién registra:** Fabio, desde el celular, apenas entrega (sede de origen, cliente, valor del producto, valor del delivery —monto libre—, cómo pagó el cliente).
+- **Cómo pagó el cliente (`modalidad`):** `todo_prepagado` (Fabio no cobra) · `producto_prepagado` (cobra el delivery) · `todo_contra_entrega` (cobra producto + delivery). `cobrado` lo calcula la base; las mismas reglas están en `src/lib/deliverys.ts`.
+- **Cobro:** efectivo o Yape/transferencia (con captura obligatoria, como en las compras).
+- **Efectivo:** queda "por entregar" a cargo de Fabio hasta que el administrador de la sede de origen lo cuenta y confirma en `/deliverys` (se registra esperado, recibido y diferencia; si no cuadra, la nota es obligatoria). Gerencia también puede confirmar.
+- **Control:** Panel de Finanzas muestra resumen del mes por sede y alertas ("Efectivo de delivery" si pasan 2 días sin entregar —`DIAS_PARA_ENTREGAR_EFECTIVO`—, y "Delivery descuadrado").
+- **Seguridad (RLS):** Fabio solo ve y borra lo suyo, y solo el mismo día y mientras no se liquide; el administrador solo ve su sede.
+- Pendiente a futuro: pago a Fabio por delivery y tarifa por zona (se descartaron por ahora).
 
 ### Estado
 - App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026. Fase 1 multi-sede en producción (29-sep-2026).

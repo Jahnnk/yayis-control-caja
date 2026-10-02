@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { borrarEvidencias, subirEvidencia } from '@/lib/evidencias';
 import { sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
+import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
 import type { CompraDetalle, Entrega, Pedido } from '@/types';
 
 export interface CompraFinanzas extends CompraDetalle {
@@ -47,6 +48,8 @@ export function useFinanzas() {
   const [entregas, setEntregas] = useState<EntregaFinanzas[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFinanzas[]>([]);
   const [items, setItems] = useState<ItemPrecio[]>([]);
+  const [deliverys, setDeliverys] = useState<DeliveryDetalle[]>([]);
+  const [liquidaciones, setLiquidaciones] = useState<LiquidacionDetalle[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchTodo = useCallback(async () => {
@@ -56,7 +59,9 @@ export function useFinanzas() {
     const hace180 = sumarDias(hoy, -180); // historial para el precio habitual de cada producto
     const SELECT_COMPRA = '*, sedes(nombre), proveedores(nombre, telefono), compra_items(*, productos(nombre))';
 
-    const [pp, pg, en, pe, it] = await Promise.all([
+    const inicioMes = `${hoy.slice(0, 7)}-01`;
+
+    const [pp, pg, en, pe, it, dl, lq] = await Promise.all([
       supabase.from('compras').select(SELECT_COMPRA)
         .eq('condicion_pago', 'credito').eq('estado_pago', 'por_pagar')
         .order('fecha_vencimiento', { ascending: true }),
@@ -75,14 +80,23 @@ export function useFinanzas() {
         .gte('created_at', `${hace180}T00:00:00`)
         .order('created_at', { ascending: false })
         .limit(1000),
+      // Deliverys del mes y, aparte, todo el efectivo que Fabio aún no entregó (sin importar la fecha).
+      supabase.from('deliverys').select('*, sedes(nombre)')
+        .or(`fecha.gte.${inicioMes},and(metodo_cobro.eq.efectivo,liquidacion_id.is.null)`)
+        .order('fecha', { ascending: true }),
+      supabase.from('liquidaciones_delivery').select('*, sedes(nombre)')
+        .gte('created_at', `${hace30}T00:00:00`)
+        .order('created_at', { ascending: false }),
     ]);
-    for (const r of [pp, pg, en, pe, it]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
+    for (const r of [pp, pg, en, pe, it, dl, lq]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
     setPorPagar((pp.data ?? []) as CompraFinanzas[]);
     setPagadas((pg.data ?? []) as CompraFinanzas[]);
     setEntregas((en.data ?? []) as EntregaFinanzas[]);
     setPedidos((pe.data ?? []) as unknown as PedidoFinanzas[]);
     // Se piden de la más nueva a la más vieja (si hay más de 1000, se pierde lo más antiguo) y se voltean.
     setItems(((it.data ?? []) as unknown as ItemPrecio[]).reverse());
+    setDeliverys((dl.data ?? []) as DeliveryDetalle[]);
+    setLiquidaciones((lq.data ?? []) as LiquidacionDetalle[]);
     setLoading(false);
   }, []);
 
@@ -115,5 +129,5 @@ export function useFinanzas() {
     return { error: null };
   }, [profile, fetchTodo]);
 
-  return { porPagar, pagadas, entregas, pedidos, items, loading, fetchTodo, pagarCompra };
+  return { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, loading, fetchTodo, pagarCompra };
 }

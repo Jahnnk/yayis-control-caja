@@ -290,3 +290,37 @@ export interface CompraDetalle extends Compra {
   proveedores: { nombre: string } | null;
   compra_items: (CompraItem & { productos: { nombre: string } | null })[];
 }
+
+/** Cómo pagó el cliente un delivery. */
+export type ModalidadDelivery = 'todo_prepagado' | 'producto_prepagado' | 'todo_contra_entrega';
+
+export interface Delivery {
+  id: string;
+  sede_id: string;
+  fecha: string;
+  cliente: string;
+  detalle: string | null;
+  monto_producto: number;
+  monto_delivery: number;
+  modalidad: ModalidadDelivery;
+  /** Lo que Fabio cobró en la puerta (lo calcula la base según la modalidad). */
+  cobrado: number;
+  metodo_cobro: MetodoPago | null;
+  evidencia_cobro_path: string | null;
+  liquidacion_id: string | null;
+  registrado_por: string;
+  created_at: string;
+}
+
+export interface LiquidacionDelivery {
+  id: string;
+  sede_id: string;
+  entregado_por: string;
+  recibido_por: string;
+  esperado: number;
+  recibido: number;
+  /** Positivo = faltó dinero; negativo = sobró. */
+  diferencia: number;
+  nota: string | null;
+  created_at: string;
+}

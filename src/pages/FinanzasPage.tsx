@@ -14,8 +14,9 @@ import { calcularAlertas, gastadoEntrega, itemACompraDePrecio, DIAS_AVISO_VENCIM
 import { calcularCambiosPrecio, formatPorcentaje, UMBRAL_VARIACION } from '@/lib/precios';
 import { fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
+import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente, resumirDeliverys } from '@/lib/deliverys';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, BellRing, CalendarClock, ChevronDown, CreditCard, Eye, Loader2, ShoppingBag, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BellRing, Bike, CalendarClock, ChevronDown, CreditCard, Eye, Loader2, ShoppingBag, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 function PagarFactura({ compra, onClose, onPagar }: {
   compra: CompraFinanzas;
@@ -66,14 +67,14 @@ function PagarFactura({ compra, onClose, onPagar }: {
 }
 
 export function FinanzasPage() {
-  const { porPagar, pagadas, entregas, pedidos, items, loading, pagarCompra } = useFinanzas();
+  const { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, loading, pagarCompra } = useFinanzas();
   const { cambiarSede } = useSedeActiva();
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [pagando, setPagando] = useState<CompraFinanzas | null>(null);
   const hoy = getTodayLima();
 
-  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items }, hoy), [porPagar, entregas, pedidos, items, hoy]);
+  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, hoy]);
   const altas = alertas.filter(a => a.nivel === 'alta').length;
 
   const totalPorPagar = porPagar.reduce((s, c) => roundTwo(s + Number(c.total)), 0);
@@ -108,6 +109,22 @@ export function FinanzasPage() {
     }
     return Array.from(porSede.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [items, hoy]);
+
+  // Deliverys del mes por sede, y el efectivo que Fabio aún no entregó (de cualquier fecha).
+  const deliverysPorSede = useMemo(() => {
+    const inicioMes = `${hoy.slice(0, 7)}-01`;
+    const sedes = new Map<string, { nombre: string; delMes: typeof deliverys; pendientes: typeof deliverys }>();
+    for (const d of deliverys) {
+      const acc = sedes.get(d.sede_id) ?? { nombre: d.sedes?.nombre ?? '—', delMes: [], pendientes: [] };
+      if (d.fecha >= inicioMes) acc.delMes.push(d);
+      if (esEfectivoPendiente(d)) acc.pendientes.push(d);
+      sedes.set(d.sede_id, acc);
+    }
+    return Array.from(sedes.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .map(s => ({ nombre: s.nombre, mes: resumirDeliverys(s.delMes), pendiente: resumirDeliverys(s.pendientes) }));
+  }, [deliverys, hoy]);
+  const totalDeliverysMes = deliverysPorSede.reduce((s, x) => s + x.mes.cantidad, 0);
+  const totalEfectivoDelivery = deliverysPorSede.reduce((s, x) => roundTwo(s + x.pendiente.efectivoPendiente), 0);
 
   // Seguimiento de precios: compras del último mes que se movieron ±15% respecto al precio habitual.
   const cambiosPrecio = useMemo(
@@ -179,7 +196,7 @@ export function FinanzasPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><AlertTriangle size={18} className="text-orange-600" /> Para revisar</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Facturas vencidas, rendiciones que no cuadraron, dinero sin rendir, mercadería sin confirmar, urgentes de la semana y precios que subieron {Math.round(UMBRAL_VARIACION * 100)}% o más sobre su precio habitual.
+            Facturas vencidas, rendiciones que no cuadraron, dinero sin rendir, mercadería sin confirmar, urgentes de la semana, efectivo de deliverys sin entregar y precios que subieron {Math.round(UMBRAL_VARIACION * 100)}% o más sobre su precio habitual.
           </p>
         </CardHeader>
         <CardContent>
@@ -277,6 +294,50 @@ export function FinanzasPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Deliverys de Compras, plegado con resumen */}
+      <details className="group rounded-lg border bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 p-4">
+          <span className="flex items-center gap-2 text-sm font-bold text-yayis-dark"><Bike size={16} /> Deliverys de Compras · este mes</span>
+          <span className="text-xs text-muted-foreground">{totalDeliverysMes} delivery(s)</span>
+          <span className={`text-xs font-bold ${totalEfectivoDelivery > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+            {totalEfectivoDelivery > 0 ? `${formatMonto(totalEfectivoDelivery)} de efectivo por entregar` : 'Sin efectivo pendiente'}
+          </span>
+          <ChevronDown size={16} className="ml-auto transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-2 border-t p-4">
+          <p className="text-xs text-muted-foreground">
+            Lo que Fabio entregó a clientes con pedidos de cada sede. «Efectivo por entregar» es el dinero que cobró en la puerta y aún no pasó al administrador
+            (se alerta si pasan {DIAS_PARA_ENTREGAR_EFECTIVO} días). Este control no mueve la caja chica de ninguna sede.
+          </p>
+          {deliverysPorSede.length === 0 ? (
+            <p className="py-3 text-center text-sm text-muted-foreground">Todavía no hay deliverys registrados.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="py-2 font-medium">Sede</th>
+                  <th className="py-2 text-right font-medium">Deliverys</th>
+                  <th className="py-2 text-right font-medium">Delivery cobrado</th>
+                  <th className="py-2 text-right font-medium">Productos llevados</th>
+                  <th className="py-2 text-right font-medium">Efectivo por entregar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deliverysPorSede.map(x => (
+                  <tr key={x.nombre} className="border-b last:border-0">
+                    <td className="py-2 font-medium">{x.nombre}</td>
+                    <td className="py-2 text-right">{x.mes.cantidad}</td>
+                    <td className="py-2 text-right">{formatMonto(x.mes.totalDelivery)}</td>
+                    <td className="py-2 text-right">{formatMonto(x.mes.totalProductos)}</td>
+                    <td className={`py-2 text-right font-bold ${x.pendiente.efectivoPendiente > 0 ? 'text-amber-700' : ''}`}>{formatMonto(x.pendiente.efectivoPendiente)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </details>
 
       {/* Cambios de precio, plegado con resumen */}
       <details className="group rounded-lg border bg-white shadow-sm">
