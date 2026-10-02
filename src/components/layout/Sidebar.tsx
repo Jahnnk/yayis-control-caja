@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard } from 'lucide-react';
+import { ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard, Bike } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
@@ -10,6 +10,7 @@ interface SidebarProps {
 const navItems = [
   { to: '/finanzas', label: 'Panel de Finanzas', icon: LayoutDashboard, roles: ['owner'] },
   { to: '/ruta', label: 'Ruta de compras', icon: Truck, roles: ['owner', 'compras'] },
+  { to: '/deliverys', label: 'Deliverys', icon: Bike, roles: ['owner', 'admin', 'compras'] },
   { to: '/rendicion', label: 'Mi dinero y rendición', icon: Wallet, roles: ['compras'] },
   { to: '/gastos', label: 'Registro de Gastos', icon: ClipboardList, roles: ['owner', 'admin', 'viewer'] },
   { to: '/resumen', label: 'Resumen', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },

@@ -1,7 +1,9 @@
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
+import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
 import type { CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
+import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
 
 // Umbrales de control. Están aquí, a la vista, para poder explicar cada alerta.
 // Precios: +15% sobre el precio habitual → alerta; +30% → alerta roja (reglas en src/lib/precios.ts).
@@ -19,7 +21,7 @@ export interface Alerta {
   titulo: string;
   detalle: string;
   /** Pantalla donde se resuelve (se abre con la sede de la alerta ya elegida). */
-  ir?: '/recepcion' | '/pedidos';
+  ir?: '/recepcion' | '/pedidos' | '/deliverys';
 }
 
 const diasEntre = (desde: string, hasta: string) =>
@@ -59,8 +61,51 @@ export function alertasDePrecio(items: ItemPrecio[], hoy: string): Alerta[] {
     }));
 }
 
+/**
+ * Deliverys de Compras:
+ *  · efectivo cobrado que lleva más de DIAS_PARA_ENTREGAR_EFECTIVO días sin entregarse al administrador;
+ *  · entregas de efectivo de las últimas 2 semanas donde el dinero no cuadró.
+ */
+export function alertasDeDeliverys(deliverys: DeliveryDetalle[], liquidaciones: LiquidacionDetalle[], hoy: string): Alerta[] {
+  const alertas: Alerta[] = [];
+
+  const porSede = new Map<string, DeliveryDetalle[]>();
+  for (const d of deliverys.filter(esEfectivoPendiente)) (porSede.get(d.sede_id) ?? porSede.set(d.sede_id, []).get(d.sede_id)!).push(d);
+  for (const [sedeId, lista] of porSede) {
+    const masViejo = lista.reduce((min, d) => (d.fecha < min ? d.fecha : min), lista[0]!.fecha);
+    const dias = diasEntre(masViejo, hoy);
+    if (dias < DIAS_PARA_ENTREGAR_EFECTIVO) continue;
+    const total = lista.reduce((s, d) => roundTwo(s + Number(d.cobrado)), 0);
+    alertas.push({
+      clave: `delivery-efectivo-${sedeId}`, nivel: dias > 5 ? 'alta' : 'media', tipo: 'Efectivo de delivery',
+      sedeId, sedeNombre: lista[0]!.sedes?.nombre ?? '',
+      titulo: `${formatMonto(total)} cobrados en deliverys sin entregar al administrador (desde hace ${dias} días)`,
+      detalle: `${lista.length} delivery(s), el más antiguo del ${fechaCorta(masViejo)}. Fabio debe entregarlo y el administrador confirmarlo.`,
+      ir: '/deliverys',
+    });
+  }
+
+  for (const l of liquidaciones) {
+    const dif = roundTwo(Number(l.esperado) - Number(l.recibido));
+    if (dif === 0 || diasEntre(fechaLima(l.created_at), hoy) > 14) continue;
+    alertas.push({
+      clave: `delivery-descuadre-${l.id}`, nivel: dif > 0 ? 'alta' : 'media', tipo: 'Delivery descuadrado',
+      sedeId: l.sede_id, sedeNombre: l.sedes?.nombre ?? '',
+      titulo: dif > 0
+        ? `Faltaron ${formatMonto(dif)} en el efectivo de deliverys del ${fechaCorta(fechaLima(l.created_at))}`
+        : `Sobraron ${formatMonto(-dif)} en el efectivo de deliverys del ${fechaCorta(fechaLima(l.created_at))}`,
+      detalle: `Esperado ${formatMonto(Number(l.esperado))} · recibido ${formatMonto(Number(l.recibido))}.${l.nota ? ` Nota: ${l.nota}` : ''}`,
+      ir: '/deliverys',
+    });
+  }
+  return alertas;
+}
+
 export function calcularAlertas(
-  { porPagar, entregas, pedidos, items }: { porPagar: CompraFinanzas[]; entregas: EntregaFinanzas[]; pedidos: PedidoFinanzas[]; items: ItemPrecio[] },
+  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [] }: {
+    porPagar: CompraFinanzas[]; entregas: EntregaFinanzas[]; pedidos: PedidoFinanzas[]; items: ItemPrecio[];
+    deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[];
+  },
   hoy: string,
 ): Alerta[] {
   const alertas: Alerta[] = [];
@@ -132,5 +177,6 @@ export function calcularAlertas(
   }
 
   alertas.push(...alertasDePrecio(items, hoy));
+  alertas.push(...alertasDeDeliverys(deliverys, liquidaciones, hoy));
   return alertas.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alta' ? -1 : 1));
 }
