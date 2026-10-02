@@ -12,6 +12,7 @@ import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { claveProducto } from '@/lib/precios';
+import { alCambiarCantidad, alEscribirTotal, alEscribirUnitario, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { UNIDADES, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
@@ -37,17 +38,44 @@ interface Props {
   candidatas: LineaCandidata[];
 }
 
-interface EstadoLinea {
+interface EstadoLinea extends CamposPrecio {
   incluir: boolean;
-  cantidad: string;
-  precio: string;
 }
 
-interface LineaExtra {
+interface LineaExtra extends CamposPrecio {
   nombre: string;
-  cantidad: string;
   unidad: string;
-  precio: string;
+}
+
+/** Precio de una línea: por unidad o total; al escribir uno, el otro se calcula solo. */
+function CamposDePrecio({ campos, unidad, nombre, disabled, onChange }: {
+  campos: CamposPrecio;
+  unidad: string;
+  nombre: string;
+  disabled?: boolean;
+  onChange: (nuevos: CamposPrecio) => void;
+}) {
+  return (
+    <div className="flex w-full flex-wrap items-end gap-2">
+      <label className="text-[11px] text-muted-foreground">
+        Precio por {unidad || 'unidad'}
+        <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
+          S/
+          <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="h-8 w-24" value={campos.unit} disabled={disabled}
+            onChange={e => onChange(alEscribirUnitario(campos, e.target.value))} aria-label={`Precio de cada ${unidad || 'unidad'} de ${nombre}`} />
+        </span>
+      </label>
+      <span className="pb-1.5 text-sm text-muted-foreground">=</span>
+      <label className="text-[11px] text-muted-foreground">
+        Total de la línea
+        <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
+          S/
+          <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="h-8 w-24" value={campos.precio} disabled={disabled}
+            onChange={e => onChange(alEscribirTotal(campos, e.target.value))} aria-label={`Precio total de ${nombre}`} />
+        </span>
+      </label>
+    </div>
+  );
 }
 
 interface EntregaAbierta {
@@ -82,7 +110,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   // Al abrir: todas las líneas incluidas con la cantidad pedida, y las entregas abiertas de la sede.
   useEffect(() => {
     if (!open) return;
-    setLineas(Object.fromEntries(candidatas.map(c => [c.pedido_item_id, { incluir: true, cantidad: String(Number(c.cantidad)), precio: '' }])));
+    setLineas(Object.fromEntries(candidatas.map(c => [c.pedido_item_id, { incluir: true, cantidad: String(Number(c.cantidad)), precio: '', unit: '', ultimo: null }])));
     setExtras([]);
     setNumero('');
     setObservacion('');
@@ -203,7 +231,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
         {/* Productos y precios */}
         <section>
           <p className="mb-2 text-sm font-bold text-yayis-dark">¿Qué compraste y cuánto pagaste por cada cosa?</p>
-          <p className="-mt-1 mb-2 text-xs text-muted-foreground">Debajo de cada producto verás su precio habitual: en rojo si pagas bastante más, en verde si consigues un mejor precio.</p>
+          <p className="-mt-1 mb-2 text-xs text-muted-foreground">Escribe el <strong>precio de cada unidad</strong> o el <strong>total</strong> de la línea: el otro se calcula solo. Debajo de cada producto verás su precio habitual: en rojo si pagas bastante más, en verde si consigues un mejor precio.</p>
           <div className="divide-y rounded-md border">
             {candidatas.map(c => {
               const l = lineas[c.pedido_item_id];
@@ -216,11 +244,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     <span className="text-xs text-muted-foreground">(pedido: {formatCantidad(c.cantidad)} {c.unidad})</span>
                   </label>
                   <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-8 w-20" value={l.cantidad} disabled={!l.incluir}
-                    onChange={e => cambiarLinea(c.pedido_item_id, { cantidad: e.target.value })} aria-label={`Cantidad comprada de ${c.nombre}`} />
+                    onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value))} aria-label={`Cantidad comprada de ${c.nombre}`} />
                   <span className="w-12 text-xs text-muted-foreground">{c.unidad}</span>
-                  <span className="text-xs text-muted-foreground">S/</span>
-                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Precio" className="h-8 w-24" value={l.precio} disabled={!l.incluir}
-                    onChange={e => cambiarLinea(c.pedido_item_id, { precio: e.target.value })} aria-label={`Precio total de ${c.nombre}`} />
+                  <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} onChange={n => cambiarLinea(c.pedido_item_id, n)} />
                   {l.incluir && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
                 </div>
               );
@@ -230,14 +256,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 <Input list="catalogo-compra" placeholder="Producto que no estaba en la lista" className="h-8 min-w-[10rem] flex-1" value={e.nombre}
                   onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value } : x))} aria-label="Producto adicional" />
                 <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-8 w-20" value={e.cantidad}
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, cantidad: ev.target.value } : x))} aria-label="Cantidad" />
+                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value) } : x))} aria-label="Cantidad" />
                 <Select className="h-8 w-24 text-xs" value={e.unidad} onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, unidad: ev.target.value } : x))} aria-label="Unidad">
                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                 </Select>
-                <span className="text-xs text-muted-foreground">S/</span>
-                <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Precio" className="h-8 w-24" value={e.precio}
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, precio: ev.target.value } : x))} aria-label="Precio total" />
                 <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="text-red-500"><Trash2 size={14} /></button>
+                <CamposDePrecio campos={e} unidad={e.unidad} nombre={e.nombre || 'el producto'}
+                  onChange={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...n } : x))} />
                 {productoDeExtra(e.nombre) && (
                   <AvisoPrecio habitual={habituales.get(claveProducto(productoDeExtra(e.nombre)!.id, e.unidad))} cantidad={e.cantidad} precio={e.precio} unidad={e.unidad} />
                 )}
@@ -246,7 +271,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           </div>
           <datalist id="catalogo-compra">{productos.map(p => <option key={p.id} value={p.nombre} />)}</datalist>
           <div className="mt-2 flex items-center justify-between">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '' }])}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '', unit: '', ultimo: null }])}>
               <Plus size={14} className="mr-1" /> Agregar algo que no estaba en la lista
             </Button>
             <span className="text-sm">Total: <strong className="text-lg text-yayis-dark">{formatMonto(total)}</strong></span>
