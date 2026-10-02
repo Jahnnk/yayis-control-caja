@@ -14,7 +14,7 @@ import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
-import { ESTADO_ITEM, diferenciaDeCierre, fechaCorta, formatCantidad } from '@/lib/compras';
+import { ESTADO_ITEM, diaSemanaDe, diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
 
@@ -154,10 +154,16 @@ export function RecepcionPage() {
 
   const categoriasSede = useMemo(() => categorias.filter(c => c.activa).map(c => ({ id: c.id, nombre: c.nombre })), [categorias]);
   const abiertas = entregas.filter(e => e.estado === 'abierta');
-  // Monto semanal de la sede y cuánto le falta a Fabio para completarlo (lo que ya tiene sin gastar cuenta).
+  // Monto semanal que el administrador recibe de Gerencia y reparte a Compras según necesidad:
+  // cuánto ya entregó esta semana (lunes a domingo) y cuánto le queda por entregar.
+  // El «saldo que continúa» de la semana anterior no es dinero nuevo: no cuenta.
   const montoSemanal = Number(sedeActiva?.monto_semanal_compras ?? 0);
+  const lunes = sumarDias(hoy, -((diaSemanaDe(hoy) + 6) % 7));
+  const entregadoEstaSemana = [...entregas, ...cerradas]
+    .filter(e => e.fecha >= lunes && !(e.notas ?? '').startsWith('Saldo que continúa'))
+    .reduce((t, e) => roundTwo(t + Number(e.monto)), 0);
+  const porEntregar = Math.max(roundTwo(montoSemanal - entregadoEstaSemana), 0);
   const enManosDeFabio = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
-  const paraCompletar = Math.max(roundTwo(montoSemanal - enManosDeFabio), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
 
   async function handleEntregar() {
@@ -215,10 +221,11 @@ export function RecepcionPage() {
           {montoSemanal > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
               <span>Monto semanal para compras: <strong>{formatMonto(montoSemanal)}</strong></span>
-              <span>Fabio tiene sin gastar: <strong>{formatMonto(enManosDeFabio)}</strong></span>
-              <span>Para completar: <strong className="text-yayis-dark">{formatMonto(paraCompletar)}</strong></span>
-              {paraCompletar > 0 && (
-                <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(paraCompletar))}>Usar {formatMonto(paraCompletar)}</Button>
+              <span>Ya entregado esta semana: <strong>{formatMonto(entregadoEstaSemana)}</strong></span>
+              <span>Te queda por entregar: <strong className="text-yayis-dark">{formatMonto(porEntregar)}</strong></span>
+              <span className="text-xs text-muted-foreground">Fabio tiene sin gastar: {formatMonto(enManosDeFabio)}</span>
+              {porEntregar > 0 && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
               )}
             </div>
           )}
