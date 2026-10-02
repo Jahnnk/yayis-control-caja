@@ -14,6 +14,7 @@ interface Props {
   pedido: PedidoConItems;
   productos: Producto[];
   proveedores: Proveedor[];
+  onRecordarProveedor: (productoId: string, proveedorId: string) => Promise<{ error: string | null }>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
   onActualizar: (itemId: string, cambios: { cantidad?: number; proveedor_id?: string | null }) => Promise<{ error: string | null }>;
@@ -22,7 +23,7 @@ interface Props {
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -37,6 +38,12 @@ export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, on
   const datalistId = `productos-${pedido.id}`;
   const proveedoresActivos = proveedores.filter(p => p.activo);
   const sinProveedor = items.filter(i => i.estado === 'pendiente' && !i.proveedor_id).length;
+  // Productos de la lista sin proveedor que el sistema ya sabe a quién se le compran.
+  const recordables = items.filter(i => {
+    if (i.estado !== 'pendiente' || i.proveedor_id) return false;
+    const habitual = productos.find(p => p.id === i.producto_id)?.proveedor_id;
+    return !!habitual && proveedoresActivos.some(p => p.id === habitual);
+  });
 
   function handleNombre(valor: string) {
     setNombre(valor);
@@ -71,6 +78,7 @@ export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, on
     });
     setGuardando(false);
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
+    if (proveedorId && proveedorId !== producto.proveedor_id) await recordar(producto.id, producto.nombre, proveedorId);
     setNombre('');
     setCantidad('');
     setNota('');
@@ -84,9 +92,35 @@ export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, on
     if (error) addToast(`Error: ${error}`, 'error');
   }
 
+  /** Guarda el proveedor como el habitual del producto y avisa qué pasará la próxima vez. */
+  async function recordar(productoId: string, nombreProducto: string, proveedorElegido: string) {
+    const { error } = await onRecordarProveedor(productoId, proveedorElegido);
+    if (error) return addToast(`Se guardó en esta lista, pero no se pudo recordar: ${error}`, 'warning');
+    const nombreProveedor = proveedores.find(p => p.id === proveedorElegido)?.nombre ?? 'ese proveedor';
+    addToast(`Recordado: la próxima vez, ${nombreProducto} saldrá con ${nombreProveedor}`, 'success');
+  }
+
   async function handleProveedor(itemId: string, valor: string) {
+    const item = items.find(i => i.id === itemId);
     const { error } = await onActualizar(itemId, { proveedor_id: valor || null });
-    if (error) addToast(`Error: ${error}`, 'error');
+    if (error) return addToast(`Error: ${error}`, 'error');
+    if (valor && item) {
+      const habitual = productos.find(p => p.id === item.producto_id)?.proveedor_id;
+      if (habitual !== valor) await recordar(item.producto_id, item.productos?.nombre ?? 'el producto', valor);
+    }
+  }
+
+  /** Completa con el proveedor recordado los productos de esta lista que aún no tienen uno. */
+  async function handleCompletarRecordados() {
+    let completados = 0;
+    for (const i of recordables) {
+      const proveedor = productos.find(p => p.id === i.producto_id)?.proveedor_id;
+      if (!proveedor) continue;
+      const { error } = await onActualizar(i.id, { proveedor_id: proveedor });
+      if (error) return addToast(`Error: ${error}`, 'error');
+      completados += 1;
+    }
+    addToast(`Se completó el proveedor de ${completados} producto(s)`, 'success');
   }
 
   async function handleEliminar(itemId: string) {
@@ -276,6 +310,11 @@ export function PedidoEditor({ pedido, productos, proveedores, obtenerOCrear, on
         {sinProveedor > 0 && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             {sinProveedor === 1 ? '1 producto' : `${sinProveedor} productos`} sin proveedor. Elígelo en la columna <strong>Proveedor</strong> para que Compras vea la lista ya agrupada por proveedor; si no, tendrá que asignarlo él.
+            {recordables.length > 0 && (
+              <Button size="sm" variant="outline" className="mt-2 block border-amber-400" onClick={handleCompletarRecordados}>
+                Completar los proveedores que el sistema ya recuerda ({recordables.length})
+              </Button>
+            )}
           </p>
         )}
 
