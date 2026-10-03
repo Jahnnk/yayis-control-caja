@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { RegistrarCompraModal, type LineaCandidata } from '@/components/compras/RegistrarCompraModal';
 import { abrirEvidencia } from '@/lib/evidencias';
+import { leerCompraAbierta } from '@/lib/borradores';
 import { formatMonto } from '@/lib/utils';
 import { useRutaCompras, type ItemRuta, type PedidoRuta } from '@/hooks/useRutaCompras';
 import { useProveedores } from '@/hooks/useProveedores';
@@ -144,6 +145,22 @@ export function RutaComprasPage() {
     }
     return Array.from(porSede.entries());
   }
+
+  // Si el celular recargó la página con una compra a medio llenar (salió a otra app o a la cámara),
+  // se vuelve a abrir esa misma compra; el formulario recupera solo lo que ya había escrito.
+  const reaperturaIntentada = useRef(false);
+  useEffect(() => {
+    if (reaperturaIntentada.current || loading || pedidos.length === 0 || registrando) return;
+    reaperturaIntentada.current = true;
+    const marca = leerCompraAbierta();
+    if (!marca || marca.fecha !== fecha) return;
+    for (const g of grupos) {
+      if (!g.proveedor || g.proveedor.id !== marca.proveedorId) continue;
+      const entrada = pendientesPorSede(g).find(([sedeId]) => sedeId === marca.sedeId);
+      if (entrada) setRegistrando({ sedeId: marca.sedeId, sedeNombre: entrada[1].sedeNombre, proveedor: g.proveedor, candidatas: entrada[1].candidatas });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, pedidos, grupos, registrando, fecha]);
 
   async function verFoto(path: string | null) {
     if (!path) return;

@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
@@ -16,6 +17,10 @@ import { alCambiarCantidad, alEscribirTotal, alEscribirUnitario, type CamposPrec
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { fechaCorta, formatCantidad, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
+import {
+  borrarBorrador, claveBorrador, guardarBorrador, guardarFoto, leerBorrador, leerFotos, limpiarBorradoresViejos, limpiarCompraAbierta,
+  marcarCompraAbierta,
+} from '@/lib/borradores';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import type { MetodoPago, Proveedor, TipoComprobante } from '@/types';
 
@@ -106,18 +111,44 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   const [fotoProducto, setFotoProducto] = useState<File | null>(null);
   const [fotoPago, setFotoPago] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
+  // Borrador automático: se guarda solo para no perder lo escrito si el celular recarga la página.
+  const [borradorListo, setBorradorListo] = useState(false);
+  const [fotosListas, setFotosListas] = useState(false);
+  const [confirmarDescartar, setConfirmarDescartar] = useState(false);
+  const clave = claveBorrador(hoy, sedeId, proveedor.id);
 
-  // Al abrir: todas las líneas incluidas con la cantidad pedida, y las entregas abiertas de la sede.
+  // Al abrir: todas las líneas incluidas con la cantidad pedida, las entregas abiertas de la sede
+  // y, si había una compra a medio llenar (la página se recargó), lo que ya se había escrito.
   useEffect(() => {
-    if (!open) return;
-    setLineas(Object.fromEntries(candidatas.map(c => [c.pedido_item_id, { incluir: true, cantidad: String(Number(c.cantidad)), precio: '', unit: '', ultimo: null }])));
-    setExtras([]);
-    setNumero('');
-    setObservacion('');
+    if (!open) { setBorradorListo(false); setFotosListas(false); return; }
+    limpiarBorradoresViejos(hoy);
+    marcarCompraAbierta({ fecha: hoy, sedeId, proveedorId: proveedor.id });
+    const borrador = leerBorrador(clave);
+
+    const base: Record<string, EstadoLinea> = Object.fromEntries(
+      candidatas.map(c => [c.pedido_item_id, { incluir: true, cantidad: String(Number(c.cantidad)), precio: '', unit: '', ultimo: null } as EstadoLinea]),
+    );
+    if (borrador) for (const id of Object.keys(base)) if (borrador.lineas[id]) base[id] = { ...base[id]!, ...borrador.lineas[id]! };
+    setLineas(base);
+    setExtras(borrador?.extras ?? []);
+    setNumero(borrador?.numero ?? '');
+    setObservacion(borrador?.observacion ?? '');
     setFotoComprobante(null);
     setFotoProducto(null);
     setFotoPago(null);
-    setComprobante(credito ? 'factura' : 'boleta');
+    setComprobante(borrador?.comprobante ?? (credito ? 'factura' : 'boleta'));
+    if (borrador && !credito) setMetodo(borrador.metodo);
+    setBorradorListo(true);
+
+    // Las fotos guardadas se recuperan aparte (son archivos).
+    setFotosListas(false);
+    leerFotos(clave).then(f => {
+      if (f.comprobante) setFotoComprobante(f.comprobante);
+      if (f.producto) setFotoProducto(f.producto);
+      if (f.pago) setFotoPago(f.pago);
+      setFotosListas(true);
+    });
+
     if (credito || !profile) return;
     let consulta = supabase
       .from('entregas')
@@ -129,9 +160,38 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     consulta.then(({ data }) => {
       const lista = (data ?? []) as EntregaAbierta[];
       setEntregas(lista);
-      setEntregaId(lista[0]?.id ?? '');
+      setEntregaId(borrador && lista.some(e => e.id === borrador.entregaId) ? borrador.entregaId : lista[0]?.id ?? '');
     });
-  }, [open, candidatas, credito, sedeId, profile]);
+  }, [open, candidatas, credito, sedeId, profile, clave, hoy, proveedor.id]);
+
+  // Guarda el borrador mientras se escribe (con una pequeña pausa para no escribir en cada tecla).
+  useEffect(() => {
+    if (!open || !borradorListo) return;
+    const t = setTimeout(() => guardarBorrador(clave, { lineas, extras, entregaId, metodo, comprobante, numero, observacion }), 300);
+    return () => clearTimeout(t);
+  }, [open, borradorListo, clave, lineas, extras, entregaId, metodo, comprobante, numero, observacion]);
+
+  // Las fotos se guardan apenas se toman (solo después de haber recuperado las anteriores).
+  useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'comprobante', fotoComprobante); }, [open, fotosListas, clave, fotoComprobante]);
+  useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'producto', fotoProducto); }, [open, fotosListas, clave, fotoProducto]);
+  useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'pago', fotoPago); }, [open, fotosListas, clave, fotoPago]);
+
+  /** Cierra y descarta el borrador (la compra se guardó o se canceló a propósito). */
+  function cerrarYDescartar() {
+    borrarBorrador(clave);
+    limpiarCompraAbierta();
+    setConfirmarDescartar(false);
+    onClose();
+  }
+
+  const hayContenido = Object.values(lineas).some(l => l.precio !== '' || l.unit !== '')
+    || extras.some(e => e.nombre.trim() !== '' || e.precio !== '')
+    || !!fotoComprobante || !!fotoProducto || !!fotoPago || numero.trim() !== '' || observacion.trim() !== '';
+  /** La X, Escape y Cancelar piden confirmación si ya había algo escrito, para no perderlo por un toque sin querer. */
+  function pedirCerrar() {
+    if (hayContenido) setConfirmarDescartar(true);
+    else cerrarYDescartar();
+  }
 
   // Sin boleta solo se permite pagar por Yape/transferencia.
   useEffect(() => {
@@ -223,11 +283,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     if (error) return addToast(`Error: ${error}`, 'error');
     addToast(`Compra a ${proveedor.nombre} registrada (${formatMonto(total)})`, 'success');
     onGuardado();
-    onClose();
+    cerrarYDescartar();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Compra a ${proveedor.nombre} — ${sedeNombre}`}>
+    <>
+    <Modal open={open} onClose={pedirCerrar} title={`Compra a ${proveedor.nombre} — ${sedeNombre}`}>
       <div className="space-y-5">
         {/* Productos y precios */}
         <section>
@@ -359,7 +420,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
         </section>
 
         <div className="flex justify-end gap-2 border-t pt-4">
-          <Button variant="outline" onClick={onClose} disabled={guardando}>Cancelar</Button>
+          <Button variant="outline" onClick={pedirCerrar} disabled={guardando}>Cancelar</Button>
           <Button onClick={handleGuardar} disabled={guardando || (!credito && entregas.length === 0)}>
             {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
             Guardar compra
@@ -367,5 +428,15 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
         </div>
       </div>
     </Modal>
+    <ConfirmDialog
+      open={open && confirmarDescartar}
+      title="¿Descartar esta compra?"
+      message="Ya escribiste datos o subiste fotos. Si sales, se borra todo lo que llenaste. Si solo necesitas ir a otra app, no pulses esto: lo que llenaste se guarda solo."
+      confirmLabel="Sí, descartar"
+      variant="destructive"
+      onConfirm={cerrarYDescartar}
+      onCancel={() => setConfirmarDescartar(false)}
+    />
+    </>
   );
 }
