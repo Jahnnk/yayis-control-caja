@@ -12,6 +12,7 @@ import { Loading } from '@/components/ui/loading';
 import { UNIDADES, fechaCorta, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
+import { precioMostrado } from '@/lib/precio-linea';
 import { claveProducto, formatPorcentaje, ofertasPorProveedor, precioHabitual, DIAS_MEJOR_PROVEEDOR } from '@/lib/precios';
 import { Check, ChevronDown, Loader2, Package, Pencil, Plus, Store, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import type { CondicionPago, Proveedor } from '@/types';
@@ -265,7 +266,7 @@ export function ProveedoresPage() {
                       <td className="py-2 pr-2 text-xs">
                         {habitual ? (
                           <>
-                            <span className="font-bold text-yayis-dark">{formatMonto(habitual.unitario)}</span> por {prod.unidad}
+                            <span className="font-bold text-yayis-dark">{formatMonto(precioMostrado(habitual.unitario, prod.unidad).valor)}</span> por {precioMostrado(habitual.unitario, prod.unidad).etiqueta}
                             <span className="block text-muted-foreground">{habitual.compras === 1 ? '1 compra' : `últimas ${habitual.compras} compras`}</span>
                           </>
                         ) : <span className="text-muted-foreground">Sin compras en {prod.unidad}</span>}
@@ -273,7 +274,7 @@ export function ProveedoresPage() {
                       <td className="py-2 text-xs">
                         {mejor ? (
                           <>
-                            <span className={`font-bold ${habitual && mejor.unitario < habitual.unitario ? 'text-emerald-700' : 'text-yayis-dark'}`}>{formatMonto(mejor.unitario)}</span> por {prod.unidad} · {mejor.proveedor}
+                            <span className={`font-bold ${habitual && mejor.unitario < habitual.unitario ? 'text-emerald-700' : 'text-yayis-dark'}`}>{formatMonto(precioMostrado(mejor.unitario, prod.unidad).valor)}</span> por {precioMostrado(mejor.unitario, prod.unidad).etiqueta} · {mejor.proveedor}
                             <span className="block text-muted-foreground">
                               {fechaCorta(mejor.fecha)}
                               {ofertas.length === 1 ? ' · único proveedor: busca otra opción' : ` · ${ofertas.length} proveedores comparados`}

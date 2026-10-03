@@ -13,7 +13,7 @@ import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { claveProducto } from '@/lib/precios';
-import { alCambiarCantidad, alEscribirTotal, alEscribirUnitario, type CamposPrecio } from '@/lib/precio-linea';
+import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { fechaCorta, formatCantidad, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
@@ -60,14 +60,16 @@ function CamposDePrecio({ campos, unidad, nombre, disabled, onChange }: {
   disabled?: boolean;
   onChange: (nuevos: CamposPrecio) => void;
 }) {
+  // En gramos y ml se escribe el precio por kg / por litro (más natural que el precio de un gramo).
+  const { factor, etiqueta } = baseDePrecio(unidad);
   return (
     <div className="flex w-full flex-wrap items-end gap-2">
       <label className="text-[11px] text-muted-foreground">
-        Precio por {unidad || 'unidad'}
+        Precio por {etiqueta || 'unidad'}
         <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
           S/
           <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="h-8 w-24" value={campos.unit} disabled={disabled}
-            onChange={e => onChange(alEscribirUnitario(campos, e.target.value))} aria-label={`Precio de cada ${unidad || 'unidad'} de ${nombre}`} />
+            onChange={e => onChange(alEscribirUnitario(campos, e.target.value, factor))} aria-label={`Precio de cada ${etiqueta || 'unidad'} de ${nombre}`} />
         </span>
       </label>
       <span className="pb-1.5 text-sm text-muted-foreground">=</span>
@@ -76,7 +78,7 @@ function CamposDePrecio({ campos, unidad, nombre, disabled, onChange }: {
         <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
           S/
           <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="h-8 w-24" value={campos.precio} disabled={disabled}
-            onChange={e => onChange(alEscribirTotal(campos, e.target.value))} aria-label={`Precio total de ${nombre}`} />
+            onChange={e => onChange(alEscribirTotal(campos, e.target.value, factor))} aria-label={`Precio total de ${nombre}`} />
         </span>
       </label>
     </div>
@@ -306,7 +308,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     <span className="text-xs text-muted-foreground">(pedido: {formatCantidad(c.cantidad)} {c.unidad})</span>
                   </label>
                   <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-8 w-20" value={l.cantidad} disabled={!l.incluir}
-                    onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value))} aria-label={`Cantidad comprada de ${c.nombre}`} />
+                    onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value, baseDePrecio(c.unidad).factor))} aria-label={`Cantidad comprada de ${c.nombre}`} />
                   <span className="w-12 text-xs text-muted-foreground">{c.unidad}</span>
                   <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} onChange={n => cambiarLinea(c.pedido_item_id, n)} />
                   {l.incluir && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
@@ -318,9 +320,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 <Input list="catalogo-compra" placeholder="Producto que no estaba en la lista" className="h-8 min-w-[10rem] flex-1" value={e.nombre}
                   onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value } : x))} aria-label="Producto adicional" />
                 <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-8 w-20" value={e.cantidad}
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value) } : x))} aria-label="Cantidad" />
+                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value, baseDePrecio(x.unidad).factor) } : x))} aria-label="Cantidad" />
                 <Input list="unidades-compra" className="h-8 w-24 text-xs" value={e.unidad} autoComplete="off" placeholder="unidad"
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, unidad: ev.target.value } : x))} aria-label="Unidad" />
+                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(ev.target.value).factor), unidad: ev.target.value } : x))} aria-label="Unidad" />
                 <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="text-red-500"><Trash2 size={14} /></button>
                 <CamposDePrecio campos={e} unidad={e.unidad} nombre={e.nombre || 'el producto'}
                   onChange={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...n } : x))} />

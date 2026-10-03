@@ -13,6 +13,7 @@ import { abrirEvidencia } from '@/lib/evidencias';
 import { calcularAlertas, gastadoEntrega, itemACompraDePrecio, DIAS_AVISO_VENCIMIENTO } from '@/lib/alertas';
 import { calcularCambiosPrecio, formatPorcentaje, UMBRAL_VARIACION } from '@/lib/precios';
 import { fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
+import { precioMostrado } from '@/lib/precio-linea';
 import { getTodayLima } from '@/lib/dates';
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente, resumirDeliverys } from '@/lib/deliverys';
 import { formatMonto, roundTwo } from '@/lib/utils';
@@ -368,7 +369,7 @@ export function FinanzasPage() {
                 <span className="font-medium">{it.productos?.nombre ?? 'Producto'}</span>
                 <span className="rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{it.compras?.sedes?.nombre}</span>
                 <span className="text-xs text-muted-foreground">
-                  {formatMonto(unitario)} por {it.unidad} (habitual {formatMonto(habitual.unitario)}) · {formatCantidad(Number(it.cantidad))} {it.unidad} a {it.compras?.proveedores?.nombre ?? '—'}, {it.compras ? fechaCorta(it.compras.fecha) : ''}
+                  {formatMonto(precioMostrado(unitario, it.unidad).valor)} por {precioMostrado(unitario, it.unidad).etiqueta} (habitual {formatMonto(precioMostrado(habitual.unitario, it.unidad).valor)}) · {formatCantidad(Number(it.cantidad))} {it.unidad} a {it.compras?.proveedores?.nombre ?? '—'}, {it.compras ? fechaCorta(it.compras.fecha) : ''}
                 </span>
                 <span className={`ml-auto text-xs font-bold ${sube ? 'text-red-700' : 'text-emerald-700'}`}>
                   {sube ? `${formatMonto(variacion.diferencia)} de más` : `Ahorro ${formatMonto(-variacion.diferencia)}`}
