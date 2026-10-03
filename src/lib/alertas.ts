@@ -1,4 +1,5 @@
 import { formatMonto, roundTwo } from '@/lib/utils';
+import { precioMostrado } from '@/lib/precio-linea';
 import { diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
@@ -57,7 +58,7 @@ export function alertasDePrecio(items: ItemPrecio[], hoy: string): Alerta[] {
       sedeId: it.compras!.sede_id,
       sedeNombre: it.compras!.sedes?.nombre ?? '',
       titulo: `${it.productos?.nombre ?? 'Producto'}: ${formatPorcentaje(variacion.porcentaje)} sobre su precio habitual`,
-      detalle: `${formatMonto(unitario)} por ${it.unidad} (${formatCantidad(Number(it.cantidad))} ${it.unidad} a ${it.compras!.proveedores?.nombre ?? '—'}, ${fechaCorta(it.compras!.fecha)}). Habitual: ${formatMonto(habitual.unitario)} por ${it.unidad}. Se pagaron ${formatMonto(variacion.diferencia)} de más.`,
+      detalle: `${formatMonto(precioMostrado(unitario, it.unidad).valor)} por ${precioMostrado(unitario, it.unidad).etiqueta} (${formatCantidad(Number(it.cantidad))} ${it.unidad} a ${it.compras!.proveedores?.nombre ?? '—'}, ${fechaCorta(it.compras!.fecha)}). Habitual: ${formatMonto(precioMostrado(habitual.unitario, it.unidad).valor)} por ${precioMostrado(habitual.unitario, it.unidad).etiqueta}. Se pagaron ${formatMonto(variacion.diferencia)} de más.`,
     }));
 }
 
