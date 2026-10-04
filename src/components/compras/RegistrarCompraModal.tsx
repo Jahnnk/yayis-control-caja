@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useCompras, validarCompra, type NuevaCompra } from '@/hooks/useCompras';
 import { useProductos } from '@/hooks/useProductos';
 import { useToast } from '@/components/ui/toast';
@@ -95,7 +96,10 @@ interface EntregaAbierta {
 
 export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNombre, proveedor, candidatas }: Props) {
   const { profile } = useAuth();
+  const { sedes } = useSedeActiva();
   const { registrarCompra } = useCompras();
+  // Tope de esta sede para comprar en efectivo sin boleta (lo cambia Gerencia en Configuración).
+  const topeSinBoleta = Number(sedes.find(s => s.id === sedeId)?.tope_sin_comprobante ?? TOPE_SIN_COMPROBANTE_EFECTIVO);
   const { productos, obtenerOCrear } = useProductos();
   const { addToast } = useToast();
   const hoy = getTodayLima();
@@ -274,6 +278,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       fotoProducto,
       fotoPago,
       evidenciaPendiente: faltanFotos.length > 0,
+      topeSinComprobante: topeSinBoleta,
     };
 
     const invalida = validarCompra(compra);
@@ -404,7 +409,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             {comprobante === 'sin_comprobante' && (
               <p className="mt-1 text-xs text-amber-800">
                 {metodo === 'efectivo'
-                  ? `Sin boleta en efectivo: hasta ${formatMonto(TOPE_SIN_COMPROBANTE_EFECTIVO)} por compra. Escribe abajo, en Observación, dónde y a quién le compraste (obligatorio).`
+                  ? `Sin boleta en efectivo: hasta ${formatMonto(topeSinBoleta)} por compra. Escribe abajo, en Observación, dónde y a quién le compraste (obligatorio).`
                   : 'Sin boleta por Yape/transferencia: foto del producto y captura del Yape (si no alcanzaste a tomarlas, puedes subirlas después).'}
               </p>
             )}

@@ -34,6 +34,8 @@ export interface NuevaCompra {
   fotoPago: File | null;
   /** Fabio no pudo tomar alguna foto: se guarda igual y la sube después (antes de rendir). */
   evidenciaPendiente?: boolean;
+  /** Tope de la sede para efectivo sin boleta (si no viene, el tope por defecto). */
+  topeSinComprobante?: number;
 }
 
 /** Fotos obligatorias que todavía faltan en esta compra. */
@@ -57,7 +59,8 @@ export function validarCompra(c: NuevaCompra): string | null {
     if (c.metodo_pago === 'efectivo') {
       // Compras del mercado sin boleta: se permite en efectivo con tope y con observación.
       const total = roundTwo(c.lineas.reduce((t, l) => t + l.precio_total, 0));
-      if (total > TOPE_SIN_COMPROBANTE_EFECTIVO) return `Sin boleta en efectivo solo hasta ${formatMonto(TOPE_SIN_COMPROBANTE_EFECTIVO)} por compra. Para más, paga por Yape/transferencia o pide boleta.`;
+      const tope = c.topeSinComprobante ?? TOPE_SIN_COMPROBANTE_EFECTIVO;
+      if (total > tope) return `Sin boleta en efectivo solo hasta ${formatMonto(tope)} por compra. Para más, paga por Yape/transferencia o pide boleta.`;
       if (!c.observacion?.trim()) return 'Sin boleta en efectivo: escribe en Observación dónde y a quién le compraste.';
     }
   }
