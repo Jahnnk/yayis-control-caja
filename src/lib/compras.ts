@@ -11,6 +11,25 @@ export function diferenciaDeCierre(monto: number, gastado: number, vueltoRecibid
   return roundTwo(Number(monto) - gastado - Number(vueltoRecibido ?? 0) - Number(saldoContinua ?? 0));
 }
 
+/** Compras en efectivo SIN boleta (mercado): hasta este monto por compra y con observación obligatoria. */
+export const TOPE_SIN_COMPROBANTE_EFECTIVO = 50;
+
+export type RanuraEvidencia = 'comprobante' | 'producto' | 'pago';
+
+/** Fotos que exige una compra según su comprobante y su forma de pago (efectivo sin boleta no exige fotos). */
+export function fotosExigidas(c: { tipo_comprobante: string; metodo_pago: string | null; condicion_pago: string }): RanuraEvidencia[] {
+  if (c.tipo_comprobante === 'sin_comprobante') return c.metodo_pago === 'cuentas' ? ['producto', 'pago'] : [];
+  const r: RanuraEvidencia[] = ['comprobante'];
+  if (c.condicion_pago === 'contado' && c.metodo_pago === 'cuentas') r.push('pago');
+  return r;
+}
+
+export const NOMBRE_FOTO: Record<RanuraEvidencia, string> = {
+  comprobante: 'foto de la boleta o factura',
+  producto: 'foto del producto',
+  pago: 'captura del Yape o transferencia',
+};
+
 export const UNIDADES = [
   'kg', 'g', 'L', 'ml', 'unidad', 'docena', 'paquete', 'bolsa', 'saco', 'caja', 'lata', 'botella', 'atado', 'rollo', 'manojo', 'sol',
 ] as const;

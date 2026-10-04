@@ -3,7 +3,7 @@ import { precioMostrado } from '@/lib/precio-linea';
 import { diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
-import type { CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
+import type { CompraControl, CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
 import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
 
 // Umbrales de control. Están aquí, a la vista, para poder explicar cada alerta.
@@ -102,10 +102,26 @@ export function alertasDeDeliverys(deliverys: DeliveryDetalle[], liquidaciones: 
   return alertas;
 }
 
+/** Compras guardadas sin alguna foto obligatoria que llevan un día o más sin completarse. */
+export function alertasDeEvidencia(compras: CompraControl[], hoy: string): Alerta[] {
+  return compras
+    .filter(c => c.evidencia_pendiente && diasEntre(c.fecha, hoy) >= 1)
+    .map(c => {
+      const dias = diasEntre(c.fecha, hoy);
+      return {
+        clave: `evidencia-${c.id}`, nivel: dias >= 3 ? 'alta' as const : 'media' as const, tipo: 'Evidencia pendiente',
+        sedeId: c.sede_id, sedeNombre: c.sedes?.nombre ?? '',
+        titulo: `Compra a ${c.proveedores?.nombre ?? 'proveedor'} por ${formatMonto(Number(c.total))} (${fechaCorta(c.fecha)}) sin su foto desde hace ${dias} día(s)`,
+        detalle: 'Compras debe subir la foto que falta (Mi dinero y rendición). Mientras tanto no se puede cerrar la rendición de esa entrega.',
+        ir: '/recepcion' as const,
+      };
+    });
+}
+
 export function calcularAlertas(
-  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [] }: {
+  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [], comprasControl = [] }: {
     porPagar: CompraFinanzas[]; entregas: EntregaFinanzas[]; pedidos: PedidoFinanzas[]; items: ItemPrecio[];
-    deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[];
+    deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[]; comprasControl?: CompraControl[];
   },
   hoy: string,
 ): Alerta[] {
@@ -179,5 +195,6 @@ export function calcularAlertas(
 
   alertas.push(...alertasDePrecio(items, hoy));
   alertas.push(...alertasDeDeliverys(deliverys, liquidaciones, hoy));
+  alertas.push(...alertasDeEvidencia(comprasControl, hoy));
   return alertas.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alta' ? -1 : 1));
 }

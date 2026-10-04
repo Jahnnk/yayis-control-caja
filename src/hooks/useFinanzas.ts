@@ -19,6 +19,18 @@ export interface EntregaFinanzas extends Entrega {
   compras: { total: number }[];
 }
 
+/** Lo mínimo de cada compra para vigilar comprobantes y evidencia pendiente. */
+export interface CompraControl {
+  id: string;
+  sede_id: string;
+  fecha: string;
+  total: number;
+  tipo_comprobante: string;
+  evidencia_pendiente: boolean;
+  sedes: { nombre: string } | null;
+  proveedores: { nombre: string } | null;
+}
+
 export interface PedidoFinanzas extends Pick<Pedido, 'id' | 'sede_id' | 'fecha_compra' | 'urgente' | 'motivo_urgente' | 'estado' | 'comprado_at' | 'created_at'> {
   sedes: { nombre: string } | null;
 }
@@ -48,6 +60,7 @@ export function useFinanzas() {
   const [entregas, setEntregas] = useState<EntregaFinanzas[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFinanzas[]>([]);
   const [items, setItems] = useState<ItemPrecio[]>([]);
+  const [comprasControl, setComprasControl] = useState<CompraControl[]>([]);
   const [deliverys, setDeliverys] = useState<DeliveryDetalle[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionDetalle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,7 +74,7 @@ export function useFinanzas() {
 
     const inicioMes = `${hoy.slice(0, 7)}-01`;
 
-    const [pp, pg, en, pe, it, dl, lq] = await Promise.all([
+    const [pp, pg, en, pe, it, dl, lq, cc] = await Promise.all([
       supabase.from('compras').select(SELECT_COMPRA)
         .eq('condicion_pago', 'credito').eq('estado_pago', 'por_pagar')
         .order('fecha_vencimiento', { ascending: true }),
@@ -87,8 +100,12 @@ export function useFinanzas() {
       supabase.from('liquidaciones_delivery').select('*, sedes(nombre)')
         .gte('created_at', `${hace30}T00:00:00`)
         .order('created_at', { ascending: false }),
+      // Compras del mes (para ver cuánto fue sin comprobante) y todas las que tienen evidencia pendiente.
+      supabase.from('compras').select('id, sede_id, fecha, total, tipo_comprobante, evidencia_pendiente, sedes(nombre), proveedores(nombre)')
+        .or(`fecha.gte.${inicioMes},evidencia_pendiente.eq.true`)
+        .order('fecha', { ascending: true }),
     ]);
-    for (const r of [pp, pg, en, pe, it, dl, lq]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
+    for (const r of [pp, pg, en, pe, it, dl, lq, cc]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
     setPorPagar((pp.data ?? []) as CompraFinanzas[]);
     setPagadas((pg.data ?? []) as CompraFinanzas[]);
     setEntregas((en.data ?? []) as EntregaFinanzas[]);
@@ -97,6 +114,7 @@ export function useFinanzas() {
     setItems(((it.data ?? []) as unknown as ItemPrecio[]).reverse());
     setDeliverys((dl.data ?? []) as DeliveryDetalle[]);
     setLiquidaciones((lq.data ?? []) as LiquidacionDetalle[]);
+    setComprasControl((cc.data ?? []) as unknown as CompraControl[]);
     setLoading(false);
   }, []);
 
@@ -129,5 +147,5 @@ export function useFinanzas() {
     return { error: null };
   }, [profile, fetchTodo]);
 
-  return { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, loading, fetchTodo, pagarCompra };
+  return { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, loading, fetchTodo, pagarCompra };
 }
