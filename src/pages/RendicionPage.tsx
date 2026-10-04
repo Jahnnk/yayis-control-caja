@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntregas, gastadoDe, type EntregaDetalle } from '@/hooks/useEntregas';
+import type { CompraDetalle } from '@/types';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,20 +9,24 @@ import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
+import { CompletarEvidenciaModal } from '@/components/compras/CompletarEvidenciaModal';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { diferenciaDeCierre, fechaCorta } from '@/lib/compras';
 import { ChevronDown, Clock, Wallet } from 'lucide-react';
 
-function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra }: {
+function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra, onCompletar }: {
   entrega: EntregaDetalle;
   puedeRendir: boolean;
   onRendir: (entrega: EntregaDetalle, vuelto: number) => void;
   onEliminarCompra: (entrega: EntregaDetalle, compraId: string) => void;
+  onCompletar: (compra: CompraDetalle) => void;
 }) {
   const gastado = gastadoDe(entrega);
   const saldo = roundTwo(Number(entrega.monto) - gastado);
   const [vuelto, setVuelto] = useState(String(Math.max(saldo, 0)));
   const abierta = entrega.estado === 'abierta';
+  // No se rinde con fotos pendientes: el administrador no podría cerrar la rendición.
+  const fotosPendientes = entrega.compras.filter(c => c.evidencia_pendiente).length;
 
   return (
     <Card className={abierta ? '' : 'border-blue-200 bg-blue-50/30'}>
@@ -38,7 +43,7 @@ function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra }: {
         ) : (
           <div className="space-y-2">
             {entrega.compras.map(c => (
-              <CompraResumen key={c.id} compra={c} onEliminar={abierta && puedeRendir ? () => onEliminarCompra(entrega, c.id) : undefined} />
+              <CompraResumen key={c.id} compra={c} onEliminar={abierta && puedeRendir ? () => onEliminarCompra(entrega, c.id) : undefined} onCompletar={puedeRendir ? () => onCompletar(c) : undefined} />
             ))}
           </div>
         )}
@@ -58,7 +63,8 @@ function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra }: {
               <label className="text-xs font-medium" htmlFor={`vuelto-${entrega.id}`}>Vuelto que devuelves (S/)</label>
               <Input id={`vuelto-${entrega.id}`} type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-32" value={vuelto} onChange={e => setVuelto(e.target.value)} />
             </div>
-            <Button onClick={() => onRendir(entrega, parseFloat(vuelto))}>Rendir cuentas</Button>
+            <Button onClick={() => onRendir(entrega, parseFloat(vuelto))} disabled={fotosPendientes > 0}>Rendir cuentas</Button>
+            {fotosPendientes > 0 && <p className="w-full text-xs text-amber-800">Sube {fotosPendientes === 1 ? 'la foto pendiente' : `las fotos pendientes de ${fotosPendientes} compras`} (botón «Subir foto» en cada compra) antes de rendir cuentas.</p>}
             {saldo < 0 && <p className="w-full text-xs text-red-600">Gastaste {formatMonto(-saldo)} más de lo que recibiste: el administrador de {entrega.sedes?.nombre} te lo devolverá.</p>}
           </div>
         )}
@@ -75,7 +81,8 @@ function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra }: {
 export function RendicionPage() {
   const { profile } = useAuth();
   const esCompras = profile?.rol === 'compras';
-  const { entregas, cerradas, loading, rendirEntrega, eliminarCompra } = useEntregas('mias');
+  const { entregas, cerradas, loading, rendirEntrega, eliminarCompra, fetchEntregas } = useEntregas('mias');
+  const [completando, setCompletando] = useState<CompraDetalle | null>(null);
   const { addToast } = useToast();
   const [porRendir, setPorRendir] = useState<{ entrega: EntregaDetalle; vuelto: number } | null>(null);
   const [porEliminar, setPorEliminar] = useState<{ entrega: EntregaDetalle; compraId: string } | null>(null);
@@ -125,10 +132,10 @@ export function RendicionPage() {
       )}
 
       {abiertas.map(e => (
-        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} />
+        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
       ))}
       {rendidas.map(e => (
-        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} />
+        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
       ))}
 
       {cerradas.length > 0 && (
@@ -155,6 +162,7 @@ export function RendicionPage() {
         </details>
       )}
 
+      {completando && <CompletarEvidenciaModal compra={completando} onClose={() => setCompletando(null)} onListo={fetchEntregas} />}
       <ConfirmDialog
         open={porRendir !== null}
         title="¿Rendir cuentas de esta entrega?"

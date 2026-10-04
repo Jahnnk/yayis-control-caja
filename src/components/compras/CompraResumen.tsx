@@ -4,17 +4,19 @@ import { useToast } from '@/components/ui/toast';
 import { abrirEvidencia } from '@/lib/evidencias';
 import { formatMonto } from '@/lib/utils';
 import { fechaCorta, formatCantidad } from '@/lib/compras';
-import { Camera, Receipt, Smartphone, Trash2 } from 'lucide-react';
+import { AlertTriangle, Camera, Receipt, Smartphone, Trash2 } from 'lucide-react';
 import type { CompraDetalle } from '@/types';
 
 interface Props {
   compra: CompraDetalle;
   onEliminar?: () => void;
+  /** Para subir la foto de una compra con evidencia pendiente (solo lo ofrece quien la registró). */
+  onCompletar?: () => void;
   /** Espacio extra a la derecha (p. ej. el selector de categoría al cerrar la rendición). */
   children?: ReactNode;
 }
 
-export function CompraResumen({ compra, onEliminar, children }: Props) {
+export function CompraResumen({ compra, onEliminar, onCompletar, children }: Props) {
   const { addToast } = useToast();
 
   async function ver(path: string | null) {
@@ -47,6 +49,12 @@ export function CompraResumen({ compra, onEliminar, children }: Props) {
         {compra.compra_items.map(i => `${i.productos?.nombre} ${formatCantidad(i.cantidad)} ${i.unidad} (${formatMonto(Number(i.precio_total))})`).join(' · ')}
       </p>
       {compra.observacion && <p className="mt-1 text-xs italic text-muted-foreground">"{compra.observacion}"</p>}
+      {compra.evidencia_pendiente && (
+        <p className="mt-1 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
+          <AlertTriangle size={13} /> Evidencia pendiente: falta subir una foto.
+          {onCompletar && <Button size="sm" variant="outline" className="ml-auto h-6 border-amber-400 px-2 text-xs" onClick={onCompletar}>Subir foto</Button>}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-1">
         {compra.evidencia_comprobante_path && (
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => ver(compra.evidencia_comprobante_path)}>

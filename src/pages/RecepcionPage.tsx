@@ -35,6 +35,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
   }, [entrega.compras, porDefecto]);
 
   const gastado = gastadoDe(entrega);
+  const fotosPendientes = entrega.compras.filter(c => c.evidencia_pendiente).length;
   const vueltoEsperado = roundTwo(Number(entrega.monto) - gastado);
   const recibido = parseFloat(vueltoRecibido);
   const diferenciaBruta = roundTwo(Number(entrega.monto) - gastado - (recibido || 0));
@@ -83,6 +84,12 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
           </p>
         </div>
 
+        {fotosPendientes > 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {fotosPendientes === 1 ? '1 compra tiene' : `${fotosPendientes} compras tienen`} <strong>evidencia pendiente</strong>: Fabio debe subir las fotos que faltan antes de que puedas cerrar. Si prefieres, devuélvela a Compras.
+          </p>
+        )}
+
         {diferenciaBruta > 0 && (
           <label className="flex cursor-pointer items-start gap-2 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-sm">
             <input type="checkbox" className="mt-1" checked={sigueConFabio} onChange={e => setSigueConFabio(e.target.checked)} />
@@ -97,7 +104,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
           <Button variant="outline" size="sm" onClick={() => onDevolver(entrega)}>
             <Undo2 size={14} className="mr-1" /> Devolver a Compras para corregir
           </Button>
-          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias, saldoContinua)} disabled={!(recibido >= 0)}>
+          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias, saldoContinua)} disabled={!(recibido >= 0) || fotosPendientes > 0}>
             <CheckCircle2 size={14} className="mr-1" /> Confirmar y cerrar
           </Button>
         </div>

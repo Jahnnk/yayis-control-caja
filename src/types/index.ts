@@ -279,6 +279,8 @@ export interface Compra {
   gasto_id: string | null;
   registrado_por: string;
   observacion: string | null;
+  /** Se guardó sin alguna foto obligatoria: Compras la sube después. Hasta entonces no se puede cerrar la rendición. */
+  evidencia_pendiente: boolean;
   created_at: string;
 }
 

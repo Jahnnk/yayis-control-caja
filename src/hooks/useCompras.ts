@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { borrarEvidencias, subirEvidencia } from '@/lib/evidencias';
-import { sumarDias } from '@/lib/compras';
-import { roundTwo } from '@/lib/utils';
+import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fotosExigidas, sumarDias, type RanuraEvidencia } from '@/lib/compras';
+import { formatMonto, roundTwo } from '@/lib/utils';
 import type { CondicionPago, MetodoPago, TipoComprobante } from '@/types';
 
 export interface LineaCompra {
@@ -32,6 +32,14 @@ export interface NuevaCompra {
   fotoComprobante: File | null;
   fotoProducto: File | null;
   fotoPago: File | null;
+  /** Fabio no pudo tomar alguna foto: se guarda igual y la sube después (antes de rendir). */
+  evidenciaPendiente?: boolean;
+}
+
+/** Fotos obligatorias que todavía faltan en esta compra. */
+export function fotosQueFaltan(c: NuevaCompra): RanuraEvidencia[] {
+  const archivos: Record<RanuraEvidencia, File | null> = { comprobante: c.fotoComprobante, producto: c.fotoProducto, pago: c.fotoPago };
+  return fotosExigidas({ tipo_comprobante: c.tipo_comprobante, metodo_pago: c.metodo_pago, condicion_pago: c.condicion_pago }).filter(r => !archivos[r]);
 }
 
 /** Revisa las reglas de evidencia antes de subir nada (la base de datos las vuelve a exigir). */
@@ -46,13 +54,16 @@ export function validarCompra(c: NuevaCompra): string | null {
   }
   if (c.tipo_comprobante === 'sin_comprobante') {
     if (c.condicion_pago === 'credito') return 'Una compra a crédito necesita factura o boleta.';
-    if (c.metodo_pago !== 'cuentas') return 'Sin boleta solo se puede pagar por Yape o transferencia (en efectivo no quedaría prueba).';
-    if (!c.fotoProducto) return 'Sin boleta: sube la foto del producto.';
-    if (!c.fotoPago) return 'Sin boleta: sube la captura del Yape o transferencia.';
-  } else {
-    if (!c.fotoComprobante) return `Sube la foto de la ${c.tipo_comprobante}.`;
-    if (c.condicion_pago === 'contado' && c.metodo_pago === 'cuentas' && !c.fotoPago) return 'Sube la captura del Yape o transferencia.';
+    if (c.metodo_pago === 'efectivo') {
+      // Compras del mercado sin boleta: se permite en efectivo con tope y con observación.
+      const total = roundTwo(c.lineas.reduce((t, l) => t + l.precio_total, 0));
+      if (total > TOPE_SIN_COMPROBANTE_EFECTIVO) return `Sin boleta en efectivo solo hasta ${formatMonto(TOPE_SIN_COMPROBANTE_EFECTIVO)} por compra. Para más, paga por Yape/transferencia o pide boleta.`;
+      if (!c.observacion?.trim()) return 'Sin boleta en efectivo: escribe en Observación dónde y a quién le compraste.';
+    }
   }
+  // Las fotos que falten solo se aceptan si Fabio eligió guardar con evidencia pendiente.
+  const faltan = fotosQueFaltan(c);
+  if (faltan.length > 0 && !c.evidenciaPendiente) return `Falta la ${NOMBRE_FOTO[faltan[0]!]}. Súbela o guarda la compra con evidencia pendiente.`;
   return null;
 }
 
@@ -80,6 +91,7 @@ export function useCompras() {
       comprobantePath = c.tipo_comprobante === 'sin_comprobante' ? null : await subir(c.fotoComprobante, 'comprobante');
       productoPath = c.tipo_comprobante === 'sin_comprobante' ? await subir(c.fotoProducto, 'producto') : null;
       pagoPath = c.metodo_pago === 'cuentas' ? await subir(c.fotoPago, 'pago') : null;
+      // (las fotos que no estén quedan sin ruta; si eran obligatorias, la compra queda como evidencia pendiente)
     } catch (e) {
       await borrarEvidencias(subidas);
       return { error: (e as Error).message };
@@ -108,6 +120,7 @@ export function useCompras() {
         evidencia_pago_path: pagoPath,
         registrado_por: profile.id,
         observacion: c.observacion?.trim() || null,
+        evidencia_pendiente: fotosQueFaltan(c).length > 0,
       })
       .select('id')
       .single();

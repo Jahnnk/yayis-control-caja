@@ -68,14 +68,14 @@ function PagarFactura({ compra, onClose, onPagar }: {
 }
 
 export function FinanzasPage() {
-  const { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, loading, pagarCompra } = useFinanzas();
+  const { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, loading, pagarCompra } = useFinanzas();
   const { cambiarSede } = useSedeActiva();
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [pagando, setPagando] = useState<CompraFinanzas | null>(null);
   const hoy = getTodayLima();
 
-  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, hoy]);
+  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, hoy]);
   const altas = alertas.filter(a => a.nivel === 'alta').length;
 
   const totalPorPagar = porPagar.reduce((s, c) => roundTwo(s + Number(c.total)), 0);
@@ -110,6 +110,21 @@ export function FinanzasPage() {
     }
     return Array.from(porSede.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [items, hoy]);
+
+  // Compras del mes sin comprobante (mercado), por sede: cuánto es del total comprado.
+  const sinComprobante = useMemo(() => {
+    const inicioMes = `${hoy.slice(0, 7)}-01`;
+    const porSede = new Map<string, { total: number; sin: number; cantidad: number }>();
+    for (const c of comprasControl) {
+      if (c.fecha < inicioMes) continue;
+      const nombre = c.sedes?.nombre ?? '—';
+      const acc = porSede.get(nombre) ?? { total: 0, sin: 0, cantidad: 0 };
+      acc.total = roundTwo(acc.total + Number(c.total));
+      if (c.tipo_comprobante === 'sin_comprobante') { acc.sin = roundTwo(acc.sin + Number(c.total)); acc.cantidad += 1; }
+      porSede.set(nombre, acc);
+    }
+    return porSede;
+  }, [comprasControl, hoy]);
 
   // Deliverys del mes por sede, y el efectivo que Fabio aún no entregó (de cualquier fecha).
   const deliverysPorSede = useMemo(() => {
@@ -279,6 +294,7 @@ export function FinanzasPage() {
                   <th className="py-2 text-right font-medium">Al contado</th>
                   <th className="py-2 text-right font-medium">A crédito</th>
                   <th className="py-2 text-right font-medium">Total</th>
+                  <th className="py-2 text-right font-medium">Sin comprobante</th>
                 </tr>
               </thead>
               <tbody>
@@ -288,6 +304,14 @@ export function FinanzasPage() {
                     <td className="py-2 text-right">{formatMonto(t.contado)}</td>
                     <td className="py-2 text-right">{formatMonto(t.credito)}</td>
                     <td className="py-2 text-right font-bold">{formatMonto(roundTwo(t.contado + t.credito))}</td>
+                    <td className="py-2 text-right text-xs">
+                      {(() => {
+                        const sc = sinComprobante.get(sede);
+                        if (!sc || sc.sin === 0) return <span className="text-muted-foreground">—</span>;
+                        const pct = sc.total > 0 ? Math.round((sc.sin / sc.total) * 100) : 0;
+                        return <span className={pct >= 10 ? 'font-bold text-amber-700' : ''}>{formatMonto(sc.sin)} ({pct}%) · {sc.cantidad} compra(s)</span>;
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

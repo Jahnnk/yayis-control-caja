@@ -15,7 +15,7 @@ import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { claveProducto } from '@/lib/precios';
 import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import { fechaCorta, formatCantidad, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
+import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import {
   borrarBorrador, claveBorrador, guardarBorrador, guardarFoto, leerBorrador, leerFotos, limpiarBorradoresViejos, limpiarCompraAbierta,
@@ -186,6 +186,11 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     onClose();
   }
 
+  const sinBoletaEfectivo = !credito && comprobante === 'sin_comprobante' && metodo === 'efectivo';
+  // Fotos obligatorias que todavía no se subieron (la compra se puede guardar igual, como evidencia pendiente).
+  const faltanFotos = fotosExigidas({ tipo_comprobante: comprobante, metodo_pago: credito ? null : metodo, condicion_pago: credito ? 'credito' : 'contado' })
+    .filter(r => !({ comprobante: fotoComprobante, producto: fotoProducto, pago: fotoPago })[r]);
+
   const hayContenido = Object.values(lineas).some(l => l.precio !== '' || l.unit !== '')
     || extras.some(e => e.nombre.trim() !== '' || e.precio !== '')
     || !!fotoComprobante || !!fotoProducto || !!fotoPago || numero.trim() !== '' || observacion.trim() !== '';
@@ -194,11 +199,6 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     if (hayContenido) setConfirmarDescartar(true);
     else cerrarYDescartar();
   }
-
-  // Sin boleta solo se permite pagar por Yape/transferencia.
-  useEffect(() => {
-    if (comprobante === 'sin_comprobante') setMetodo('cuentas');
-  }, [comprobante]);
 
   const total = useMemo(() => {
     const deLista = candidatas.reduce((s, c) => {
@@ -273,6 +273,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       fotoComprobante,
       fotoProducto,
       fotoPago,
+      evidenciaPendiente: faltanFotos.length > 0,
     };
 
     const invalida = validarCompra(compra);
@@ -378,7 +379,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 <div className="mt-1 flex gap-2">
                   {(['efectivo', 'cuentas'] as const).map(m => (
                     <Button key={m} type="button" size="sm" variant={metodo === m ? 'default' : 'outline'} aria-pressed={metodo === m}
-                      disabled={m === 'efectivo' && comprobante === 'sin_comprobante'} onClick={() => setMetodo(m)}>
+                      onClick={() => setMetodo(m)}>
                       {m === 'efectivo' ? 'Efectivo' : 'Yape / transferencia'}
                     </Button>
                   ))}
@@ -401,7 +402,11 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
               ))}
             </div>
             {comprobante === 'sin_comprobante' && (
-              <p className="mt-1 text-xs text-amber-800">Sin comprobante: el pago debe ser por Yape/transferencia y necesitas foto del producto y del Yape.</p>
+              <p className="mt-1 text-xs text-amber-800">
+                {metodo === 'efectivo'
+                  ? `Sin boleta en efectivo: hasta ${formatMonto(TOPE_SIN_COMPROBANTE_EFECTIVO)} por compra. Escribe abajo, en Observación, dónde y a quién le compraste (obligatorio).`
+                  : 'Sin boleta por Yape/transferencia: foto del producto y captura del Yape (si no alcanzaste a tomarlas, puedes subirlas después).'}
+              </p>
             )}
           </div>
           {comprobante !== 'sin_comprobante' && (
@@ -412,20 +417,30 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
               <EvidenciaInput id="foto-comprobante" label={`Foto de la ${comprobante}`} archivo={fotoComprobante} onChange={setFotoComprobante} requerido />
             )}
             {comprobante === 'sin_comprobante' && (
-              <EvidenciaInput id="foto-producto" label="Foto del producto" archivo={fotoProducto} onChange={setFotoProducto} requerido />
+              <EvidenciaInput id="foto-producto" label={metodo === 'cuentas' ? 'Foto del producto' : 'Foto del producto (opcional)'} archivo={fotoProducto} onChange={setFotoProducto} requerido={metodo === 'cuentas'} />
             )}
             {!credito && metodo === 'cuentas' && (
               <EvidenciaInput id="foto-pago" label="Captura del Yape / transferencia" archivo={fotoPago} onChange={setFotoPago} requerido />
             )}
           </div>
-          <Input placeholder="Observación (opcional)" value={observacion} onChange={e => setObservacion(e.target.value)} aria-label="Observación" />
+          <Input
+            placeholder={sinBoletaEfectivo ? 'Observación (obligatoria): dónde y a quién compraste' : 'Observación (opcional)'}
+            className={sinBoletaEfectivo && !observacion.trim() ? 'border-amber-400' : ''}
+            value={observacion} onChange={e => setObservacion(e.target.value)} aria-label="Observación"
+          />
         </section>
+
+        {faltanFotos.length > 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Falta: {faltanFotos.map(r => NOMBRE_FOTO[r]).join(' y ')}. Si no alcanzaste a tomarla, guarda la compra igual: queda con <strong>evidencia pendiente</strong> y la subes después desde «Mi dinero y rendición». No podrás rendir cuentas hasta completarla.
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button variant="outline" onClick={pedirCerrar} disabled={guardando}>Cancelar</Button>
           <Button onClick={handleGuardar} disabled={guardando || (!credito && entregas.length === 0)}>
             {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
-            Guardar compra
+            {faltanFotos.length > 0 ? 'Guardar y subir la foto después' : 'Guardar compra'}
           </Button>
         </div>
       </div>
