@@ -29,7 +29,7 @@ export function useSedes() {
     return { error: null };
   }, [fetchSedes]);
 
-  const updateSede = useCallback(async (id: string, updates: { nombre?: string; activa?: boolean; dias_compra?: number[]; monto_semanal_compras?: number | null }) => {
+  const updateSede = useCallback(async (id: string, updates: { nombre?: string; activa?: boolean; dias_compra?: number[]; monto_semanal_compras?: number | null; tope_sin_comprobante?: number }) => {
     const { error } = await supabase.from('sedes').update(updates).eq('id', id);
     if (error) return { error: error.message };
     await fetchSedes();

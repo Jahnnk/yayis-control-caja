@@ -10,6 +10,8 @@ export interface Sede {
   dias_compra?: number[] | null;
   /** Dinero semanal que el administrador maneja para las compras de Fabio. */
   monto_semanal_compras?: number | null;
+  /** Hasta cuánto se puede comprar en efectivo SIN boleta, por compra, en esta sede. */
+  tope_sin_comprobante?: number | null;
   created_at: string;
 }
 

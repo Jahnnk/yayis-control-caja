@@ -11,7 +11,7 @@ export function diferenciaDeCierre(monto: number, gastado: number, vueltoRecibid
   return roundTwo(Number(monto) - gastado - Number(vueltoRecibido ?? 0) - Number(saldoContinua ?? 0));
 }
 
-/** Compras en efectivo SIN boleta (mercado): hasta este monto por compra y con observación obligatoria. */
+/** Tope por defecto para compras en efectivo SIN boleta (mercado): cada sede puede tener el suyo (Configuración). */
 export const TOPE_SIN_COMPROBANTE_EFECTIVO = 50;
 
 export type RanuraEvidencia = 'comprobante' | 'producto' | 'pago';

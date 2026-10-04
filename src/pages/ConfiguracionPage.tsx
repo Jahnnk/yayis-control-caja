@@ -53,6 +53,15 @@ export function ConfiguracionPage() {
     }
   }
 
+  async function handleTopeSinBoleta(id: string, valor: string, actual: number) {
+    const nuevo = parseFloat(valor);
+    if (Number.isNaN(nuevo) || nuevo < 0) return addToast('Escribe un monto válido', 'error');
+    if (nuevo === actual) return;
+    const { error } = await updateSede(id, { tope_sin_comprobante: nuevo });
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast('Tope guardado', 'success');
+  }
+
   async function handleMontoSemanal(id: string, valor: string, actual: number | null) {
     const nuevo = valor.trim() === '' ? null : parseFloat(valor);
     if (nuevo !== null && (Number.isNaN(nuevo) || nuevo < 0)) return addToast('Escribe un monto válido', 'error');
@@ -262,7 +271,7 @@ export function ConfiguracionPage() {
       <Card>
         <CardHeader>
           <CardTitle>Sedes y días de compra</CardTitle>
-          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Fabio cada semana.</p>
+          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Fabio cada semana. El <strong>tope sin boleta</strong> es lo máximo que Compras puede comprar en efectivo, por compra, cuando no le dan boleta.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -310,6 +319,16 @@ export function ConfiguracionPage() {
                     defaultValue={s.monto_semanal_compras ?? ''}
                     onBlur={e => handleMontoSemanal(s.id, e.target.value, s.monto_semanal_compras ?? null)}
                     aria-label={`Monto semanal para compras de ${s.nombre}`}
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Hasta cuánto puede comprar Compras en efectivo sin boleta, por compra, en esta sede">
+                  Tope sin boleta S/
+                  <Input
+                    key={`tope-${s.id}-${s.tope_sin_comprobante ?? ''}`}
+                    type="number" inputMode="decimal" min="0" step="1" className="h-8 w-20"
+                    defaultValue={s.tope_sin_comprobante ?? 50}
+                    onBlur={e => handleTopeSinBoleta(s.id, e.target.value, Number(s.tope_sin_comprobante ?? 50))}
+                    aria-label={`Tope sin boleta de ${s.nombre}`}
                   />
                 </label>
                 <button onClick={() => handleToggleSede(s.id, s.activa)} title={s.activa ? 'Desactivar sede' : 'Activar sede'}>
