@@ -6,16 +6,20 @@ import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select-native';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
 import { CompletarEvidenciaModal } from '@/components/compras/CompletarEvidenciaModal';
 import { formatMonto, roundTwo } from '@/lib/utils';
+import { getTodayLima } from '@/lib/dates';
 import { diferenciaDeCierre, fechaCorta } from '@/lib/compras';
 import { ChevronDown, Clock, Wallet } from 'lucide-react';
 
-function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra, onCompletar }: {
+function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEliminarCompra, onCompletar }: {
   entrega: EntregaDetalle;
+  /** Compras que se muestran (según el filtro de fechas). Los totales de abajo siguen siendo los de toda la entrega. */
+  comprasVisibles: CompraDetalle[];
   puedeRendir: boolean;
   onRendir: (entrega: EntregaDetalle, vuelto: number) => void;
   onEliminarCompra: (entrega: EntregaDetalle, compraId: string) => void;
@@ -42,7 +46,10 @@ function TarjetaEntrega({ entrega, puedeRendir, onRendir, onEliminarCompra, onCo
           <p className="text-sm text-muted-foreground">Todavía no registraste compras con este dinero.</p>
         ) : (
           <div className="space-y-2">
-            {entrega.compras.map(c => (
+            {comprasVisibles.length < entrega.compras.length && (
+              <p className="text-xs text-muted-foreground">Mostrando {comprasVisibles.length} de {entrega.compras.length} compras de esta entrega (los totales de abajo son de toda la entrega).</p>
+            )}
+            {comprasVisibles.map(c => (
               <CompraResumen key={c.id} compra={c} onEliminar={abierta && puedeRendir ? () => onEliminarCompra(entrega, c.id) : undefined} onCompletar={puedeRendir ? () => onCompletar(c) : undefined} />
             ))}
           </div>
@@ -86,6 +93,9 @@ export function RendicionPage() {
   const { addToast } = useToast();
   const [porRendir, setPorRendir] = useState<{ entrega: EntregaDetalle; vuelto: number } | null>(null);
   const [porEliminar, setPorEliminar] = useState<{ entrega: EntregaDetalle; compraId: string } | null>(null);
+  const [sedeFiltro, setSedeFiltro] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
 
   function pedirRendir(entrega: EntregaDetalle, vuelto: number) {
     if (!(vuelto >= 0)) return addToast('Escribe el vuelto (0 si no sobró nada)', 'error');
@@ -112,9 +122,26 @@ export function RendicionPage() {
 
   if (loading && entregas.length === 0) return <Loading text="Cargando tu dinero..." />;
 
-  const abiertas = entregas.filter(e => e.estado === 'abierta');
-  const rendidas = entregas.filter(e => e.estado === 'rendida');
-  const enMano = abiertas.reduce((s, e) => roundTwo(s + Number(e.monto) - gastadoDe(e)), 0);
+  const enMano = entregas.filter(e => e.estado === 'abierta').reduce((s, e) => roundTwo(s + Number(e.monto) - gastadoDe(e)), 0);
+
+  // Filtros: por sede y por fecha de la compra (un solo día o varios).
+  const sedesConDinero = Array.from(new Map([...entregas, ...cerradas].map(e => [e.sede_id, e.sedes?.nombre ?? ''])).entries())
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const hayFiltroFecha = desde !== '' || hasta !== '';
+  const hayFiltro = sedeFiltro !== '' || hayFiltroFecha;
+  const enRango = (fecha: string) => (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
+  const comprasDe = (e: EntregaDetalle) => (hayFiltroFecha ? e.compras.filter(c => enRango(c.fecha)) : e.compras);
+  const tarjetasVisibles = (estado: 'abierta' | 'rendida') => entregas
+    .filter(e => e.estado === estado && (!sedeFiltro || e.sede_id === sedeFiltro) && (!hayFiltroFecha || comprasDe(e).length > 0))
+    .map(e => ({ entrega: e, compras: comprasDe(e) }));
+  const abiertas = tarjetasVisibles('abierta');
+  const rendidas = tarjetasVisibles('rendida');
+  const cerradasVisibles = cerradas.filter(e => (!sedeFiltro || e.sede_id === sedeFiltro) && (!hayFiltroFecha || enRango(e.fecha)));
+  const comprasMostradas = [...abiertas, ...rendidas].flatMap(t => t.compras);
+  const totalMostrado = comprasMostradas.reduce((t, c) => roundTwo(t + Number(c.total)), 0);
+  const hayDatos = entregas.length > 0 || cerradas.length > 0;
+  function limpiarFiltros() { setSedeFiltro(''); setDesde(''); setHasta(''); }
+  function soloHoy() { const hoy = getTodayLima(); setDesde(hoy); setHasta(hoy); }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -125,27 +152,58 @@ export function RendicionPage() {
         </p>
       </div>
 
+      {hayDatos && (
+        <div className="space-y-2 rounded-lg border bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs font-medium" htmlFor="filtro-sede">Sede</label>
+              <Select id="filtro-sede" value={sedeFiltro} onChange={e => setSedeFiltro(e.target.value)} className="mt-1 w-40">
+                <option value="">Todas</option>
+                {sedesConDinero.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium" htmlFor="filtro-desde">Compras desde</label>
+              <Input id="filtro-desde" type="date" className="mt-1 w-40" value={desde} max={hasta || undefined} onChange={e => setDesde(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium" htmlFor="filtro-hasta">hasta</label>
+              <Input id="filtro-hasta" type="date" className="mt-1 w-40" value={hasta} min={desde || undefined} onChange={e => setHasta(e.target.value)} />
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={soloHoy}>Solo hoy</Button>
+            {hayFiltro && <Button type="button" size="sm" variant="ghost" onClick={limpiarFiltros}>Quitar filtros</Button>}
+          </div>
+          {hayFiltro && (
+            <p className="text-sm text-muted-foreground">
+              Compras mostradas: <strong className="text-yayis-dark">{comprasMostradas.length}</strong> por <strong className="text-yayis-dark">{formatMonto(totalMostrado)}</strong>
+            </p>
+          )}
+        </div>
+      )}
+
       {abiertas.length === 0 && rendidas.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          {esCompras ? 'No tienes dinero entregado por ninguna sede en este momento.' : 'No hay dinero entregado a Compras sin rendir.'}
+          {hayFiltro
+            ? 'No hay compras con esos filtros.'
+            : esCompras ? 'No tienes dinero entregado por ninguna sede en este momento.' : 'No hay dinero entregado a Compras sin rendir.'}
         </p>
       )}
 
-      {abiertas.map(e => (
-        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
+      {abiertas.map(({ entrega: e, compras }) => (
+        <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
       ))}
-      {rendidas.map(e => (
-        <TarjetaEntrega key={e.id} entrega={e} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
+      {rendidas.map(({ entrega: e, compras }) => (
+        <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
       ))}
 
-      {cerradas.length > 0 && (
+      {cerradasVisibles.length > 0 && (
         <details className="group rounded-lg border bg-white shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between p-4 text-sm font-bold text-yayis-dark">
-            <span>Rendiciones cerradas ({cerradas.length})</span>
+            <span>Rendiciones cerradas ({cerradasVisibles.length})</span>
             <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
           </summary>
           <div className="divide-y border-t text-sm">
-            {cerradas.map(e => {
+            {cerradasVisibles.map(e => {
               const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
