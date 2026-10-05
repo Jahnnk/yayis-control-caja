@@ -126,6 +126,7 @@ export function RecepcionPage() {
   const [receptores, setReceptores] = useState<{ id: string; nombre: string }[]>([]);
   const [receptorId, setReceptorId] = useState('');
   const [monto, setMonto] = useState('');
+  const [fechaEntrega, setFechaEntrega] = useState(getTodayLima());
   // El dinero para compras se transfiere por Yape/Plin: «Cuentas» sale por defecto.
   const [metodo, setMetodo] = useState<MetodoPago>('cuentas');
   const [nota, setNota] = useState('');
@@ -177,13 +178,15 @@ export function RecepcionPage() {
     const valor = parseFloat(monto);
     if (!receptorId) return addToast('No hay usuario de Compras para recibir el dinero', 'error');
     if (!(valor > 0)) return addToast('El monto debe ser mayor a 0', 'error');
+    if (!fechaEntrega || fechaEntrega > hoy) return addToast('La fecha de la entrega no puede ser futura', 'error');
     setGuardando(true);
-    const { error } = await crearEntrega({ receptor_id: receptorId, monto: valor, metodo_pago: metodo, fecha: hoy, notas: nota.trim() || null });
+    const { error } = await crearEntrega({ receptor_id: receptorId, monto: valor, metodo_pago: metodo, fecha: fechaEntrega, notas: nota.trim() || null });
     setGuardando(false);
     if (error) return addToast(`Error: ${error}`, 'error');
     addToast(`Entrega de ${formatMonto(valor)} registrada`, 'success');
     setMonto('');
     setNota('');
+    setFechaEntrega(hoy);
   }
 
   async function handleAnular(e: EntregaDetalle) {
@@ -251,6 +254,10 @@ export function RecepcionPage() {
               <div>
                 <label className="text-xs font-medium" htmlFor="monto-entrega">Monto (S/)</label>
                 <Input id="monto-entrega" type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-32" value={monto} onChange={e => setMonto(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium" htmlFor="fecha-entrega">Fecha de la entrega</label>
+                <Input id="fecha-entrega" type="date" className="mt-1 w-40" value={fechaEntrega} max={hoy} onChange={e => setFechaEntrega(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs font-medium" htmlFor="metodo-entrega">Sale de</label>
