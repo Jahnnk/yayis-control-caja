@@ -16,7 +16,7 @@ import { Loading } from '@/components/ui/loading';
 import { getTodayLima } from '@/lib/dates';
 import { diaSemanaDe, fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
 import type { EstadoItemPedido, Proveedor } from '@/types';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock, Eye, MapPin, Phone, Receipt, Store, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock, Eye, MapPin, PackageCheck, Phone, Receipt, Store, X } from 'lucide-react';
 
 interface LineaRuta {
   item: ItemRuta;
@@ -27,6 +27,15 @@ interface GrupoProducto {
   productoId: string;
   nombre: string;
   lineas: LineaRuta[];
+}
+
+interface GrupoSede {
+  sedeId: string;
+  nombre: string;
+  /** Lo que ya compró y debe llevarle, lo que aún falta y lo que no había. */
+  entregar: LineaRuta[];
+  faltan: LineaRuta[];
+  noHabia: LineaRuta[];
 }
 
 interface GrupoProveedor {
@@ -53,6 +62,7 @@ export function RutaComprasPage() {
   const { addToast } = useToast();
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [guardarHabitual, setGuardarHabitual] = useState(true);
+  const [vista, setVista] = useState<'proveedor' | 'sede'>('proveedor');
   const [registrando, setRegistrando] = useState<{
     sedeId: string;
     sedeNombre: string;
@@ -99,6 +109,27 @@ export function RutaComprasPage() {
       if (b.clave === 'sin-proveedor') return 1;
       return Number(conUrgente(b)) - Number(conUrgente(a)) || (a.proveedor?.nombre ?? '').localeCompare(b.proveedor?.nombre ?? '');
     });
+  }, [pedidos]);
+
+  // Vista por sede: qué debe llevarle Fabio a cada una.
+  const gruposSede = useMemo<GrupoSede[]>(() => {
+    const porSede = new Map<string, GrupoSede>();
+    for (const pedido of pedidos) {
+      let g = porSede.get(pedido.sede_id);
+      if (!g) {
+        g = { sedeId: pedido.sede_id, nombre: pedido.sedes?.nombre ?? '', entregar: [], faltan: [], noHabia: [] };
+        porSede.set(pedido.sede_id, g);
+      }
+      for (const item of pedido.pedido_items) {
+        const linea = { item, pedido };
+        if (item.estado === 'comprado') g.entregar.push(linea);
+        else if (item.estado === 'no_habia') g.noHabia.push(linea);
+        else g.faltan.push(linea);
+      }
+    }
+    const porNombre = (a: LineaRuta, b: LineaRuta) => (a.item.productos?.nombre ?? '').localeCompare(b.item.productos?.nombre ?? '');
+    for (const g of porSede.values()) { g.entregar.sort(porNombre); g.faltan.sort(porNombre); g.noHabia.sort(porNombre); }
+    return Array.from(porSede.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [pedidos]);
 
   // Todo lo urgente que falta comprar, para mostrarlo arriba de todo.
@@ -229,7 +260,18 @@ export function RutaComprasPage() {
         </CardContent>
       </Card>
 
-      {urgentesPendientes.length > 0 && (
+      {totalLineas > 0 && (
+        <div className="flex w-fit gap-1 rounded-lg border bg-white p-1" role="group" aria-label="Cómo ver la ruta">
+          <Button type="button" size="sm" variant={vista === 'proveedor' ? 'default' : 'ghost'} aria-pressed={vista === 'proveedor'} onClick={() => setVista('proveedor')}>
+            <Store size={14} className="mr-1" /> Por proveedor
+          </Button>
+          <Button type="button" size="sm" variant={vista === 'sede' ? 'default' : 'ghost'} aria-pressed={vista === 'sede'} onClick={() => setVista('sede')}>
+            <PackageCheck size={14} className="mr-1" /> Por sede (qué entregar)
+          </Button>
+        </div>
+      )}
+
+      {urgentesPendientes.length > 0 && vista === 'proveedor' && (
         <Card className="border-red-300 bg-red-50/60">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-red-800">⚡ Urgente: cómpralo primero ({urgentesPendientes.length})</CardTitle>
@@ -252,6 +294,49 @@ export function RutaComprasPage() {
         <Loading text="Cargando ruta..." />
       ) : grupos.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No hay nada que comprar este día.</p>
+      ) : vista === 'sede' ? (
+        gruposSede.map(g => {
+          const filaLinea = ({ item, pedido }: LineaRuta) => (
+            <div key={item.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-sm">
+              <span className="font-medium">{item.productos?.nombre ?? 'Producto'}</span>
+              <span className="font-bold text-yayis-green">{formatCantidad(item.cantidad)} {item.unidad}</span>
+              {item.urgente && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
+              {etiquetaPedido(pedido)}
+              {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}
+              <span className="ml-auto text-xs text-muted-foreground">{item.proveedores?.nombre ?? 'sin proveedor'}</span>
+            </div>
+          );
+          return (
+            <Card key={g.sedeId}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base"><PackageCheck size={18} className="text-yayis-green" /> {g.nombre}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  <strong className="text-emerald-700">{g.entregar.length}</strong> para entregar · <strong className="text-amber-700">{g.faltan.length}</strong> faltan comprar · <strong className="text-red-600">{g.noHabia.length}</strong> no había
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {g.entregar.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs font-bold uppercase text-emerald-700">Para entregar a {g.nombre}</p>
+                    <div className="divide-y rounded-md border border-emerald-200 bg-emerald-50/40">{g.entregar.map(l => filaLinea(l))}</div>
+                  </div>
+                )}
+                {g.faltan.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs font-bold uppercase text-amber-700">Falta comprar</p>
+                    <div className="divide-y rounded-md border bg-white">{g.faltan.map(l => filaLinea(l))}</div>
+                  </div>
+                )}
+                {g.noHabia.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs font-bold uppercase text-red-600">No había</p>
+                    <div className="divide-y rounded-md border border-red-200 bg-red-50/40">{g.noHabia.map(l => filaLinea(l))}</div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })
       ) : (
         grupos.map(g => {
           const sinProveedor = g.clave === 'sin-proveedor';
