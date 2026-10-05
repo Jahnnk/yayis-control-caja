@@ -441,6 +441,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           </p>
         )}
 
+        {!credito && entregas.length === 0 && (
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+            No puedes guardar todavía: no tienes dinero entregado por {sedeNombre}. Pídele al administrador que registre la entrega y vuelve a abrir esta compra.
+          </p>
+        )}
+
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button variant="outline" onClick={pedirCerrar} disabled={guardando}>Cancelar</Button>
           <Button onClick={handleGuardar} disabled={guardando || (!credito && entregas.length === 0)}>
