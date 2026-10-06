@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
+import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
+import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
 import { useToast } from '@/components/ui/toast';
 import { GastoForm } from '@/components/gastos/GastoForm';
 import { GastosTable } from '@/components/gastos/GastosTable';
@@ -25,6 +27,8 @@ export function RegistroGastosPage() {
 
   const [editGasto, setEditGasto] = useState<(GastoFormData & { id: string; constancia_path: string | null }) | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [versionSaldo, setVersionSaldo] = useState(0);
+  const saldoSemanal = useSaldoSemanal(versionSaldo);
   const [page, setPage] = useState(0);
   const pageSize = 20;
 
@@ -45,6 +49,7 @@ export function RegistroGastosPage() {
       categoria_id: filterCategoria || undefined,
       metodo_pago: filterMetodoPago || undefined,
       estado: filterEstado === 'todos' ? undefined : (filterEstado || 'pendiente'),
+      incluirMontoSemanal: filterEstado === '',
       busqueda: busqueda || undefined,
       page,
       pageSize,
@@ -65,6 +70,7 @@ export function RegistroGastosPage() {
       monto: String(g.monto),
       estado: g.estado,
       notas: g.notas ?? '',
+      con_monto_semanal: g.con_monto_semanal === true,
       constancia_path: g.constancia_path,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -106,11 +112,13 @@ export function RegistroGastosPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-yayis-dark">Registro de Gastos</h1>
 
+      <SaldoMontoSemanal saldo={saldoSemanal} />
+
       <ResumenDiario />
 
       {!isViewer && (
         <GastoForm
-          onSaved={loadGastos}
+          onSaved={() => { loadGastos(); setVersionSaldo(v => v + 1); }}
           editData={editGasto ?? undefined}
           onCancelEdit={() => setEditGasto(null)}
         />

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGastos, validarConstancia } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { getTodayLima } from '@/lib/dates';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,9 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
   const { addToast } = useToast();
 
   const isOwner = profile?.rol === 'owner';
+  const { sedeActiva } = useSedeActiva();
+  // Un gasto ya repuesto por Gerencia no puede pasar a pagarse con el monto semanal.
+  const yaRepuesto = !!editData && editData.estado === 'pagado' && !editData.con_monto_semanal;
   const today = getTodayLima();
 
   const [form, setForm] = useState<GastoFormData>({
@@ -33,6 +37,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     monto: editData?.monto ?? '',
     estado: 'pendiente',
     notas: editData?.notas ?? '',
+    con_monto_semanal: editData?.con_monto_semanal ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [constanciaFile, setConstanciaFile] = useState<File | null>(null);
@@ -50,6 +55,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
         monto: editData.monto,
         estado: editData.estado,
         notas: editData.notas,
+        con_monto_semanal: editData.con_monto_semanal,
       });
     } else {
       setForm({
@@ -60,6 +66,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
         monto: '',
         estado: 'pagado',
         notas: '',
+        con_monto_semanal: false,
       });
     }
     setConstanciaFile(null);
@@ -103,7 +110,10 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     setSaving(true);
 
     if (editData?.id) {
-      const { error } = await updateGasto(editData.id, form, {
+      // Solo se envía la casilla si cambió (cambiarla cambia también si se le repone o no).
+      const cambios: Partial<GastoFormData> = { ...form };
+      if (form.con_monto_semanal === editData.con_monto_semanal) delete cambios.con_monto_semanal;
+      const { error } = await updateGasto(editData.id, cambios, {
         file: constanciaFile,
         pathActual: editData.constancia_path,
         eliminar: eliminarConstancia,
@@ -128,6 +138,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
           monto: '',
           estado: 'pagado',
           notas: '',
+          con_monto_semanal: false,
         }));
         clearConstancia();
         onSaved();
@@ -225,6 +236,26 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
             className="mt-1"
           />
         </div>
+
+        {/* Monto semanal */}
+        {(sedeActiva?.monto_semanal_compras ?? 0) > 0 && (
+          <div className="sm:col-span-2 lg:col-span-3">
+            <label className={`flex items-start gap-2 text-sm ${yaRepuesto ? 'text-muted-foreground' : ''}`}>
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={form.con_monto_semanal}
+                disabled={saving || yaRepuesto}
+                onChange={e => updateField('con_monto_semanal', e.target.checked)}
+              />
+              <span>
+                <strong>Se paga con el monto semanal</strong> (por ejemplo, pagos a proveedores que ya no hace Gerencia).
+                Resta del monto semanal y <strong>no se te repone</strong>.
+                {yaRepuesto && <span className="block text-xs">Este gasto ya fue repuesto: no se puede cambiar.</span>}
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Constancia */}
         <div className="sm:col-span-2 lg:col-span-3">
