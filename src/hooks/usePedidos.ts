@@ -87,10 +87,15 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  const enviarPedido = useCallback(async (pedidoId: string) => {
+  /** motivoSobreTope: por qué se envía aunque la lista pase el tope del presupuesto (le llega a Finanzas). */
+  const enviarPedido = useCallback(async (pedidoId: string, motivoSobreTope?: string) => {
     const { error } = await supabase
       .from('pedidos')
-      .update({ estado: 'enviado', enviado_at: new Date().toISOString() })
+      .update({
+        estado: 'enviado',
+        enviado_at: new Date().toISOString(),
+        ...(motivoSobreTope?.trim() ? { motivo_sobre_tope: motivoSobreTope.trim() } : {}),
+      })
       .eq('id', pedidoId)
       .eq('estado', 'borrador');
     if (error) return { error: error.message };

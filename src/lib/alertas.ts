@@ -5,6 +5,8 @@ import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
 import type { CompraControl, CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
 import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
+import type { SobreTopeGasto, SobreTopePedido, UsoSede } from '@/hooks/useAlertasPresupuesto';
+import { nombreCategoria } from '@/lib/presupuesto';
 
 // Umbrales de control. Están aquí, a la vista, para poder explicar cada alerta.
 // Precios: +15% sobre el precio habitual → alerta; +30% → alerta roja (reglas en src/lib/precios.ts).
@@ -22,7 +24,7 @@ export interface Alerta {
   titulo: string;
   detalle: string;
   /** Pantalla donde se resuelve (se abre con la sede de la alerta ya elegida). */
-  ir?: '/recepcion' | '/pedidos' | '/deliverys';
+  ir?: '/recepcion' | '/pedidos' | '/deliverys' | '/presupuesto' | '/gastos';
 }
 
 const diasEntre = (desde: string, hasta: string) =>
@@ -118,10 +120,50 @@ export function alertasDeEvidencia(compras: CompraControl[], hoy: string): Alert
     });
 }
 
+/**
+ * Presupuesto (aprobado en Cash Control): categorías que ya pasaron su tope este mes (alta), y
+ * gastos o listas que se registraron pasando el tope, con el motivo que escribió el administrador.
+ */
+export function alertasDePresupuesto(usoPorSede: UsoSede[], gastos: SobreTopeGasto[], pedidos: SobreTopePedido[]): Alerta[] {
+  const alertas: Alerta[] = [];
+  for (const s of usoPorSede) {
+    for (const u of s.uso) {
+      if (!u.tope || u.gastado <= u.tope) continue;
+      alertas.push({
+        clave: `tope-${s.sedeId}-${u.categoria}`, nivel: 'alta', tipo: 'Presupuesto pasado',
+        sedeId: s.sedeId, sedeNombre: s.sedeNombre,
+        titulo: `${nombreCategoria(u.categoria)}: ${formatMonto(u.gastado)} de un tope de ${formatMonto(u.tope)} (${Math.round((u.gastado / u.tope) * 100)}%)`,
+        detalle: `Se pasó por ${formatMonto(roundTwo(u.gastado - u.tope))} este mes. Revisa con el administrador o ajusta el presupuesto en Cash Control.`,
+        ir: '/presupuesto',
+      });
+    }
+  }
+  for (const g of gastos) {
+    alertas.push({
+      clave: `tope-gasto-${g.id}`, nivel: 'media', tipo: 'Gasto sobre el tope',
+      sedeId: g.sede_id, sedeNombre: g.sedes?.nombre ?? '',
+      titulo: `${g.descripcion} · ${formatMonto(Number(g.monto))} (${fechaCorta(g.fecha)}, ${g.categorias?.nombre ?? 'sin categoría'})`,
+      detalle: `Motivo: ${g.motivo_sobre_tope}`,
+      ir: '/gastos',
+    });
+  }
+  for (const p of pedidos) {
+    alertas.push({
+      clave: `tope-pedido-${p.id}`, nivel: 'media', tipo: 'Lista sobre el tope',
+      sedeId: p.sede_id, sedeNombre: p.sedes?.nombre ?? '',
+      titulo: `Lista del ${fechaCorta(p.fecha_compra)} enviada pasando el tope`,
+      detalle: `Motivo: ${p.motivo_sobre_tope}`,
+      ir: '/pedidos',
+    });
+  }
+  return alertas;
+}
+
 export function calcularAlertas(
-  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [], comprasControl = [] }: {
+  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [], comprasControl = [], presupuesto }: {
     porPagar: CompraFinanzas[]; entregas: EntregaFinanzas[]; pedidos: PedidoFinanzas[]; items: ItemPrecio[];
     deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[]; comprasControl?: CompraControl[];
+    presupuesto?: { usoPorSede: UsoSede[]; gastos: SobreTopeGasto[]; pedidos: SobreTopePedido[] };
   },
   hoy: string,
 ): Alerta[] {
@@ -196,5 +238,6 @@ export function calcularAlertas(
   alertas.push(...alertasDePrecio(items, hoy));
   alertas.push(...alertasDeDeliverys(deliverys, liquidaciones, hoy));
   alertas.push(...alertasDeEvidencia(comprasControl, hoy));
+  if (presupuesto) alertas.push(...alertasDePresupuesto(presupuesto.usoPorSede, presupuesto.gastos, presupuesto.pedidos));
   return alertas.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alta' ? -1 : 1));
 }

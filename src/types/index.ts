@@ -35,6 +35,8 @@ export interface Categoria {
   activa: boolean;
   orden: number;
   tipo_gasto?: TipoGasto | null;
+  /** Su categoría en la lista única del presupuesto de Cash Control (null = sin emparejar). */
+  categoria_presupuesto?: string | null;
   created_at: string;
 }
 
@@ -54,6 +56,8 @@ export interface Gasto {
   registrado_por: string;
   reposicion_id: string | null;
   con_monto_semanal?: boolean;
+  /** Por qué se registró aunque pasaba el tope del presupuesto (le llega a Finanzas). */
+  motivo_sobre_tope?: string | null;
   constancia_path: string | null;
   created_at: string;
   updated_at: string;
@@ -151,6 +155,8 @@ export interface GastoFormData {
   notas: string;
   /** El administrador lo paga con el monto semanal de compras: resta de ese monto y NO se le repone. */
   con_monto_semanal: boolean;
+  /** Motivo obligatorio cuando el gasto pasa el tope de su categoría. */
+  motivo_sobre_tope?: string;
 }
 
 export interface ResumenSemanalData {
@@ -195,6 +201,8 @@ export interface Producto {
   unidad: string;
   /** Proveedor habitual: a quien se le suele comprar. */
   proveedor_id: string | null;
+  /** Categoría del presupuesto que recuerda el producto (para estimar la lista antes de comprar). */
+  categoria_presupuesto?: string | null;
   activo: boolean;
   created_at: string;
 }
@@ -208,6 +216,8 @@ export interface Pedido {
   fecha_compra: string;
   urgente: boolean;
   motivo_urgente: string | null;
+  /** Por qué se envió aunque la lista pasaba el tope del presupuesto. */
+  motivo_sobre_tope?: string | null;
   estado: EstadoPedido;
   notas: string | null;
   creado_por: string;

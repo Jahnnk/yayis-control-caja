@@ -59,5 +59,16 @@ export function useCategorias() {
     return { error: null };
   }, [fetchCategorias]);
 
-  return { categorias, loading, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto };
+  /**
+   * Con qué categoría de la lista única del presupuesto (Cash Control) se empareja. Igual que el
+   * tipo, se cambia en la categoría del mismo nombre de las 3 sedes.
+   */
+  const updateCategoriaPresupuesto = useCallback(async (nombre: string, categoria: string | null) => {
+    const { error } = await supabase.from('categorias').update({ categoria_presupuesto: categoria }).eq('nombre', nombre);
+    if (error) return { error: error.message };
+    await fetchCategorias(false);
+    return { error: null };
+  }, [fetchCategorias]);
+
+  return { categorias, loading, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto, updateCategoriaPresupuesto };
 }

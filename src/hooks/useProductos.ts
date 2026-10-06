@@ -80,5 +80,13 @@ export function useProductos() {
     return { error: null };
   }, []);
 
-  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto, recordarProveedor, recordarUnidad };
+  /** Recuerda la categoría del presupuesto de un producto (para estimar las listas por categoría). */
+  const recordarCategoria = useCallback(async (productoId: string, categoria: string | null) => {
+    const { error } = await supabase.rpc('recordar_categoria_producto', { p_producto: productoId, p_categoria: categoria });
+    if (error) return { error: error.message };
+    setProductos(prev => prev.map(p => (p.id === productoId ? { ...p, categoria_presupuesto: categoria } : p)));
+    return { error: null };
+  }, []);
+
+  return { productos, loading, fetchProductos, obtenerOCrear, actualizarProducto, recordarProveedor, recordarUnidad, recordarCategoria };
 }

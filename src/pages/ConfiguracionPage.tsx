@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useCategorias } from '@/hooks/useCategorias';
+import { CATEGORIAS_PRESUPUESTO, nombreCategoria } from '@/lib/presupuesto';
 import { useFondos } from '@/hooks/useFondos';
 import { useSedes } from '@/hooks/useSedes';
 import { useToast } from '@/components/ui/toast';
@@ -18,7 +19,7 @@ import { Navigate } from 'react-router-dom';
 export function ConfiguracionPage() {
   const { profile } = useAuth();
   const { sedeId, sedeActiva, recargarSedes } = useSedeActiva();
-  const { categorias, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto } = useCategorias();
+  const { categorias, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto, updateCategoriaPresupuesto } = useCategorias();
   const { fondos, updateFondos, fetchHistorial, historialFondos } = useFondos();
   const { sedes, createSede, updateSede } = useSedes();
   const { addToast } = useToast();
@@ -89,6 +90,12 @@ export function ConfiguracionPage() {
     else addToast(`«${nombre}» quedó como ${valor === '' ? 'por definir' : `gasto ${valor}`} en las 3 sedes`, 'success');
   }
 
+  async function handleCategoriaPresupuesto(nombre: string, valor: string) {
+    const { error } = await updateCategoriaPresupuesto(nombre, valor || null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast(valor ? `«${nombre}» cuenta para «${nombreCategoria(valor)}» del presupuesto en las 3 sedes` : `«${nombre}» quedó sin emparejar: no consume ningún tope`, 'success');
+  }
+
   async function handleToggleCategoria(id: string, activa: boolean) {
     const { error } = await updateCategoria(id, { activa: !activa });
     if (error) addToast(`Error: ${error}`, 'error');
@@ -149,6 +156,7 @@ export function ConfiguracionPage() {
         <CardHeader>
           <CardTitle>Categorías de gasto{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
           <p className="text-xs text-muted-foreground">El tipo (gasto fijo o variable) se usa en el Excel de gastos por categoría y se aplica igual en las 3 sedes.</p>
+          <p className="text-xs text-muted-foreground">«En el presupuesto» dice a qué barra del presupuesto suma cada gasto (la lista única de Cash Control). Sin emparejar, el gasto se ve pero no consume ningún tope.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -186,7 +194,17 @@ export function ConfiguracionPage() {
                     <span className={`text-sm ${!c.activa ? 'text-muted-foreground line-through' : ''}`}>
                       {c.nombre}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Select
+                        value={c.categoria_presupuesto ?? ''}
+                        onChange={e => handleCategoriaPresupuesto(c.nombre, e.target.value)}
+                        className={`h-8 w-44 text-xs ${c.categoria_presupuesto ? '' : 'border-amber-400 text-amber-800'}`}
+                        aria-label={`Categoría del presupuesto de ${c.nombre}`}
+                        title="En el presupuesto"
+                      >
+                        <option value="">Sin emparejar</option>
+                        {CATEGORIAS_PRESUPUESTO.map(cp => <option key={cp} value={cp}>{nombreCategoria(cp)}</option>)}
+                      </Select>
                       <Select
                         value={c.tipo_gasto ?? ''}
                         onChange={e => handleTipoGasto(c.nombre, e.target.value)}

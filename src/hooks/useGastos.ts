@@ -136,6 +136,8 @@ export function useGastos() {
       // Pagado con el monto semanal: ya tiene su dinero, no se le repone. (La columna solo se envía si se marca.)
       estado: formData.con_monto_semanal ? 'pagado' as const : 'pendiente' as const,
       ...(formData.con_monto_semanal ? { con_monto_semanal: true } : {}),
+      // Pasó el tope de su categoría: el motivo le llega a Finanzas. (La columna solo se envía si hay motivo.)
+      ...(formData.motivo_sobre_tope?.trim() ? { motivo_sobre_tope: formData.motivo_sobre_tope.trim() } : {}),
       notas: formData.notas.trim() || null,
       semana,
       mes,
@@ -171,6 +173,7 @@ export function useGastos() {
       updates.estado = formData.con_monto_semanal ? 'pagado' : 'pendiente';
     }
     if (formData.notas !== undefined) updates.notas = formData.notas.trim() || null;
+    if (formData.motivo_sobre_tope?.trim()) updates.motivo_sobre_tope = formData.motivo_sobre_tope.trim();
 
     if (formData.fecha !== undefined) {
       updates.fecha = formData.fecha;
