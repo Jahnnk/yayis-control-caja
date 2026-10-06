@@ -76,9 +76,9 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
                 <td className="px-4 py-3 text-right font-medium whitespace-nowrap">{formatMonto(Number(g.monto))}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                    g.estado === 'pagado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    g.con_monto_semanal ? 'bg-blue-50 text-blue-700' : g.estado === 'pagado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                   }`}>
-                    {g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}
+                    {g.con_monto_semanal ? 'Monto semanal' : g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{g.profiles?.nombre ?? '-'}</td>

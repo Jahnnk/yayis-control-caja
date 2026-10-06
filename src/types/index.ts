@@ -53,6 +53,7 @@ export interface Gasto {
   sede_id: string;
   registrado_por: string;
   reposicion_id: string | null;
+  con_monto_semanal?: boolean;
   constancia_path: string | null;
   created_at: string;
   updated_at: string;
@@ -148,6 +149,8 @@ export interface GastoFormData {
   monto: string;
   estado: EstadoGasto;
   notas: string;
+  /** El administrador lo paga con el monto semanal de compras: resta de ese monto y NO se le repone. */
+  con_monto_semanal: boolean;
 }
 
 export interface ResumenSemanalData {

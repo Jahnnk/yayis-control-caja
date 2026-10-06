@@ -14,6 +14,8 @@ import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
+import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
+import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
 import { ESTADO_ITEM, diaSemanaDe, diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
@@ -126,6 +128,7 @@ export function RecepcionPage() {
   const [receptores, setReceptores] = useState<{ id: string; nombre: string }[]>([]);
   const [receptorId, setReceptorId] = useState('');
   const [monto, setMonto] = useState('');
+  const [versionSaldo, setVersionSaldo] = useState(0);
   const [fechaEntrega, setFechaEntrega] = useState(getTodayLima());
   // El dinero para compras se transfiere por Yape/Plin: «Cuentas» sale por defecto.
   const [metodo, setMetodo] = useState<MetodoPago>('cuentas');
@@ -162,15 +165,10 @@ export function RecepcionPage() {
 
   const categoriasSede = useMemo(() => categorias.filter(c => c.activa).map(c => ({ id: c.id, nombre: c.nombre })), [categorias]);
   const abiertas = entregas.filter(e => e.estado === 'abierta');
-  // Monto semanal que el administrador recibe de Gerencia y reparte a Compras según necesidad:
-  // cuánto ya entregó esta semana (lunes a domingo) y cuánto le queda por entregar.
-  // El «saldo que continúa» de la semana anterior no es dinero nuevo: no cuenta.
-  const montoSemanal = Number(sedeActiva?.monto_semanal_compras ?? 0);
-  const lunes = sumarDias(hoy, -((diaSemanaDe(hoy) + 6) % 7));
-  const entregadoEstaSemana = [...entregas, ...cerradas]
-    .filter(e => e.fecha >= lunes && !(e.notas ?? '').startsWith('Saldo que continúa'))
-    .reduce((t, e) => roundTwo(t + Number(e.monto)), 0);
-  const porEntregar = Math.max(roundTwo(montoSemanal - entregadoEstaSemana), 0);
+  // Monto semanal que el administrador recibe de Gerencia: lo reparte a Compras según necesidad y
+  // con él paga directamente lo que marca «Se paga con el monto semanal» (ver useSaldoSemanal).
+  const saldoSemanal = useSaldoSemanal(versionSaldo);
+  const porEntregar = Math.max(saldoSemanal.queda, 0);
   const enManosDeFabio = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
 
@@ -187,12 +185,13 @@ export function RecepcionPage() {
     setMonto('');
     setNota('');
     setFechaEntrega(hoy);
+    setVersionSaldo(v => v + 1);
   }
 
   async function handleAnular(e: EntregaDetalle) {
     const { error } = await anularEntrega(e);
     if (error) addToast(error, 'error');
-    else addToast('Entrega anulada', 'success');
+    else { addToast('Entrega anulada', 'success'); setVersionSaldo(v => v + 1); }
   }
 
   async function handleDevolver(e: EntregaDetalle) {
@@ -228,17 +227,14 @@ export function RecepcionPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={18} /> Entregar dinero a Compras</CardTitle>
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
-          {montoSemanal > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
-              <span>Monto semanal para compras: <strong>{formatMonto(montoSemanal)}</strong></span>
-              <span>Ya entregado esta semana: <strong>{formatMonto(entregadoEstaSemana)}</strong></span>
-              <span>Te queda por entregar: <strong className="text-yayis-dark">{formatMonto(porEntregar)}</strong></span>
+          <div className="mt-2">
+            <SaldoMontoSemanal saldo={saldoSemanal}>
               <span className="text-xs text-muted-foreground">Fabio tiene sin gastar: {formatMonto(enManosDeFabio)}</span>
               {porEntregar > 0 && (
                 <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
               )}
-            </div>
-          )}
+            </SaldoMontoSemanal>
+          </div>
         </CardHeader>
         <CardContent>
           {receptores.length === 0 ? (
