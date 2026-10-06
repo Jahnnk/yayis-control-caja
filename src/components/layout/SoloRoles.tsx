@@ -11,10 +11,10 @@ export function SoloRoles({ roles, children }: { roles: Rol[]; children: ReactNo
   return <>{children}</>;
 }
 
-/** Cada rol arranca donde trabaja: Gerencia en su panel, Compras en su ruta del día, el resto en el registro de gastos. */
+/** Cada rol arranca donde trabaja: Gerencia en la vista general, Compras en su ruta del día, el resto en el registro de gastos. */
 export function InicioSegunRol() {
   const { profile } = useAuth();
   if (!profile) return null;
-  const destino = profile.rol === 'owner' ? '/finanzas' : profile.rol === 'compras' ? '/ruta' : '/gastos';
+  const destino = profile.rol === 'owner' ? '/vista-general' : profile.rol === 'compras' ? '/ruta' : '/gastos';
   return <Navigate to={destino} replace />;
 }
