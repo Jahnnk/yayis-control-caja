@@ -1,8 +1,12 @@
 import { Menu, LogOut, MapPin } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { Button } from '@/components/ui/button';
 import { ROL_LABEL } from '@/lib/roles';
+
+// Pantallas que muestran las 3 sedes juntas (tienen su propio filtro de sede): el selector de arriba no aplica.
+const PANTALLAS_DE_TODAS_LAS_SEDES = ['/vista-general', '/finanzas', '/ruta', '/rendicion'];
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -11,6 +15,8 @@ interface HeaderProps {
 export function Header({ onMenuToggle }: HeaderProps) {
   const { profile, signOut } = useAuth();
   const { sedeId, sedeActiva, sedes, puedeCambiarSede, cambiarSede } = useSedeActiva();
+  const { pathname } = useLocation();
+  const todasLasSedes = PANTALLAS_DE_TODAS_LAS_SEDES.includes(pathname);
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-white border-b shadow-sm">
@@ -18,7 +24,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <button onClick={onMenuToggle} className="lg:hidden text-yayis-dark hover:text-yayis-green">
           <Menu size={22} />
         </button>
-        {puedeCambiarSede ? (
+        {puedeCambiarSede && !todasLasSedes ? (
           <label className="flex items-center gap-2">
             <MapPin size={16} className="text-yayis-green shrink-0" />
             <span className="sr-only">Sede</span>
@@ -36,7 +42,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         ) : (
           <span className="flex items-center gap-1.5 text-sm font-bold text-yayis-green">
             <MapPin size={16} className="shrink-0" />
-            {profile?.rol === 'compras' ? 'Todas las sedes' : sedeActiva?.nombre ?? 'Sin sede'}
+            {profile?.rol === 'compras' || todasLasSedes ? 'Todas las sedes' : sedeActiva?.nombre ?? 'Sin sede'}
           </span>
         )}
       </div>
