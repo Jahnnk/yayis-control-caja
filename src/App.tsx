@@ -16,6 +16,7 @@ import { RendicionPage } from '@/pages/RendicionPage';
 import { RecepcionPage } from '@/pages/RecepcionPage';
 import { FinanzasPage } from '@/pages/FinanzasPage';
 import { DeliverysPage } from '@/pages/DeliverysPage';
+import { VistaGeneralPage } from '@/pages/VistaGeneralPage';
 import { SoloRoles, InicioSegunRol } from '@/components/layout/SoloRoles';
 
 // El Resumen carga las librerias de graficos (pesadas); se descarga solo
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
               <Route path="/inicio" element={<InicioSegunRol />} />
+              <Route path="/vista-general" element={<SoloRoles roles={['owner']}><VistaGeneralPage /></SoloRoles>} />
               <Route path="/finanzas" element={<SoloRoles roles={['owner']}><FinanzasPage /></SoloRoles>} />
               <Route path="/gastos" element={<SoloRoles roles={['owner', 'admin', 'viewer']}><RegistroGastosPage /></SoloRoles>} />
               <Route path="/resumen" element={
