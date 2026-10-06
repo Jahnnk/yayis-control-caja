@@ -1,8 +1,9 @@
 import { roundTwo } from '@/lib/utils';
 import { resumirDeliverys, sumarCobrado, type ResumenDeliverys } from '@/lib/deliverys';
-import { diaSemanaDe, diferenciaDeCierre, sumarDias } from '@/lib/compras';
+import { diaSemanaDe, diferenciaDeCierre, formatCantidad, sumarDias } from '@/lib/compras';
 import type { DeliveryDetalle } from '@/hooks/useDeliverys';
 import type { CompraVista, EntregaVista, GastoVista, PedidoVista } from '@/hooks/useVistaGeneral';
+import type { TipoGasto } from '@/types';
 
 // Reglas de la Vista general. Están aquí, a la vista, para poder explicar cada número.
 //
@@ -85,7 +86,28 @@ export interface FilaDia {
   noHabia: number;
 }
 
-export interface FilaCategoria { nombre: string; monto: number; porcentaje: number }
+export interface FilaCategoria { nombre: string; tipo: TipoGasto | null; monto: number; porcentaje: number }
+
+/** Categoría de las compras que todavía no la tienen (se elige al cerrar la rendición; las de crédito no pasan por rendición). */
+export const SIN_RENDIR = 'Compras sin rendir aún';
+export const A_CREDITO = 'Compras a crédito';
+
+export type OrigenMovimiento = 'Gasto de caja' | 'Compra de Fabio' | 'Compra a crédito';
+
+/** Una línea de gasto: un gasto de caja o una compra. Es la misma lista para la pantalla y para el Excel. */
+export interface Movimiento {
+  id: string;
+  sedeId: string;
+  fecha: string;
+  origen: OrigenMovimiento;
+  categoria: string;
+  tipo: TipoGasto | null;
+  detalle: string;
+  productos: string;
+  comprobante: string;
+  pago: string;
+  monto: number;
+}
 
 export interface Rendicion {
   entrega: EntregaVista;
@@ -115,6 +137,7 @@ export interface VistaGeneral {
   porSede: FilaSede[];
   porDia: FilaDia[];
   porCategoria: FilaCategoria[];
+  movimientos: Movimiento[];
 }
 
 export function calcularVistaGeneral(
@@ -189,18 +212,38 @@ export function calcularVistaGeneral(
     };
   });
 
-  // Categorías: gastos de caja por su categoría; cada compra por la categoría de su gasto (si ya se rindió).
-  const porNombre = new Map<string, number>();
-  const sumar = (nombre: string, monto: number) => porNombre.set(nombre, roundTwo((porNombre.get(nombre) ?? 0) + Number(monto)));
-  for (const g of gastosCaja) sumar(g.categorias?.nombre ?? 'Sin categoría', g.monto);
-  for (const c of compras) {
-    const gasto = c.gasto_id ? gastoPorId.get(c.gasto_id) : undefined;
-    if (gasto?.categorias?.nombre) sumar(gasto.categorias.nombre, c.total);
-    else sumar(c.condicion_pago === 'credito' ? 'Compras a crédito' : 'Compras sin rendir aún', c.total);
-  }
+  // Movimientos: gastos de caja con su categoría; cada compra con la categoría de su gasto (si ya se rindió).
+  const metodo = (m: string | null) => (m === 'efectivo' ? 'Efectivo' : m === 'cuentas' ? 'Yape / transferencia' : '');
+  const movimientos: Movimiento[] = [
+    ...gastosCaja.map(g => ({
+      id: g.id, sedeId: g.sede_id, fecha: g.fecha, origen: 'Gasto de caja' as const,
+      categoria: g.categorias?.nombre ?? 'Sin categoría', tipo: g.categorias?.tipo_gasto ?? null,
+      detalle: g.descripcion, productos: '', comprobante: '', pago: metodo(g.metodo_pago), monto: Number(g.monto),
+    })),
+    ...compras.map(c => {
+      const gasto = c.gasto_id ? gastoPorId.get(c.gasto_id) : undefined;
+      const credito = c.condicion_pago === 'credito';
+      const comprobante = c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : `${c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${c.numero_comprobante ? ` ${c.numero_comprobante}` : ''}`;
+      return {
+        id: c.id, sedeId: c.sede_id, fecha: c.fecha, origen: credito ? 'Compra a crédito' as const : 'Compra de Fabio' as const,
+        categoria: gasto?.categorias?.nombre ?? (credito ? A_CREDITO : SIN_RENDIR), tipo: gasto?.categorias?.tipo_gasto ?? null,
+        detalle: c.proveedores?.nombre ?? 'Proveedor',
+        productos: c.compra_items.map(i => `${i.productos?.nombre ?? 'Producto'} ${formatCantidad(Number(i.cantidad))} ${i.unidad}`).join(', '),
+        comprobante, pago: credito ? 'A crédito' : metodo(c.metodo_pago), monto: Number(c.total),
+      };
+    }),
+  ].sort((a, b) => a.fecha.localeCompare(b.fecha));
+
   const totalGastado = roundTwo(totalCaja + totalCompras);
-  const porCategoria = Array.from(porNombre.entries())
-    .map(([nombre, monto]) => ({ nombre, monto, porcentaje: totalGastado > 0 ? Math.round((monto / totalGastado) * 1000) / 10 : 0 }))
+  const porNombre = new Map<string, FilaCategoria>();
+  for (const m of movimientos) {
+    const fila = porNombre.get(m.categoria) ?? { nombre: m.categoria, tipo: m.tipo, monto: 0, porcentaje: 0 };
+    fila.monto = roundTwo(fila.monto + m.monto);
+    fila.tipo = fila.tipo ?? m.tipo;
+    porNombre.set(m.categoria, fila);
+  }
+  const porCategoria = Array.from(porNombre.values())
+    .map(f => ({ ...f, porcentaje: totalGastado > 0 ? Math.round((f.monto / totalGastado) * 1000) / 10 : 0 }))
     .sort((a, b) => b.monto - a.monto);
 
   return {
@@ -214,6 +257,6 @@ export function calcularVistaGeneral(
     rendiciones,
     listas, listasAtrasadas, sinComprar,
     deliverys, resumenDeliverys: resumirDeliverys(deliverys),
-    porSede, porDia, porCategoria,
+    porSede, porDia, porCategoria, movimientos,
   };
 }
