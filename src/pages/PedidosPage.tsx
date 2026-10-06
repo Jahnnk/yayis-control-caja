@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { PedidoEditor } from '@/components/compras/PedidoEditor';
+import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
+import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
+import { roundTwo } from '@/lib/utils';
 import { getTodayLima, DIAS_SEMANA } from '@/lib/dates';
 import { ESTADO_ITEM, ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra } from '@/lib/compras';
 import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from 'lucide-react';
@@ -17,7 +20,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
   const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido } = usePedidos();
-  const { productos, obtenerOCrear, recordarProveedor, recordarUnidad } = useProductos();
+  const { productos, obtenerOCrear, recordarProveedor, recordarUnidad, recordarCategoria } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
 
@@ -26,6 +29,22 @@ export function PedidosPage() {
   const nombresDias = DIAS_SEMANA.filter(d => diasCompra.includes(d.valor)).map(d => d.largo);
 
   const abiertos = pedidos.filter(p => p.estado === 'borrador' || p.estado === 'enviado');
+
+  // Presupuesto: precio habitual de lo que hay en las listas abiertas, y lo estimado de cada lista
+  // por categoría (cada lista ve también lo que ocupan las OTRAS del mismo mes que no se compran aún).
+  const habituales = usePreciosHabituales(abiertos.flatMap(p => p.pedido_items.map(i => i.producto_id)));
+  const estimadoDe = useMemo(() => {
+    const categoriaDe = (id: string) => productos.find(p => p.id === id)?.categoria_presupuesto;
+    return new Map(abiertos.map(p => [p.id, estimarPorCategoria(estimarLineasPedido(p.pedido_items, categoriaDe, habituales)).porCategoria]));
+  }, [abiertos, productos, habituales]);
+  function otrosPorCategoria(pedidoId: string, mes: string) {
+    const suma = new Map<string, number>();
+    for (const p of abiertos) {
+      if (p.id === pedidoId || mesDe(p.fecha_compra) !== mes) continue;
+      for (const [c, v] of estimadoDe.get(p.id) ?? []) suma.set(c, roundTwo((suma.get(c) ?? 0) + v));
+    }
+    return suma;
+  }
   const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado');
 
   // Fechas de compra disponibles para una lista nueva: las proximas del calendario
@@ -84,6 +103,9 @@ export function PedidosPage() {
           proveedores={proveedores}
           onRecordarProveedor={recordarProveedor}
           onRecordarUnidad={recordarUnidad}
+          onRecordarCategoria={recordarCategoria}
+          habituales={habituales}
+          otrosPorCategoria={otrosPorCategoria(p.id, mesDe(p.fecha_compra))}
           obtenerOCrear={obtenerOCrear}
           onAgregar={agregarItem}
           onActualizar={actualizarItem}

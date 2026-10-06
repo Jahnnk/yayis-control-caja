@@ -17,6 +17,7 @@ import { RecepcionPage } from '@/pages/RecepcionPage';
 import { FinanzasPage } from '@/pages/FinanzasPage';
 import { DeliverysPage } from '@/pages/DeliverysPage';
 import { VistaGeneralPage } from '@/pages/VistaGeneralPage';
+import { PresupuestoPage } from '@/pages/PresupuestoPage';
 import { SoloRoles, InicioSegunRol } from '@/components/layout/SoloRoles';
 
 // El Resumen carga las librerias de graficos (pesadas); se descarga solo
@@ -45,6 +46,7 @@ export default function App() {
                   </Suspense>
                 </SoloRoles>
               } />
+              <Route path="/presupuesto" element={<SoloRoles roles={['owner', 'admin', 'viewer']}><PresupuestoPage /></SoloRoles>} />
               <Route path="/pedidos" element={<SoloRoles roles={['owner', 'admin']}><PedidosPage /></SoloRoles>} />
               <Route path="/ruta" element={<SoloRoles roles={['owner', 'compras']}><RutaComprasPage /></SoloRoles>} />
               <Route path="/proveedores" element={<SoloRoles roles={['owner', 'admin', 'compras']}><ProveedoresPage /></SoloRoles>} />

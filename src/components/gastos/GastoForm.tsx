@@ -4,6 +4,10 @@ import { useGastos, validarConstancia } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
+import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
+import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
+import { mesDe, pasaElTope } from '@/lib/presupuesto';
+import { formatMonto } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +28,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
   const { addToast } = useToast();
 
   const isOwner = profile?.rol === 'owner';
-  const { sedeActiva } = useSedeActiva();
+  const { sedeActiva, sedeId } = useSedeActiva();
   // Un gasto ya repuesto por Gerencia no puede pasar a pagarse con el monto semanal.
   const yaRepuesto = !!editData && editData.estado === 'pagado' && !editData.con_monto_semanal;
   const today = getTodayLima();
@@ -40,6 +44,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     con_monto_semanal: editData?.con_monto_semanal ?? false,
   });
   const [saving, setSaving] = useState(false);
+  const [motivoTope, setMotivoTope] = useState('');
   const [constanciaFile, setConstanciaFile] = useState<File | null>(null);
   const [eliminarConstancia, setEliminarConstancia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,17 +106,32 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  // Presupuesto: la barra de la categoría del gasto, con este gasto encima (rayado).
+  const { uso: usoMes, recargar: recargarPresupuesto } = usePresupuestoCaja(sedeId, mesDe(form.fecha || today));
+  const categoriaElegida = categorias.find(c => c.id === form.categoria_id);
+  const usoCategoria = categoriaElegida?.categoria_presupuesto
+    ? usoMes.find(u => u.categoria === categoriaElegida.categoria_presupuesto)
+    : undefined;
+  // Al editar, el gasto ya está contado en lo gastado: solo se suma la diferencia.
+  const yaContado = editData && editData.categoria_id === form.categoria_id && mesDe(editData.fecha) === mesDe(form.fecha)
+    ? parseFloat(editData.monto) || 0 : 0;
+  const montoExtra = Math.max(0, (parseFloat(form.monto) || 0) - yaContado);
+  const chequeoTope = pasaElTope(usoCategoria, montoExtra);
+  const pideMotivo = !!chequeoTope?.pasa && montoExtra > 0;
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.descripcion.trim()) return addToast('La descripcion es obligatoria', 'error');
     if (!form.categoria_id) return addToast('Selecciona una categoria', 'error');
     if (!form.monto || parseFloat(form.monto) <= 0) return addToast('El monto debe ser mayor a 0', 'error');
+    if (pideMotivo && !motivoTope.trim()) return addToast('Este gasto pasa el tope del presupuesto: escribe por qué', 'error');
+    const datos: GastoFormData = { ...form, motivo_sobre_tope: pideMotivo ? motivoTope.trim() : undefined };
 
     setSaving(true);
 
     if (editData?.id) {
       // Solo se envía la casilla si cambió (cambiarla cambia también si se le repone o no).
-      const cambios: Partial<GastoFormData> = { ...form };
+      const cambios: Partial<GastoFormData> = { ...datos };
       if (form.con_monto_semanal === editData.con_monto_semanal) delete cambios.con_monto_semanal;
       const { error } = await updateGasto(editData.id, cambios, {
         file: constanciaFile,
@@ -121,11 +141,13 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
       if (error) addToast(`Error: ${error}`, 'error');
       else {
         addToast('Gasto actualizado', 'success');
+        setMotivoTope('');
+        recargarPresupuesto();
         onCancelEdit?.();
         onSaved();
       }
     } else {
-      const { error } = await createGasto(form, constanciaFile);
+      const { error } = await createGasto(datos, constanciaFile);
       if (error) addToast(`Error: ${error}`, 'error');
       else {
         addToast('Gasto registrado', 'success');
@@ -141,6 +163,8 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
           con_monto_semanal: false,
         }));
         clearConstancia();
+        setMotivoTope('');
+        recargarPresupuesto();
         onSaved();
         // Reload daily summary
         const reloader = (window as unknown as Record<string, unknown>).__reloadResumenDiario;
@@ -236,6 +260,28 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
             className="mt-1"
           />
         </div>
+
+        {/* Presupuesto de la categoría (los topes los aprueba Gerencia en Cash Control) */}
+        {usoCategoria?.tope && (
+          <div className={`sm:col-span-2 lg:col-span-3 rounded-lg border p-3 ${pideMotivo ? 'border-red-300 bg-red-50/60' : 'bg-yayis-cream'}`}>
+            <BarraPresupuesto uso={usoCategoria} extra={montoExtra} etiquetaExtra="este gasto" />
+            {pideMotivo && (
+              <div className="mt-3">
+                <label className="text-sm font-medium text-red-800" htmlFor="motivo-tope">
+                  Este gasto pasa el tope de {formatMonto(usoCategoria.tope)}. ¿Por qué es necesario? *
+                </label>
+                <Input
+                  id="motivo-tope"
+                  placeholder="Ej: se malogró la licuadora y no se puede esperar al próximo mes"
+                  value={motivoTope}
+                  onChange={e => setMotivoTope(e.target.value)}
+                  className="mt-1 bg-white"
+                />
+                <p className="mt-1 text-xs text-red-700">Se puede registrar igual; Gerencia de Finanzas verá el motivo en sus alertas.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Monto semanal */}
         {(sedeActiva?.monto_semanal_compras ?? 0) > 0 && (

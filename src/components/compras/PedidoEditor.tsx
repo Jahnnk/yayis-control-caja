@@ -6,9 +6,30 @@ import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AYUDA_UNIDAD_SOL, ESTADO_ITEM, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
-import { AlertTriangle, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { AlertTriangle, Gauge, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
+import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
+import { CATEGORIAS_DEL_ADMIN, CATEGORIAS_PRESUPUESTO, estimarLineasPedido, estimarPorCategoria, mesDe, nombreCategoria, type UsoCategoria } from '@/lib/presupuesto';
+import { formatMonto, roundTwo } from '@/lib/utils';
+import type { PrecioHabitual } from '@/lib/precios';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
+
+const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
+
+/** Las opciones de categoría: primero las que suele manejar el administrador. */
+function OpcionesCategoria() {
+  return (
+    <>
+      <optgroup label="Las de siempre">
+        {CATEGORIAS_DEL_ADMIN.map(c => <option key={c} value={c}>{nombreCategoria(c)}</option>)}
+      </optgroup>
+      <optgroup label="Otras">
+        {OTRAS_CATEGORIAS.map(c => <option key={c} value={c}>{nombreCategoria(c)}</option>)}
+      </optgroup>
+    </>
+  );
+}
 
 interface Props {
   pedido: PedidoConItems;
@@ -16,15 +37,20 @@ interface Props {
   proveedores: Proveedor[];
   onRecordarProveedor: (productoId: string, proveedorId: string) => Promise<{ error: string | null }>;
   onRecordarUnidad: (productoId: string, unidad: string) => Promise<{ error: string | null }>;
+  onRecordarCategoria: (productoId: string, categoria: string | null) => Promise<{ error: string | null }>;
+  /** Precio habitual de cada producto (clave producto|unidad), para estimar lo que costará la lista. */
+  habituales: Map<string, PrecioHabitual>;
+  /** Lo estimado de las OTRAS listas de la sede del mismo mes que todavía no se compran, por categoría. */
+  otrosPorCategoria: Map<string, number>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
   onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
-  onEnviar: (pedidoId: string) => Promise<{ error: string | null }>;
+  onEnviar: (pedidoId: string, motivoSobreTope?: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -32,6 +58,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const [nota, setNota] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [urgenteNuevo, setUrgenteNuevo] = useState(false);
+  const [categoriaNueva, setCategoriaNueva] = useState('');
+  const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
+  const [motivoTope, setMotivoTope] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [confirmCancelar, setConfirmCancelar] = useState(false);
 
@@ -50,6 +79,20 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     return !!habitual && proveedoresActivos.some(p => p.id === habitual);
   });
 
+  // Presupuesto: lo que costaría lo pendiente de esta lista (precio habitual) por categoría,
+  // sobre lo ya gastado en el mes y lo estimado de las otras listas sin comprar.
+  const { uso, hayTopes } = usePresupuestoCaja(pedido.sede_id, mesDe(pedido.fecha_compra));
+  const categoriaDe = (productoId: string) => productos.find(p => p.id === productoId)?.categoria_presupuesto;
+  const lineasEstimadas = estimarLineasPedido(items, categoriaDe, habituales);
+  const estimado = estimarPorCategoria(lineasEstimadas);
+  const totalEstimado = roundTwo([...estimado.porCategoria.values()].reduce((s, v) => s + v, 0));
+  const barras = [...estimado.porCategoria.entries()].map(([categoria, esta]) => {
+    const u: UsoCategoria = uso.find(x => x.categoria === categoria) ?? { categoria, tope: null, presupuestoTotal: null, gastado: 0, enviadoEl: null };
+    const otros = otrosPorCategoria.get(categoria) ?? 0;
+    return { uso: u, esta, otros, extra: roundTwo(esta + otros) };
+  }).sort((a, b) => (b.uso.tope ? (b.uso.gastado + b.extra) / b.uso.tope : -1) - (a.uso.tope ? (a.uso.gastado + a.extra) / a.uso.tope : -1));
+  const excedidas = barras.filter(b => b.uso.tope && b.uso.gastado + b.extra > b.uso.tope);
+
   function handleNombre(texto: string) {
     const valor = texto.toLocaleUpperCase('es-PE'); // los productos se escriben en MAYÚSCULAS
     setNombre(valor);
@@ -57,6 +100,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (conocido) {
       setUnidad(conocido.unidad);
       setProveedorId(conocido.proveedor_id ?? '');
+      setCategoriaNueva(conocido.categoria_presupuesto ?? '');
     }
   }
 
@@ -89,6 +133,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
     if (proveedorId && proveedorId !== producto.proveedor_id) await recordar(producto.id, producto.nombre, proveedorId);
     if (unidadFinal !== producto.unidad) await recordarUnidadDe(producto.id, producto.nombre, unidadFinal);
+    if (categoriaNueva && categoriaNueva !== (producto.categoria_presupuesto ?? '')) await recordarCategoriaDe(producto.id, producto.nombre, categoriaNueva);
+    setCategoriaNueva('');
     setNombre('');
     setCantidad('');
     setNota('');
@@ -115,6 +161,16 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     const { error } = await onRecordarUnidad(productoId, unidadElegida);
     if (error) return addToast(`Se guardó en esta lista, pero no se pudo recordar la unidad: ${error}`, 'warning');
     addToast(`Recordado: ${nombreProducto} se pedirá en «${unidadElegida}»`, 'success');
+  }
+
+  async function recordarCategoriaDe(productoId: string, nombreProducto: string, categoria: string | null) {
+    const { error } = await onRecordarCategoria(productoId, categoria);
+    if (error) return addToast(`No se pudo guardar la categoría: ${error}`, 'warning');
+    addToast(categoria ? `Recordado: ${nombreProducto} va en «${nombreCategoria(categoria)}»` : `${nombreProducto} quedó sin categoría`, 'success');
+  }
+
+  async function handleCategoria(productoId: string, nombreProducto: string, valor: string) {
+    await recordarCategoriaDe(productoId, nombreProducto, valor || null);
   }
 
   async function handleUnidad(itemId: string, valor: string) {
@@ -161,9 +217,19 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   }
 
   async function handleEnviar() {
-    const { error } = await onEnviar(pedido.id);
+    // Si la lista pasa el tope de alguna categoría, primero se pide el motivo (le llega a Finanzas).
+    if (excedidas.length > 0 && !pidiendoMotivo) {
+      setPidiendoMotivo(true);
+      return;
+    }
+    if (excedidas.length > 0 && !motivoTope.trim()) return addToast('Escribe por qué la lista pasa el tope', 'error');
+    const { error } = await onEnviar(pedido.id, excedidas.length > 0 ? motivoTope : undefined);
     if (error) addToast(`Error: ${error}`, 'error');
-    else addToast('Lista enviada a Compras', 'success');
+    else {
+      addToast('Lista enviada a Compras', 'success');
+      setPidiendoMotivo(false);
+      setMotivoTope('');
+    }
   }
 
   async function handleCancelar() {
@@ -252,6 +318,13 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             </Select>
           </div>
           <div className="col-span-2 sm:col-span-7">
+            <label className="text-xs font-medium" htmlFor={`cat-${pedido.id}`}>Categoría del presupuesto</label>
+            <Select id={`cat-${pedido.id}`} value={categoriaNueva} onChange={e => setCategoriaNueva(e.target.value)} className="mt-1">
+              <option value="">Elegir…</option>
+              <OpcionesCategoria />
+            </Select>
+          </div>
+          <div className="col-span-2 sm:col-span-12">
             <label className="text-xs font-medium" htmlFor={`nota-${pedido.id}`}>Nota (opcional)</label>
             <Input
               id={`nota-${pedido.id}`}
@@ -288,6 +361,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                   <th className="py-2 font-medium">Producto</th>
                   <th className="py-2 font-medium">Cantidad</th>
                   <th className="py-2 font-medium">Proveedor</th>
+                  <th className="py-2 font-medium">Categoría</th>
+                  <th className="py-2 text-right font-medium">Estimado</th>
                   <th className="py-2 text-center font-medium">⚡ Urgente</th>
                   <th className="py-2 font-medium">Nota</th>
                   {enviado && <th className="py-2 font-medium">Estado</th>}
@@ -344,6 +419,28 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                         <span className="text-xs">{i.proveedores?.nombre ?? '—'}</span>
                       )}
                     </td>
+                    <td className="py-2 pr-2">
+                      {i.estado === 'pendiente' ? (
+                        <Select
+                          className={`h-8 w-40 text-xs ${categoriaDe(i.producto_id) ? '' : 'border-amber-400'}`}
+                          value={categoriaDe(i.producto_id) ?? ''}
+                          onChange={e => handleCategoria(i.producto_id, i.productos?.nombre ?? 'El producto', e.target.value)}
+                          aria-label={`Categoría de ${i.productos?.nombre ?? 'producto'}`}
+                        >
+                          <option value="">Elegir…</option>
+                          <OpcionesCategoria />
+                        </Select>
+                      ) : (
+                        <span className="text-xs">{categoriaDe(i.producto_id) ? nombreCategoria(categoriaDe(i.producto_id)!) : '—'}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 text-right text-xs tabular-nums text-muted-foreground">
+                      {(() => {
+                        if (i.estado !== 'pendiente') return '';
+                        const h = habituales.get(`${i.producto_id}|${i.unidad}`);
+                        return h ? formatMonto(roundTwo(h.unitario * Number(i.cantidad))) : '—';
+                      })()}
+                    </td>
                     <td className="py-2 pr-2 text-center">
                       {i.estado === 'pendiente' ? (
                         <input
@@ -379,6 +476,51 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
           </div>
         )}
 
+        {/* Presupuesto: cuánto usaría esta lista de cada tope */}
+        {lineasEstimadas.length > 0 && (
+          <div className="space-y-3 rounded-lg border bg-yayis-cream p-3">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-yayis-dark">
+              <Gauge size={16} /> Esta lista cuesta unos <strong>{formatMonto(totalEstimado)}</strong>
+              <span className="text-xs font-normal text-muted-foreground">(con el precio habitual de cada producto)</span>
+            </p>
+            {hayTopes ? (
+              barras.filter(b => b.uso.tope).map(b => (
+                <BarraPresupuesto key={b.uso.categoria} uso={b.uso} extra={b.extra}
+                  etiquetaExtra={b.otros > 0 ? `esta lista y otras sin comprar (estimado)` : 'esta lista (estimado)'} />
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">Todavía no hay presupuesto aprobado para este mes: cuando Gerencia lo apruebe, aquí verás cuánto usa la lista de cada tope.</p>
+            )}
+            {hayTopes && barras.some(b => !b.uso.tope) && (
+              <p className="text-xs text-muted-foreground">
+                Sin tope este mes: {barras.filter(b => !b.uso.tope).map(b => `${nombreCategoria(b.uso.categoria)} (${formatMonto(b.esta)})`).join(', ')}.
+              </p>
+            )}
+            {(estimado.sinCategoria > 0 || estimado.sinPrecio > 0) && (
+              <p className="text-xs text-amber-800">
+                {estimado.sinCategoria > 0 && <>{estimado.sinCategoria} producto(s) sin categoría: elígela en la columna <strong>Categoría</strong>. </>}
+                {estimado.sinPrecio > 0 && <>{estimado.sinPrecio} producto(s) todavía sin precio conocido (no se compraron antes en esa unidad): no entran en el estimado.</>}
+              </p>
+            )}
+          </div>
+        )}
+
+        {pidiendoMotivo && excedidas.length > 0 && pedido.estado === 'borrador' && (
+          <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3">
+            <p className="text-sm font-medium text-red-800">
+              Esta lista pasa el tope de {excedidas.map(b => nombreCategoria(b.uso.categoria)).join(', ')}. ¿Por qué es necesaria igual?
+            </p>
+            <Input
+              placeholder="Ej: viene un pedido grande de tortas para el fin de semana"
+              value={motivoTope}
+              onChange={e => setMotivoTope(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEnviar()}
+              className="bg-white"
+            />
+            <p className="text-xs text-red-700">Se puede enviar igual; Gerencia de Finanzas verá el motivo. También puedes quitar o bajar productos.</p>
+          </div>
+        )}
+
         {urgentes > 0 && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
             ⚡ {urgentes === 1 ? '1 producto urgente' : `${urgentes} productos urgentes`}: Compras {pedido.estado === 'borrador' ? 'los verá primero cuando envíes la lista' : 'ya los ve primero en su ruta'}.
@@ -411,8 +553,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
               {pedido.estado === 'borrador' ? 'Descartar lista' : 'Cancelar pedido'}
             </Button>
             {pedido.estado === 'borrador' && (
-              <Button size="sm" onClick={handleEnviar} disabled={items.length === 0}>
-                <Send size={14} className="mr-1" /> Enviar a Compras
+              <Button size="sm" onClick={handleEnviar} disabled={items.length === 0}
+                className={pidiendoMotivo && excedidas.length > 0 ? 'bg-red-600 hover:bg-red-700' : ''}>
+                <Send size={14} className="mr-1" /> {pidiendoMotivo && excedidas.length > 0 ? 'Enviar igual' : 'Enviar a Compras'}
               </Button>
             )}
           </div>

@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Loading } from '@/components/ui/loading';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { abrirEvidencia } from '@/lib/evidencias';
+import { useAlertasPresupuesto } from '@/hooks/useAlertasPresupuesto';
 import { calcularAlertas, gastadoEntrega, itemACompraDePrecio, DIAS_AVISO_VENCIMIENTO } from '@/lib/alertas';
 import { calcularCambiosPrecio, formatPorcentaje, UMBRAL_VARIACION } from '@/lib/precios';
 import { fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
@@ -75,7 +76,8 @@ export function FinanzasPage() {
   const [pagando, setPagando] = useState<CompraFinanzas | null>(null);
   const hoy = getTodayLima();
 
-  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, hoy]);
+  const presupuesto = useAlertasPresupuesto(hoy);
+  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, presupuesto }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, presupuesto, hoy]);
   const altas = alertas.filter(a => a.nivel === 'alta').length;
 
   const totalPorPagar = porPagar.reduce((s, c) => roundTwo(s + Number(c.total)), 0);
