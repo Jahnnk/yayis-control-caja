@@ -217,6 +217,8 @@ Pantalla `/vista-general` (`src/pages/VistaGeneralPage.tsx`), la primera que ve 
 - **Muestra:** números clave, por sede, gastos por categoría, día por día (si es más de un día), listas de los administradores, productos sin comprar, compras de Fabio, dinero entregado y rendiciones, deliverys y gastos de caja. Las alertas son de "ahora" (las mismas del Panel de Finanzas).
 - **Reglas de los números** en `src/lib/vista-general.ts`: una compra se cuenta UNA vez (el gasto que crea `cerrar_entrega` se excluye usando `compras.gasto_id`); total gastado = gastos de caja + compras (contado y crédito); "entregado a Fabio" no cuenta el saldo que continúa.
 - Solo lectura; sin cambios en la base de datos. Gastos se traen paginados (Supabase da máximo 1000 filas por consulta).
+- **Excel de gastos por categoría (pedido de Kelly, 5-oct-2026):** botón «Descargar Excel» en la Vista general, con el periodo y la sede elegidos (`src/lib/exportGastosCategoria.ts`). Hojas: Resumen (categoría × sede, con fijo/variable y totales por tipo), una hoja por sede (detalle agrupado por categoría con subtotales) y Detalle (todo en una tabla con filtros). Sale de `movimientos` en `src/lib/vista-general.ts`, la misma lista que la pantalla. Incluye gastos de caja + compras de Fabio; las compras sin rendir y a crédito todavía no tienen categoría y salen aparte.
+- **Gasto fijo o variable:** columna `categorias.tipo_gasto` (`'fijo' | 'variable' | null` = por definir), `supabase/tipo_categoria.sql`. Se elige en Configuración → Categorías y la app lo cambia en la categoría del mismo nombre de las 3 sedes.
 
 ### Estado
 - App estable y en uso. Deuda con Luis cuadrada al 8-jul-2026. Fase 1 multi-sede en producción (29-sep-2026).

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { DeliveryDetalle } from '@/hooks/useDeliverys';
-import type { CompraDetalle, Entrega, Gasto, PedidoConItems } from '@/types';
+import type { CompraDetalle, Entrega, Gasto, PedidoConItems, TipoGasto } from '@/types';
 
 export interface GastoVista extends Pick<Gasto, 'id' | 'fecha' | 'monto' | 'metodo_pago' | 'descripcion' | 'sede_id' | 'categoria_id' | 'estado'> {
-  categorias: { nombre: string } | null;
+  categorias: { nombre: string; tipo_gasto?: TipoGasto | null } | null;
 }
 
 export interface CompraVista extends CompraDetalle {
@@ -28,7 +28,7 @@ async function gastosDelRango(desde: string, hasta: string) {
   for (let desdeFila = 0; ; desdeFila += PAGINA) {
     const { data, error } = await supabase
       .from('gastos')
-      .select('id, fecha, monto, metodo_pago, descripcion, sede_id, categoria_id, estado, categorias(nombre)')
+      .select('id, fecha, monto, metodo_pago, descripcion, sede_id, categoria_id, estado, categorias(nombre, tipo_gasto)')
       .gte('fecha', desde).lte('fecha', hasta)
       .order('fecha', { ascending: true }).order('id', { ascending: true })
       .range(desdeFila, desdeFila + PAGINA - 1);

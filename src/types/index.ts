@@ -25,12 +25,16 @@ export interface Profile {
   created_at: string;
 }
 
+/** Si la categoría es gasto fijo o variable. Null = todavía por definir. */
+export type TipoGasto = 'fijo' | 'variable';
+
 export interface Categoria {
   id: string;
   nombre: string;
   sede_id: string;
   activa: boolean;
   orden: number;
+  tipo_gasto?: TipoGasto | null;
   created_at: string;
 }
 

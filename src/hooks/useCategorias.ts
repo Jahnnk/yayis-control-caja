@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
-import type { Categoria } from '@/types';
+import type { Categoria, TipoGasto } from '@/types';
 
 export function useCategorias() {
   const { sedeId } = useSedeActiva();
@@ -51,5 +51,13 @@ export function useCategorias() {
     return { error: null };
   }, [fetchCategorias]);
 
-  return { categorias, loading, fetchCategorias, createCategoria, updateCategoria };
+  /** El tipo (fijo/variable) se cambia en la categoría del mismo nombre de las 3 sedes, para que se lea igual en todas. */
+  const updateTipoGasto = useCallback(async (nombre: string, tipo: TipoGasto | null) => {
+    const { error } = await supabase.from('categorias').update({ tipo_gasto: tipo }).eq('nombre', nombre);
+    if (error) return { error: error.message };
+    await fetchCategorias(false);
+    return { error: null };
+  }, [fetchCategorias]);
+
+  return { categorias, loading, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto };
 }

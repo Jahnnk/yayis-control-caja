@@ -8,7 +8,9 @@ import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select-native';
 import { formatMonto } from '@/lib/utils';
+import type { TipoGasto } from '@/types';
 import { DIAS_SEMANA } from '@/lib/dates';
 import { Plus, Check, X, ToggleLeft, ToggleRight, MapPin, CalendarDays } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
@@ -16,7 +18,7 @@ import { Navigate } from 'react-router-dom';
 export function ConfiguracionPage() {
   const { profile } = useAuth();
   const { sedeId, sedeActiva, recargarSedes } = useSedeActiva();
-  const { categorias, fetchCategorias, createCategoria, updateCategoria } = useCategorias();
+  const { categorias, fetchCategorias, createCategoria, updateCategoria, updateTipoGasto } = useCategorias();
   const { fondos, updateFondos, fetchHistorial, historialFondos } = useFondos();
   const { sedes, createSede, updateSede } = useSedes();
   const { addToast } = useToast();
@@ -81,6 +83,12 @@ export function ConfiguracionPage() {
     }
   }
 
+  async function handleTipoGasto(nombre: string, valor: string) {
+    const { error } = await updateTipoGasto(nombre, valor === '' ? null : valor as TipoGasto);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast(`«${nombre}» quedó como ${valor === '' ? 'por definir' : `gasto ${valor}`} en las 3 sedes`, 'success');
+  }
+
   async function handleToggleCategoria(id: string, activa: boolean) {
     const { error } = await updateCategoria(id, { activa: !activa });
     if (error) addToast(`Error: ${error}`, 'error');
@@ -140,6 +148,7 @@ export function ConfiguracionPage() {
       <Card>
         <CardHeader>
           <CardTitle>Categorías de gasto{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
+          <p className="text-xs text-muted-foreground">El tipo (gasto fijo o variable) se usa en el Excel de gastos por categoría y se aplica igual en las 3 sedes.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -178,6 +187,16 @@ export function ConfiguracionPage() {
                       {c.nombre}
                     </span>
                     <div className="flex items-center gap-2">
+                      <Select
+                        value={c.tipo_gasto ?? ''}
+                        onChange={e => handleTipoGasto(c.nombre, e.target.value)}
+                        className={`h-8 w-32 text-xs ${c.tipo_gasto ? '' : 'border-amber-400 text-amber-800'}`}
+                        aria-label={`Tipo de gasto de ${c.nombre}`}
+                      >
+                        <option value="">Por definir</option>
+                        <option value="fijo">Gasto fijo</option>
+                        <option value="variable">Gasto variable</option>
+                      </Select>
                       <Button
                         size="sm"
                         variant="ghost"

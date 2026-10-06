@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
-import { ArrowRight, BellRing, Bike, CalendarDays, ChevronDown, ClipboardList, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
+import { ArrowRight, BellRing, Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 /** Sección plegada: el resumen siempre a la vista, el detalle al abrirla. */
 function Desplegable({ icono, titulo, resumen, children }: { icono: ReactNode; titulo: string; resumen: ReactNode; children: ReactNode }) {
@@ -52,6 +53,8 @@ export function VistaGeneralPage() {
   const [clave, setClave] = useState<ClavePeriodo>('hoy');
   const [periodo, setPeriodo] = useState<Periodo>({ desde: hoy, hasta: hoy });
   const [sedeFiltro, setSedeFiltro] = useState('');
+  const [exportando, setExportando] = useState(false);
+  const { addToast } = useToast();
   const datos = useVistaGeneral(periodo.desde, periodo.hasta);
   const finanzas = useFinanzas();
 
@@ -82,13 +85,37 @@ export function VistaGeneralPage() {
   const maxCategoria = v.porCategoria[0]?.monto ?? 0;
   const listasActivas = v.listas.filter(p => p.estado !== 'cancelado');
 
+  async function descargarExcel() {
+    setExportando(true);
+    try {
+      const { exportarGastosPorCategoria } = await import('@/lib/exportGastosCategoria');
+      await exportarGastosPorCategoria(v.movimientos, {
+        periodo: tituloPeriodo,
+        sedes: sedes.filter(s => !sedeFiltro || s.id === sedeFiltro).map(s => ({ id: s.id, nombre: s.nombre })),
+        desde: periodo.desde,
+        hasta: periodo.hasta,
+        generado: hoy,
+      });
+    } catch (e) {
+      console.error(e);
+      addToast('No se pudo generar el Excel. Intenta de nuevo.', 'error');
+    }
+    setExportando(false);
+  }
+
   if (datos.loading && datos.gastos.length === 0 && datos.compras.length === 0) return <Loading text="Cargando la vista general..." />;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-yayis-dark">Vista general</h1>
-        <p className="text-sm text-muted-foreground">{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)} · {sedeFiltro ? sedes.find(s => s.id === sedeFiltro)?.nombre : 'las 3 sedes'}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-yayis-dark">Vista general</h1>
+          <p className="text-sm text-muted-foreground">{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)} · {sedeFiltro ? sedes.find(s => s.id === sedeFiltro)?.nombre : 'las 3 sedes'}</p>
+        </div>
+        <Button variant="outline" onClick={descargarExcel} disabled={exportando || datos.loading} title="Gastos del periodo por sede y categoría, con gasto fijo o variable">
+          {exportando ? <Loader2 size={16} className="mr-1 animate-spin" /> : <Download size={16} className="mr-1" />}
+          Descargar Excel
+        </Button>
       </div>
 
       {/* Filtros */}
@@ -194,7 +221,7 @@ export function VistaGeneralPage() {
                 {v.porCategoria.map(c => (
                   <div key={c.nombre} title={`${c.nombre}: ${formatMonto(c.monto)} (${c.porcentaje}%)`}>
                     <div className="flex justify-between gap-2 text-sm">
-                      <span className="truncate">{c.nombre}</span>
+                      <span className="truncate">{c.nombre}{c.tipo && <span className="ml-1.5 text-xs text-muted-foreground">· {c.tipo === 'fijo' ? 'fijo' : 'variable'}</span>}</span>
                       <span className="shrink-0"><strong>{formatMonto(c.monto)}</strong> <span className="text-xs text-muted-foreground">{c.porcentaje}%</span></span>
                     </div>
                     <div className="mt-0.5 h-2 w-full rounded-full bg-gray-100">
