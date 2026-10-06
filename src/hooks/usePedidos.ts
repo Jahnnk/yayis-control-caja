@@ -130,9 +130,31 @@ export function usePedidos() {
       .eq('id', pedidoId)
       .eq('estado', 'comprado');
     if (error) return { error: error.message };
+    // «Recibido conforme» de toda la lista = todos sus productos comprados quedan entregados.
+    await supabase.from('pedido_items')
+      .update({ entregado_at: new Date().toISOString() })
+      .eq('pedido_id', pedidoId).eq('estado', 'comprado').is('entregado_at', null);
     await fetchPedidos();
     return { error: null };
   }, [profile, fetchPedidos]);
 
-  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion };
+  /**
+   * El administrador marca (o desmarca) que un producto ya llegó a su sede y lo verificó.
+   * La base hace cumplir que solo lo haga el administrador y que el producto ya esté comprado;
+   * y cuando todo lo comprado de la lista está entregado, la lista pasa sola a «recibido».
+   */
+  const marcarEntregado = useCallback(async (itemId: string, entregado: boolean) => {
+    const { data, error } = await supabase
+      .from('pedido_items')
+      .update({ entregado_at: entregado ? new Date().toISOString() : null })
+      .eq('id', itemId)
+      .eq('estado', 'comprado')
+      .select('id');
+    if (error) return { error: error.message };
+    if (!data || data.length === 0) return { error: 'Ese producto ya no está comprado. Recarga la pantalla.' };
+    await fetchPedidos();
+    return { error: null };
+  }, [fetchPedidos]);
+
+  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion, marcarEntregado };
 }

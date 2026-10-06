@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
+import { usePreciosPagados } from '@/hooks/usePreciosPagados';
+import { PedidoPorRecibir } from '@/components/compras/PedidoPorRecibir';
 import { usePedidos } from '@/hooks/usePedidos';
 import { useProductos } from '@/hooks/useProductos';
 import { useProveedores } from '@/hooks/useProveedores';
@@ -12,14 +14,15 @@ import { Loading } from '@/components/ui/loading';
 import { PedidoEditor } from '@/components/compras/PedidoEditor';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
-import { roundTwo } from '@/lib/utils';
+import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, DIAS_SEMANA } from '@/lib/dates';
 import { ESTADO_ITEM, ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra } from '@/lib/compras';
+
 import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from 'lucide-react';
 
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
-  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido } = usePedidos();
+  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado } = usePedidos();
   const { productos, obtenerOCrear, recordarProveedor, recordarUnidad, recordarCategoria } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
@@ -45,7 +48,14 @@ export function PedidosPage() {
     }
     return suma;
   }
-  const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado');
+  // Listas ya compradas que esperan que el administrador confirme la entrega producto por producto.
+  const porRecibir = pedidos.filter(p => p.estado === 'comprado');
+  const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado' && p.estado !== 'comprado');
+  // Lo que se pagó por cada producto comprado (se vuelve a leer cuando Compras compra algo).
+  const pagos = usePreciosPagados(
+    pedidos.filter(p => p.estado !== 'borrador').map(p => p.id),
+    pedidos.map(p => `${p.id}:${p.estado}:${p.pedido_items.filter(i => i.estado === 'comprado').length}`).join('|'),
+  );
 
   // Fechas de compra disponibles para una lista nueva: las proximas del calendario
   // que todavia no tienen su lista regular.
@@ -110,10 +120,15 @@ export function PedidosPage() {
           onAgregar={agregarItem}
           onActualizar={actualizarItem}
           onEliminar={eliminarItem}
+          pagos={pagos}
+          onEntregado={marcarEntregado}
           onEnviar={enviarPedido}
           onCancelar={cancelarPedido}
         />
       ))}
+
+      {/* Compradas: el administrador confirma lo que fue llegando a su sede */}
+      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} />)}
 
       {/* Nueva lista / pedido urgente */}
       <Card>
@@ -193,9 +208,10 @@ export function PedidosPage() {
                   <ul className="mt-2 space-y-1 pl-2 text-xs">
                     {p.pedido_items.map(i => (
                       <li key={i.id} className="flex items-center gap-2">
-                        <span className={`rounded-full px-1.5 py-0.5 ${ESTADO_ITEM[i.estado].clase}`}>{ESTADO_ITEM[i.estado].label}</span>
+                        <span className={`rounded-full px-1.5 py-0.5 ${i.entregado_at ? 'bg-emerald-100 font-bold text-emerald-800' : ESTADO_ITEM[i.estado].clase}`}>{i.entregado_at ? 'Entregado' : ESTADO_ITEM[i.estado].label}</span>
                         <span>{i.productos?.nombre}</span>
                         <span className="text-muted-foreground">{formatCantidad(i.cantidad)} {i.unidad}</span>
+                        {i.estado === 'comprado' && pagos.get(i.id) && <span className="ml-auto font-medium text-yayis-dark">{formatMonto(pagos.get(i.id)!.total)}</span>}
                       </li>
                     ))}
                   </ul>

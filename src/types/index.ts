@@ -240,6 +240,9 @@ export interface PedidoItem {
   /** El administrador la marcó como urgente (se compra primero). */
   urgente: boolean;
   estado: EstadoItemPedido;
+  /** El administrador confirmó que el producto ya llegó a su sede y lo verificó. */
+  entregado_at?: string | null;
+  entregado_por?: string | null;
   created_at: string;
 }
 
