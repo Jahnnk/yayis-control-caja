@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { AYUDA_UNIDAD_SOL, ESTADO_ITEM, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
+import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
 import { AlertTriangle, Gauge, Loader2, Plus, Send, Trash2 } from 'lucide-react';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
@@ -14,6 +14,8 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioHabitual } from '@/lib/precios';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
+import type { PrecioPagado } from '@/hooks/usePreciosPagados';
+import { EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
 
 const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
 
@@ -46,11 +48,15 @@ interface Props {
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
   onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
+  /** Lo pagado por cada línea ya comprada (clave: id de la línea del pedido). */
+  pagos: Map<string, PrecioPagado>;
+  /** El administrador confirma (o deshace) que un producto comprado ya llegó a su sede. */
+  onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string, motivoSobreTope?: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -362,7 +368,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                   <th className="py-2 font-medium">Cantidad</th>
                   <th className="py-2 font-medium">Proveedor</th>
                   <th className="py-2 font-medium">Categoría</th>
-                  <th className="py-2 text-right font-medium">Estimado</th>
+                  <th className="py-2 text-right font-medium" title="Lo que costaría (precio habitual) si falta comprar; lo que se pagó si ya se compró">Precio</th>
                   <th className="py-2 text-center font-medium">⚡ Urgente</th>
                   <th className="py-2 font-medium">Nota</th>
                   {enviado && <th className="py-2 font-medium">Estado</th>}
@@ -436,9 +442,10 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                     </td>
                     <td className="py-2 pr-2 text-right text-xs tabular-nums text-muted-foreground">
                       {(() => {
+                        if (i.estado === 'comprado') return <PrecioPagadoCelda pago={pagos.get(i.id)} />;
                         if (i.estado !== 'pendiente') return '';
                         const h = habituales.get(`${i.producto_id}|${i.unidad}`);
-                        return h ? formatMonto(roundTwo(h.unitario * Number(i.cantidad))) : '—';
+                        return h ? <span title="Estimado con el precio habitual">≈ {formatMonto(roundTwo(h.unitario * Number(i.cantidad)))}</span> : '—';
                       })()}
                     </td>
                     <td className="py-2 pr-2 text-center">
@@ -457,9 +464,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                     <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
                     {enviado && (
                       <td className="py-2 pr-2">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_ITEM[i.estado].clase}`}>
-                          {ESTADO_ITEM[i.estado].label}
-                        </span>
+                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} />
                       </td>
                     )}
                     <td className="py-2 text-right">
