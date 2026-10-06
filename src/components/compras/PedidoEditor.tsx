@@ -50,7 +50,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     return !!habitual && proveedoresActivos.some(p => p.id === habitual);
   });
 
-  function handleNombre(valor: string) {
+  function handleNombre(texto: string) {
+    const valor = texto.toLocaleUpperCase('es-PE'); // los productos se escriben en MAYÚSCULAS
     setNombre(valor);
     const conocido = productos.find(p => p.nombre.toLowerCase() === valor.trim().toLowerCase());
     if (conocido) {
@@ -202,7 +203,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             <Input
               id={`prod-${pedido.id}`}
               list={datalistId}
-              placeholder="Ej: Harina preparada"
+              placeholder="Ej: HARINA PREPARADA"
               value={nombre}
               onChange={e => handleNombre(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAgregar()}

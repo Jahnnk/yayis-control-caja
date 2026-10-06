@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Producto } from '@/types';
 
+/** Nombre de producto como se guarda: sin espacios de más y en MAYÚSCULAS. */
+export function nombreDeProducto(nombre: string): string {
+  return nombre.trim().replace(/\s+/g, ' ').toLocaleUpperCase('es-PE');
+}
+
 export function useProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -21,7 +26,8 @@ export function useProductos() {
    * y si no existe lo crea. Asi el catalogo se arma solo a medida que se pide.
    */
   const obtenerOCrear = useCallback(async (nombre: string, unidad: string) => {
-    const limpio = nombre.trim().replace(/\s+/g, ' ');
+    // Los nombres del catálogo van siempre en MAYÚSCULAS (la base también lo hace cumplir).
+    const limpio = nombreDeProducto(nombre);
     const existente = productos.find(p => p.nombre.toLowerCase() === limpio.toLowerCase());
     if (existente) return { producto: existente, error: null };
 
@@ -48,7 +54,8 @@ export function useProductos() {
   }, [productos, fetchProductos]);
 
   const actualizarProducto = useCallback(async (id: string, cambios: { unidad?: string; proveedor_id?: string | null; nombre?: string; activo?: boolean }) => {
-    const { error } = await supabase.from('productos').update(cambios).eq('id', id);
+    const { error } = await supabase.from('productos')
+      .update(cambios.nombre !== undefined ? { ...cambios, nombre: nombreDeProducto(cambios.nombre) } : cambios).eq('id', id);
     if (error) return { error: error.message.includes('productos_nombre_unico') ? 'Ya existe un producto con ese nombre' : error.message };
     await fetchProductos();
     return { error: null };
