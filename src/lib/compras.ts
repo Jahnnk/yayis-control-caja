@@ -91,12 +91,15 @@ export function diaSemanaDe(fecha: string): number {
 
 /** "jueves 2 de octubre" */
 export function fechaLarga(fecha: string): string {
-  return format(aFecha(fecha), "EEEE d 'de' MMMM", { locale: es });
+  const f = aFecha(fecha);
+  // Una fecha vacía o mal escrita no debe romper la pantalla.
+  return Number.isNaN(f.getTime()) ? '' : format(f, "EEEE d 'de' MMMM", { locale: es });
 }
 
 /** "jue 2 oct" */
 export function fechaCorta(fecha: string): string {
-  return format(aFecha(fecha), 'EEE d MMM', { locale: es });
+  const f = aFecha(fecha);
+  return Number.isNaN(f.getTime()) ? '' : format(f, 'EEE d MMM', { locale: es });
 }
 
 /** Las proximas fechas (desde hoy inclusive) que caen en los dias de compra de la sede. */

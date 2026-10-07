@@ -463,7 +463,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     <p className="w-full text-xs text-blue-700">
                       {l.origenSugerido === 'referencia'
                         ? 'Sugerido: el precio de referencia que puso la sede en su lista. Cámbialo si hoy costó distinto.'
-                        : `Sugerido: el precio de tu última compra a este proveedor (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ?? '')}). Cámbialo si hoy costó distinto.`}
+                        : `Sugerido: el precio de tu última compra a este proveedor${ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ? ` (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))!.fecha)})` : ''}. Cámbialo si hoy costó distinto.`}
                     </p>
                   )}
                   {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} referencia={referenciaPorUnidadLinea(c.precio_referencia, c.unidad)} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
