@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { usePreciosPagados } from '@/hooks/usePreciosPagados';
-import { PedidoPorRecibir } from '@/components/compras/PedidoPorRecibir';
+import { PedidoPorRecibir, PedidoRecibidoResumen } from '@/components/compras/PedidoPorRecibir';
 import { usePedidos } from '@/hooks/usePedidos';
 import { useProductos } from '@/hooks/useProductos';
 import { useProveedores } from '@/hooks/useProveedores';
@@ -16,7 +16,7 @@ import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, DIAS_SEMANA } from '@/lib/dates';
-import { ESTADO_ITEM, ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra } from '@/lib/compras';
+import { ESTADO_ITEM, ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra, sumarDias } from '@/lib/compras';
 
 import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from 'lucide-react';
 
@@ -50,7 +50,11 @@ export function PedidosPage() {
   }
   // Listas ya compradas que esperan que el administrador confirme la entrega producto por producto.
   const porRecibir = pedidos.filter(p => p.estado === 'comprado');
-  const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado' && p.estado !== 'comprado');
+  // Listas ya recibidas en los últimos 7 días: se ven en una sección aparte (para cuadrar con Compras); después van al historial.
+  const diaRecibida = (p: { recibido_at: string | null; fecha_compra: string }) =>
+    p.recibido_at ? new Date(p.recibido_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) : p.fecha_compra;
+  const recibidasRecientes = pedidos.filter(p => p.estado === 'recibido' && diaRecibida(p) >= sumarDias(hoy, -7));
+  const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado' && p.estado !== 'comprado' && !recibidasRecientes.includes(p));
   // Lo que se pagó por cada producto comprado (se vuelve a leer cuando Compras compra algo).
   const pagos = usePreciosPagados(
     pedidos.filter(p => p.estado !== 'borrador').map(p => p.id),
@@ -183,6 +187,14 @@ export function PedidosPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Recibidas esta semana: una línea cada una, con el detalle plegado */}
+      {recibidasRecientes.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-bold text-yayis-dark">Recibidas esta semana ({recibidasRecientes.length})</h2>
+          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} />)}
+        </div>
+      )}
 
       {/* Historial (plegado por defecto) */}
       {historial.length > 0 && (
