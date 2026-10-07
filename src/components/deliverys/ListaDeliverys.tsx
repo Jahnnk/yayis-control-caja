@@ -34,7 +34,7 @@ export function ListaDeliverys({ deliverys, mostrarSede, puedeBorrar, onBorrar, 
             <span className="w-24 text-right font-bold">{d.cobrado > 0 ? formatMonto(Number(d.cobrado)) : '—'}</span>
             <span className="flex w-24 justify-end gap-1">
               {puedeCambiarFecha?.(d) && onCambiarFecha && (
-                <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onCambiarFecha(d)} aria-label="Cambiar la fecha" title="Cambiar la fecha"><CalendarDays size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onCambiarFecha(d)} aria-label="Corregir el delivery" title="Corregir fecha o forma de pago"><CalendarDays size={14} /></Button>
               )}
               {d.evidencia_cobro_path && onVerCaptura && (
                 <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onVerCaptura(d.evidencia_cobro_path!)} aria-label="Ver captura"><Eye size={14} /></Button>
