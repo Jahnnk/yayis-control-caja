@@ -210,6 +210,7 @@ export function RutaComprasPage() {
 
   function estadoSede(sedeId: string) {
     const regular = pedidos.find(p => p.sede_id === sedeId && !p.urgente && p.fecha_compra === fecha);
+    if (regular?.estado === 'recibido') return { texto: 'Compra terminada y recibida por la sede', clase: 'text-emerald-700', icono: Check };
     if (regular?.estado === 'comprado') return { texto: 'Compra terminada', clase: 'text-emerald-700', icono: Check };
     if (regular) return { texto: `Lista enviada (${regular.pedido_items.length} productos)`, clase: 'text-blue-700', icono: Check };
     if (borradores.some(b => b.sede_id === sedeId)) return { texto: 'Lista en preparación, aún no enviada', clase: 'text-amber-700', icono: Clock };

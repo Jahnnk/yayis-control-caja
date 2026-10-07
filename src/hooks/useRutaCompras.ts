@@ -18,7 +18,7 @@ const SELECT_RUTA =
 /**
  * Lo que Compras tiene que comprar en una fecha: las listas enviadas para ese dia,
  * las urgentes y las atrasadas (enviadas para un dia anterior y aun sin comprar),
- * mas las ya compradas ese dia para ver el avance.
+ * mas las ya compradas (y las ya recibidas por la sede) ese dia para ver el avance.
  */
 export function useRutaCompras(fecha: string) {
   const [pedidos, setPedidos] = useState<PedidoRuta[]>([]);
@@ -34,7 +34,7 @@ export function useRutaCompras(fecha: string) {
       supabase
         .from('pedidos')
         .select(SELECT_RUTA)
-        .or(`and(estado.eq.enviado,fecha_compra.lte.${fecha}),and(estado.eq.comprado,fecha_compra.eq.${fecha})`)
+        .or(`and(estado.eq.enviado,fecha_compra.lte.${fecha}),and(estado.eq.comprado,fecha_compra.eq.${fecha}),and(estado.eq.recibido,fecha_compra.eq.${fecha})`)
         .order('fecha_compra', { ascending: true }),
       supabase
         .from('pedidos')
