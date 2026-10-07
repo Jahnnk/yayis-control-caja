@@ -4,12 +4,16 @@ import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
 import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
+import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
+import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { GastoForm } from '@/components/gastos/GastoForm';
 import { GastosTable } from '@/components/gastos/GastosTable';
 import { ResumenDiario } from '@/components/gastos/ResumenDiario';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select-native';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes } from '@/lib/dates';
 import { Search } from 'lucide-react';
@@ -29,6 +33,10 @@ export function RegistroGastosPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [versionSaldo, setVersionSaldo] = useState(0);
   const saldoSemanal = useSaldoSemanal(versionSaldo);
+  const { responsable } = useSedeActiva();
+  const { consolidado } = useConsolidadoReposicion(versionSaldo);
+  // Quién originó los gastos que se ven: todos, los del administrador o las compras de Fabio.
+  const [filterOrigen, setFilterOrigen] = useState<'' | 'administrador' | 'compras'>('');
   const [page, setPage] = useState(0);
   const pageSize = 20;
 
@@ -50,10 +58,11 @@ export function RegistroGastosPage() {
       metodo_pago: filterMetodoPago || undefined,
       estado: filterEstado === 'todos' ? undefined : (filterEstado || 'pendiente'),
       busqueda: busqueda || undefined,
+      origen: filterOrigen || undefined,
       page,
       pageSize,
     });
-  }, [fetchGastos, filterSemana, filterCategoria, filterMetodoPago, filterEstado, busqueda, page, currentMes]);
+  }, [fetchGastos, filterSemana, filterCategoria, filterMetodoPago, filterEstado, filterOrigen, busqueda, page, currentMes]);
 
   useEffect(() => {
     loadGastos();
@@ -111,6 +120,8 @@ export function RegistroGastosPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-yayis-dark">Registro de Gastos</h1>
 
+      <ConsolidadoReposicion datos={consolidado} responsable={responsable ?? 'el administrador'} />
+
       <SaldoMontoSemanal saldo={saldoSemanal} />
 
       <ResumenDiario />
@@ -122,6 +133,20 @@ export function RegistroGastosPage() {
           onCancelEdit={() => setEditGasto(null)}
         />
       )}
+
+      {/* ¿Quién lo originó? */}
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Origen de los gastos">
+        {([
+          ['', 'Todos'],
+          ['administrador', `Pagados por ${responsable ?? 'el administrador'}`],
+          ['compras', 'Compras de Fabio'],
+        ] as const).map(([valor, etiqueta]) => (
+          <Button key={valor} type="button" size="sm" variant={filterOrigen === valor ? 'default' : 'outline'} aria-pressed={filterOrigen === valor}
+            onClick={() => { setFilterOrigen(valor); setPage(0); }}>
+            {etiqueta}
+          </Button>
+        ))}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

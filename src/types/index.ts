@@ -56,6 +56,8 @@ export interface Gasto {
   registrado_por: string;
   reposicion_id: string | null;
   con_monto_semanal?: boolean;
+  /** Quién lo originó: el administrador (lo registró él) o Compras (nació al cerrar la rendición de Fabio). */
+  origen?: 'administrador' | 'compras';
   /** Por qué se registró aunque pasaba el tope del presupuesto (le llega a Finanzas). */
   motivo_sobre_tope?: string | null;
   constancia_path: string | null;
@@ -153,7 +155,7 @@ export interface GastoFormData {
   monto: string;
   estado: EstadoGasto;
   notas: string;
-  /** El administrador lo paga con el monto semanal de compras: resta de ese monto y NO se le repone. */
+  /** El administrador lo pagó con el monto semanal de compras: resta de ese saldo y se repone igual. */
   con_monto_semanal: boolean;
   /** Motivo obligatorio cuando el gasto pasa el tope de su categoría. */
   motivo_sobre_tope?: string;

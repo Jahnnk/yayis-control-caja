@@ -6,6 +6,8 @@ import { useFondos } from '@/hooks/useFondos';
 import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
+import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -43,6 +45,8 @@ export function ResumenPage() {
   const { arqueo, fetchArqueo, saveArqueo, cerrarSemana } = useArqueo();
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
   const { fetchDesgloseReposicion } = useDesgloseReposicion();
+  // Consolidado para reposición (lo del administrador y lo de Fabio); se recalcula cuando cambia la deuda.
+  const { consolidado } = useConsolidadoReposicion(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas));
   const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
   const { valores: valoresRevisados, fetchValoresRevisados, verificarGrupo, reabrirGrupo } = useValoresRevisados();
   const { addToast } = useToast();
@@ -726,6 +730,8 @@ export function ResumenPage() {
           </CardContent>
         </Card>
       </div>
+
+      {isOwner && <ConsolidadoReposicion datos={consolidado} responsable={encargado} />}
 
       {/* Reponer + Caja del administrador */}
       {isOwner && (
