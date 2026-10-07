@@ -17,8 +17,15 @@ export const TOPE_SIN_COMPROBANTE_EFECTIVO = 50;
 export type RanuraEvidencia = 'comprobante' | 'producto' | 'pago';
 
 /** Fotos que exige una compra según su comprobante y su forma de pago (efectivo sin boleta no exige fotos). */
-export function fotosExigidas(c: { tipo_comprobante: string; metodo_pago: string | null; condicion_pago: string }): RanuraEvidencia[] {
-  if (c.tipo_comprobante === 'sin_comprobante') return c.metodo_pago === 'cuentas' ? ['producto', 'pago'] : [];
+export function fotosExigidas(
+  c: { tipo_comprobante: string; metodo_pago: string | null; condicion_pago: string },
+  /** Total de la compra y tope sin boleta de la sede: la foto del producto solo es obligatoria por encima del tope. */
+  limite?: { total: number; tope: number },
+): RanuraEvidencia[] {
+  if (c.tipo_comprobante === 'sin_comprobante') {
+    if (c.metodo_pago !== 'cuentas') return [];
+    return limite && limite.total > limite.tope ? ['producto', 'pago'] : ['pago'];
+  }
   const r: RanuraEvidencia[] = ['comprobante'];
   if (c.condicion_pago === 'contado' && c.metodo_pago === 'cuentas') r.push('pago');
   return r;

@@ -18,6 +18,7 @@ import { claveProducto } from '@/lib/precios';
 import { repartirTotal } from '@/lib/reparto-total';
 import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
+import { RANURAS_PAGO_EXTRA } from '@/lib/borradores';
 import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import {
@@ -128,6 +129,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   const [fotoComprobante, setFotoComprobante] = useState<File | null>(null);
   const [fotoProducto, setFotoProducto] = useState<File | null>(null);
   const [fotoPago, setFotoPago] = useState<File | null>(null);
+  // Otras capturas de pago (se pagó a varios puestos por Yape): la compra lleva una constancia por pago.
+  const [pagosExtra, setPagosExtra] = useState<(File | null)[]>([]);
   const [guardando, setGuardando] = useState(false);
   // «Solo me dieron el total»: se escribe el total de la compra y el sistema lo reparte entre los productos.
   const [soloTotal, setSoloTotal] = useState(false);
@@ -164,6 +167,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     setFotoComprobante(null);
     setFotoProducto(null);
     setFotoPago(null);
+    setPagosExtra([]);
     setComprobante(borrador?.comprobante ?? (credito ? 'factura' : 'boleta'));
     if (borrador && !credito) setMetodo(borrador.metodo);
     setBorradorListo(true);
@@ -174,6 +178,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       if (f.comprobante) setFotoComprobante(f.comprobante);
       if (f.producto) setFotoProducto(f.producto);
       if (f.pago) setFotoPago(f.pago);
+      setPagosExtra(RANURAS_PAGO_EXTRA.map(r => f[r] ?? null).filter((x): x is File => !!x));
       setFotosListas(true);
     });
 
@@ -203,6 +208,10 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'comprobante', fotoComprobante); }, [open, fotosListas, clave, fotoComprobante]);
   useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'producto', fotoProducto); }, [open, fotosListas, clave, fotoProducto]);
   useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'pago', fotoPago); }, [open, fotosListas, clave, fotoPago]);
+  useEffect(() => {
+    if (!open || !fotosListas) return;
+    RANURAS_PAGO_EXTRA.forEach((r, i) => { void guardarFoto(clave, r, pagosExtra[i] ?? null); });
+  }, [open, fotosListas, clave, pagosExtra]);
 
   /** Cierra y descarta el borrador (la compra se guardó o se canceló a propósito). */
   function cerrarYDescartar() {
@@ -212,14 +221,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     onClose();
   }
 
-  const sinBoletaEfectivo = !credito && comprobante === 'sin_comprobante' && metodo === 'efectivo';
-  // Fotos obligatorias que todavía no se subieron (la compra se puede guardar igual, como evidencia pendiente).
-  const faltanFotosBase = fotosExigidas({ tipo_comprobante: comprobante, metodo_pago: credito ? null : metodo, condicion_pago: credito ? 'credito' : 'contado' })
-    .filter(r => !({ comprobante: fotoComprobante, producto: fotoProducto, pago: fotoPago })[r]);
+  // Sin boleta (efectivo o Yape): la observación (dónde y a quién se compró) es obligatoria.
+  const sinBoleta = !credito && comprobante === 'sin_comprobante';
 
   const hayContenido = Object.values(lineas).some(l => (l.precio !== '' || l.unit !== '') && !l.sugerido)
     || extras.some(e => e.nombre.trim() !== '' || e.precio !== '')
-    || !!fotoComprobante || !!fotoProducto || !!fotoPago || numero.trim() !== '' || observacion.trim() !== '' || totalTexto.trim() !== '' || pagadoTexto.trim() !== '';
+    || !!fotoComprobante || !!fotoProducto || !!fotoPago || pagosExtra.length > 0 || numero.trim() !== '' || observacion.trim() !== '' || totalTexto.trim() !== '' || pagadoTexto.trim() !== '';
   /** La X, Escape y Cancelar piden confirmación si ya había algo escrito, para no perderlo por un toque sin querer. */
   function pedirCerrar() {
     if (hayContenido) setConfirmarDescartar(true);
@@ -289,6 +296,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   const esRecojo = hayLineas && total === 0 && (soloTotal
     ? totalTexto.trim() !== ''
     : lineasIncluidas.every(c => lineas[c.pedido_item_id]!.precio !== '') && extrasConNombre.every(e => e.precio !== ''));
+  // Fotos obligatorias que todavía no se subieron (la compra se puede guardar igual, como evidencia pendiente).
+  // La foto del producto sin boleta por Yape solo es obligatoria por encima del tope sin boleta de la sede.
+  const fotoProductoObligatoria = sinBoleta && metodo === 'cuentas' && total > topeSinBoleta;
+  const faltanFotosBase = fotosExigidas(
+    { tipo_comprobante: comprobante, metodo_pago: credito ? null : metodo, condicion_pago: credito ? 'credito' : 'contado' },
+    { total, tope: topeSinBoleta },
+  ).filter(r => !({ comprobante: fotoComprobante, producto: fotoProducto, pago: fotoPago })[r]);
   const faltanFotos = esRecojo ? [] : faltanFotosBase;
 
   // Cuadre: si quedan precios sugeridos sin tocar, Fabio escribe cuánto pagó en total y debe coincidir con la suma.
@@ -364,6 +378,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       fotoComprobante: esRecojo ? null : fotoComprobante,
       fotoProducto: esRecojo ? null : fotoProducto,
       fotoPago: esRecojo ? null : fotoPago,
+      fotosPagoExtra: esRecojo ? [] : pagosExtra.filter((f): f is File => !!f),
       evidenciaPendiente: faltanFotos.length > 0,
       topeSinComprobante: topeSinBoleta,
     };
@@ -560,7 +575,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
               <p className="mt-1 text-xs text-amber-800">
                 {metodo === 'efectivo'
                   ? `Sin boleta en efectivo: hasta ${formatMonto(topeSinBoleta)} por compra. Escribe abajo, en Observación, dónde y a quién le compraste (obligatorio).`
-                  : 'Sin boleta por Yape/transferencia: foto del producto y captura del Yape (si no alcanzaste a tomarlas, puedes subirlas después).'}
+                  : `Sin boleta por Yape/transferencia: captura del Yape (una por cada pago) y, en Observación, dónde y a quién le compraste (obligatorio). La foto del producto es opcional hasta ${formatMonto(topeSinBoleta)}; desde ahí es obligatoria.`}
               </p>
             )}
           </div>
@@ -572,15 +587,24 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
               <EvidenciaInput id="foto-comprobante" label={`Foto de la ${comprobante}`} archivo={fotoComprobante} onChange={setFotoComprobante} requerido />
             )}
             {comprobante === 'sin_comprobante' && (
-              <EvidenciaInput id="foto-producto" label={metodo === 'cuentas' ? 'Foto del producto' : 'Foto del producto (opcional)'} archivo={fotoProducto} onChange={setFotoProducto} requerido={metodo === 'cuentas'} />
+              <EvidenciaInput id="foto-producto" label={fotoProductoObligatoria ? 'Foto del producto' : 'Foto del producto (opcional)'} archivo={fotoProducto} onChange={setFotoProducto} requerido={fotoProductoObligatoria} />
             )}
             {!credito && metodo === 'cuentas' && (
-              <EvidenciaInput id="foto-pago" label="Captura del Yape / transferencia" archivo={fotoPago} onChange={setFotoPago} requerido />
+              <EvidenciaInput id="foto-pago" label={pagosExtra.length > 0 ? 'Captura del Yape 1' : 'Captura del Yape / transferencia'} archivo={fotoPago} onChange={setFotoPago} requerido />
             )}
+            {!credito && metodo === 'cuentas' && pagosExtra.map((f, i) => (
+              <EvidenciaInput key={i} id={`foto-pago-${i + 2}`} label={`Captura del Yape ${i + 2}`} archivo={f}
+                onChange={nuevo => setPagosExtra(prev => nuevo ? prev.map((x, j) => (j === i ? nuevo : x)) : prev.filter((_, j) => j !== i))} requerido />
+            ))}
           </div>
+          {!credito && metodo === 'cuentas' && pagosExtra.length < RANURAS_PAGO_EXTRA.length && (
+            <Button type="button" variant="ghost" size="sm" className="-mt-1" onClick={() => setPagosExtra(prev => [...prev, null])}>
+              <Plus size={14} className="mr-1" /> Agregar otra captura de Yape (pagaste a varios puestos)
+            </Button>
+          )}
           <Input
-            placeholder={sinBoletaEfectivo ? 'Observación (obligatoria): dónde y a quién compraste' : 'Observación (opcional)'}
-            className={sinBoletaEfectivo && !observacion.trim() ? 'border-amber-400' : ''}
+            placeholder={sinBoleta ? 'Observación (obligatoria): dónde y a quién compraste' : 'Observación (opcional)'}
+            className={sinBoleta && !observacion.trim() ? 'border-amber-400' : ''}
             value={observacion} onChange={e => setObservacion(e.target.value)} aria-label="Observación"
           />
         </section>}

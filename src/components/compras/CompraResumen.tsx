@@ -69,9 +69,14 @@ export function CompraResumen({ compra, onEliminar, onCompletar, children }: Pro
         )}
         {compra.evidencia_pago_path && (
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => ver(compra.evidencia_pago_path)}>
-            <Smartphone size={12} className="mr-1" /> Pago
+            <Smartphone size={12} className="mr-1" /> {(compra.evidencias_pago_extra ?? []).length > 0 ? 'Pago 1' : 'Pago'}
           </Button>
         )}
+        {(compra.evidencias_pago_extra ?? []).map((p, i) => (
+          <Button key={p} variant="outline" size="sm" className="h-7 text-xs" onClick={() => ver(p)}>
+            <Smartphone size={12} className="mr-1" /> Pago {i + 2}
+          </Button>
+        ))}
         {children && <div className="ml-auto">{children}</div>}
       </div>
     </div>

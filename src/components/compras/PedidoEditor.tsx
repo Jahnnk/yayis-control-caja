@@ -15,7 +15,7 @@ import type { PrecioHabitual } from '@/lib/precios';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
-import { EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
+import { CantidadCelda, EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
 
 const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
 
@@ -404,7 +404,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                           />
                         </span>
                       ) : (
-                        <span>{formatCantidad(i.cantidad)} {i.unidad}</span>
+                        <CantidadCelda item={i} pago={pagos.get(i.id)} />
                       )}
                     </td>
                     <td className="py-2 pr-2">
