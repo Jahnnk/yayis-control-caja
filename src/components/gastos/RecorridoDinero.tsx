@@ -34,7 +34,7 @@ export function RecorridoDinero({ saldo }: { saldo: SaldoSemanal }) {
       <CardContent className="space-y-3 p-4">
         <div>
           <p className="text-sm font-bold text-yayis-dark">Recorrido del dinero de esta semana</p>
-          <p className="text-xs text-muted-foreground">De lunes a hoy: lo que Gerencia te dio (monto semanal) y a dónde fue.</p>
+          <p className="text-xs text-muted-foreground">Lo que Gerencia te dio (monto semanal) y a dónde fue. Incluye lo marcado de días anteriores que todavía no se repone.</p>
         </div>
 
         <div className="flex h-6 w-full overflow-hidden rounded-md bg-gray-100" role="img"

@@ -37,7 +37,9 @@ export function useSaldoSemanal(version = 0): SaldoSemanal {
     const lunes = sumarDias(hoy, -((diaSemanaDe(hoy) + 6) % 7));
     const [en, ga, otros] = await Promise.all([
       supabase.from('entregas').select('id, monto, notas').eq('sede_id', sedeId).gte('fecha', lunes),
-      supabase.from('gastos').select('monto').eq('sede_id', sedeId).eq('con_monto_semanal', true).gte('fecha', lunes),
+      // Lo marcado como pagado con el monto semanal: lo de esta semana y lo de días anteriores que sigue pendiente de reposición
+      // (ese dinero todavía no se repuso, así que sigue siendo parte del dinero que el administrador está manejando).
+      supabase.from('gastos').select('monto').eq('sede_id', sedeId).eq('con_monto_semanal', true).or(`fecha.gte.${lunes},estado.eq.pendiente`),
       // Gastos propios del administrador de esta semana que no se marcaron (los que nacen de Compras no cuentan aquí).
       supabase.from('gastos').select('id, fecha, descripcion, monto, con_monto_semanal, origen').eq('sede_id', sedeId).gte('fecha', lunes).order('fecha', { ascending: false }),
     ]);
