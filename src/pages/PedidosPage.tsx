@@ -129,7 +129,7 @@ export function PedidosPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-yayis-dark">Pedidos de compra{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+        <h1 className="text-2xl font-bold text-yayis-dark">Pedidos y recepción{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <CalendarDays size={15} />
           {nombresDias.length > 0

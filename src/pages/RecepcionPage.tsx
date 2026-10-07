@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useEntregas, fetchUsuariosCompras, gastadoDe, type EntregaDetalle } from '@/hooks/useEntregas';
 import { usePedidos } from '@/hooks/usePedidos';
-import { usePreciosPagados } from '@/hooks/usePreciosPagados';
-import { PedidoPorRecibir } from '@/components/compras/PedidoPorRecibir';
+import { RecorridoDinero } from '@/components/gastos/RecorridoDinero';
+import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
+import { ComprasRegistradas } from '@/components/gastos/ComprasRegistradas';
+import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { RendicionPage } from '@/pages/RendicionPage';
+import { Link } from 'react-router-dom';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -120,7 +125,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
 export function RecepcionPage() {
   const { sedeActiva, responsable } = useSedeActiva();
   const { entregas, cerradas, loading, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
-  const { pedidos, marcarEntregado, registrarRecepcion, marcarTodoConforme } = usePedidos();
+  const { pedidos } = usePedidos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
   const hoy = getTodayLima();
@@ -146,21 +151,7 @@ export function RecepcionPage() {
 
   // Pedidos ya comprados, esperando que el admin confirme que llegaron
   const porRecibir = pedidos.filter(p => p.estado === 'comprado');
-  const [comprasPorPedido, setComprasPorPedido] = useState<Record<string, CompraDetalle[]>>({});
-  const idsPorRecibir = porRecibir.map(p => p.id).join(',');
-  const pagosPorRecibir = usePreciosPagados(porRecibir.map(p => p.id), pedidos.map(p => `${p.id}:${p.estado}:${p.pedido_items.filter(i => i.entregado_at).length}`).join('|'));
-  useEffect(() => {
-    if (!idsPorRecibir) { setComprasPorPedido({}); return; }
-    supabase
-      .from('compras')
-      .select('*, proveedores(nombre), compra_items(*, productos(nombre))')
-      .in('pedido_id', idsPorRecibir.split(','))
-      .then(({ data }) => {
-        const agrupadas: Record<string, CompraDetalle[]> = {};
-        for (const c of (data ?? []) as CompraDetalle[]) (agrupadas[c.pedido_id!] ??= []).push(c);
-        setComprasPorPedido(agrupadas);
-      });
-  }, [idsPorRecibir]);
+
 
   const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string>; saldoContinua: number } | null>(null);
   const [cerrando, setCerrando] = useState(false);
@@ -170,6 +161,11 @@ export function RecepcionPage() {
   // Monto semanal que el administrador recibe de Gerencia: lo reparte a Compras según necesidad y
   // con él paga directamente lo que marca «Se paga con el monto semanal» (ver useSaldoSemanal).
   const saldoSemanal = useSaldoSemanal(versionSaldo);
+  const { consolidado, sinRendir } = useConsolidadoReposicion(versionSaldo);
+  const { profile } = useAuth();
+  const esGerencia = profile?.rol === 'owner';
+  // Gerencia puede ver el dinero en manos de Compras de todas las sedes (antes era «Dinero en Compras»).
+  const [verTodas, setVerTodas] = useState(false);
   const porEntregar = Math.max(saldoSemanal.queda, 0);
   const enManosDeCompras = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
@@ -213,25 +209,47 @@ export function RecepcionPage() {
   }
 
 
+  if (verTodas) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <Button type="button" size="sm" variant="outline" onClick={() => setVerTodas(false)}>← Volver a esta sede</Button>
+        <RendicionPage />
+      </div>
+    );
+  }
+
   if (loading && entregas.length === 0) return <Loading text="Cargando..." />;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold text-yayis-dark">Entregas y recepción{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-yayis-dark">Dinero de la semana{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+        {esGerencia && (
+          <div className="flex gap-1" role="group" aria-label="Qué ver">
+            <Button type="button" size="sm" variant="default" aria-pressed>Esta sede</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setVerTodas(true)}>Todas las sedes</Button>
+          </div>
+        )}
+      </div>
+
+      <RecorridoDinero saldo={saldoSemanal} />
+      <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />
+      <ComprasRegistradas sinRendir={sinRendir} />
 
       {/* 1. Entregar dinero */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={18} /> Entregar dinero a Compras</CardTitle>
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
-          <div className="mt-2">
-            <SaldoMontoSemanal saldo={saldoSemanal}>
+          {saldoSemanal.montoSemanal > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
+              <span>Te queda del monto semanal: <strong className={saldoSemanal.queda < 0 ? 'text-red-600' : 'text-yayis-dark'}>{formatMonto(saldoSemanal.queda)}</strong></span>
               <span className="text-xs text-muted-foreground">Compras tiene sin gastar: {formatMonto(enManosDeCompras)}</span>
               {porEntregar > 0 && (
                 <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
               )}
-            </SaldoMontoSemanal>
-          </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {receptores.length === 0 ? (
@@ -322,26 +340,14 @@ export function RecepcionPage() {
         />
       ))}
 
-      {/* 4. Mercadería por recibir */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><PackageCheck size={18} /> Mercadería por recibir</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {porRecibir.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay compras terminadas esperando tu confirmación.</p>
-          ) : porRecibir.map(p => (
-            <PedidoPorRecibir key={p.id} pedido={p} pagos={pagosPorRecibir} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme}>
-              {(comprasPorPedido[p.id] ?? []).length > 0 && (
-                <details className="rounded-md border bg-white">
-                  <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-yayis-dark">Ver los comprobantes de las compras ({(comprasPorPedido[p.id] ?? []).length})</summary>
-                  <div className="space-y-2 border-t p-3">{(comprasPorPedido[p.id] ?? []).map(c => <CompraResumen key={c.id} compra={c} />)}</div>
-                </details>
-              )}
-            </PedidoPorRecibir>
-          ))}
-        </CardContent>
-      </Card>
+      {/* La mercadería se recibe en «Pedidos y recepción» */}
+      {porRecibir.length > 0 && (
+        <Link to="/pedidos" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+          <PackageCheck size={16} />
+          <span>Tienes <strong>{porRecibir.length}</strong> lista(s) de mercadería por recibir: se revisa producto por producto en <strong>Pedidos y recepción</strong>.</span>
+          <span className="ml-auto text-xs font-medium underline">Ir a recibir →</span>
+        </Link>
+      )}
 
       {/* Historial plegado */}
       {cerradas.length > 0 && (

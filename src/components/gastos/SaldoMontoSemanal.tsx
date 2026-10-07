@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { formatMonto } from '@/lib/utils';
 import type { SaldoSemanal } from '@/hooks/useSaldoSemanal';
 
-/** Franja con el saldo del monto semanal de la sede (se ve en Registro de Gastos y en Entregas y recepción). */
+/** Franja con el saldo del monto semanal de la sede (se ve en Registro de Gastos y en Dinero de la semana). */
 export function SaldoMontoSemanal({ saldo, children }: { saldo: SaldoSemanal; children?: ReactNode }) {
   if (saldo.montoSemanal <= 0) return null;
   return (
