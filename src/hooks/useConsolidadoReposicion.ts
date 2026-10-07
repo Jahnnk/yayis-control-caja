@@ -6,6 +6,9 @@ import { roundTwo } from '@/lib/utils';
 export interface TotalOrigen { total: number; cantidad: number; efectivo: number; cuentas: number }
 export interface ConsolidadoReposicion { administrador: TotalOrigen; compras: TotalOrigen; total: TotalOrigen }
 
+/** Compras de Fabio ya hechas con dinero entregado, pero cuya rendición todavía no se cierra (aún no son gasto a reponer). */
+export interface SinRendir { total: number; cantidad: number }
+
 const vacio = (): TotalOrigen => ({ total: 0, cantidad: 0, efectivo: 0, cuentas: 0 });
 const PAGINA = 1000;
 
@@ -16,6 +19,7 @@ const PAGINA = 1000;
 export function useConsolidadoReposicion(version = 0) {
   const { sedeId } = useSedeActiva();
   const [consolidado, setConsolidado] = useState<ConsolidadoReposicion>({ administrador: vacio(), compras: vacio(), total: vacio() });
+  const [sinRendir, setSinRendir] = useState<SinRendir>({ total: 0, cantidad: 0 });
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
@@ -38,10 +42,23 @@ export function useConsolidadoReposicion(version = 0) {
         }
         if (!data || data.length < PAGINA) break;
       }
-      if (vigente) { setConsolidado(r); setCargando(false); }
+      // Compras al contado de Fabio (con entrega de dinero) que todavía no se convirtieron en gasto: falta cerrar la rendición.
+      const pendientes: SinRendir = { total: 0, cantidad: 0 };
+      for (let desde = 0; ; desde += PAGINA) {
+        const { data, error } = await supabase.from('compras').select('total, entrega_id')
+          .eq('sede_id', sedeId).is('gasto_id', null).order('id', { ascending: true }).range(desde, desde + PAGINA - 1);
+        if (error) { console.error('Error calculando las compras sin rendir:', error); break; }
+        for (const c of data ?? []) {
+          if (!c.entrega_id || !(Number(c.total) > 0)) continue;
+          pendientes.total = roundTwo(pendientes.total + Number(c.total));
+          pendientes.cantidad += 1;
+        }
+        if (!data || data.length < PAGINA) break;
+      }
+      if (vigente) { setConsolidado(r); setSinRendir(pendientes); setCargando(false); }
     })();
     return () => { vigente = false; };
   }, [sedeId, version]);
 
-  return { consolidado, cargando };
+  return { consolidado, sinRendir, cargando };
 }

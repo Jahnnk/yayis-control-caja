@@ -46,7 +46,7 @@ export function ResumenPage() {
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
   const { fetchDesgloseReposicion } = useDesgloseReposicion();
   // Consolidado para reposición (lo del administrador y lo de Fabio); se recalcula cuando cambia la deuda.
-  const { consolidado } = useConsolidadoReposicion(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas));
+  const { consolidado, sinRendir } = useConsolidadoReposicion(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas));
   const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
   const { valores: valoresRevisados, fetchValoresRevisados, verificarGrupo, reabrirGrupo } = useValoresRevisados();
   const { addToast } = useToast();
@@ -731,7 +731,7 @@ export function ResumenPage() {
         </Card>
       </div>
 
-      {isOwner && <ConsolidadoReposicion datos={consolidado} responsable={encargado} />}
+      {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />}
 
       {/* Reponer + Caja del administrador */}
       {isOwner && (

@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { formatMonto } from '@/lib/utils';
-import type { ConsolidadoReposicion as Datos, TotalOrigen } from '@/hooks/useConsolidadoReposicion';
+import type { ConsolidadoReposicion as Datos, SinRendir, TotalOrigen } from '@/hooks/useConsolidadoReposicion';
 import { Landmark, ShoppingBasket, UserRound } from 'lucide-react';
 
 function Columna({ titulo, icono, t, destacado }: { titulo: string; icono: React.ReactNode; t: TotalOrigen; destacado?: boolean }) {
@@ -16,7 +16,7 @@ function Columna({ titulo, icono, t, destacado }: { titulo: string; icono: React
 }
 
 /** Consolidado para reposición: lo pendiente de reponer, separado entre lo que pagó el administrador y las compras de Fabio. */
-export function ConsolidadoReposicion({ datos, responsable }: { datos: Datos; responsable: string }) {
+export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos: Datos; responsable: string; sinRendir?: SinRendir }) {
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
@@ -31,6 +31,12 @@ export function ConsolidadoReposicion({ datos, responsable }: { datos: Datos; re
           <Columna titulo="Compras de Fabio" icono={<ShoppingBasket size={14} />} t={datos.compras} />
           <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={datos.total} destacado />
         </div>
+        {sinRendir && sinRendir.cantidad > 0 && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Además hay <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) de Fabio que <strong>todavía no se rinden</strong>.
+            No suman al total de arriba: entran cuando Fabio rinda cuentas y el administrador cierre la rendición.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
