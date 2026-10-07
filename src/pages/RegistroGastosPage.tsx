@@ -34,7 +34,7 @@ export function RegistroGastosPage() {
   const [versionSaldo, setVersionSaldo] = useState(0);
   const saldoSemanal = useSaldoSemanal(versionSaldo);
   const { responsable } = useSedeActiva();
-  const { consolidado } = useConsolidadoReposicion(versionSaldo);
+  const { consolidado, sinRendir } = useConsolidadoReposicion(versionSaldo);
   // Quién originó los gastos que se ven: todos, los del administrador o las compras de Fabio.
   const [filterOrigen, setFilterOrigen] = useState<'' | 'administrador' | 'compras'>('');
   const [page, setPage] = useState(0);
@@ -120,7 +120,7 @@ export function RegistroGastosPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-yayis-dark">Registro de Gastos</h1>
 
-      <ConsolidadoReposicion datos={consolidado} responsable={responsable ?? 'el administrador'} />
+      <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={responsable ?? 'el administrador'} />
 
       <SaldoMontoSemanal saldo={saldoSemanal} />
 
