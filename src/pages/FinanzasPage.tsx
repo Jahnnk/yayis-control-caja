@@ -122,7 +122,7 @@ export function FinanzasPage() {
       const nombre = c.sedes?.nombre ?? '—';
       const acc = porSede.get(nombre) ?? { total: 0, sin: 0, cantidad: 0 };
       acc.total = roundTwo(acc.total + Number(c.total));
-      if (c.tipo_comprobante === 'sin_comprobante') { acc.sin = roundTwo(acc.sin + Number(c.total)); acc.cantidad += 1; }
+      if (c.tipo_comprobante === 'sin_comprobante' && Number(c.total) > 0) { acc.sin = roundTwo(acc.sin + Number(c.total)); acc.cantidad += 1; }
       porSede.set(nombre, acc);
     }
     return porSede;

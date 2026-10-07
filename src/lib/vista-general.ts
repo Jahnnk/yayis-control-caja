@@ -223,7 +223,7 @@ export function calcularVistaGeneral(
     ...compras.map(c => {
       const gasto = c.gasto_id ? gastoPorId.get(c.gasto_id) : undefined;
       const credito = c.condicion_pago === 'credito';
-      const comprobante = c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : `${c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${c.numero_comprobante ? ` ${c.numero_comprobante}` : ''}`;
+      const comprobante = Number(c.total) === 0 ? 'Recojo sin pago' : c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : `${c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${c.numero_comprobante ? ` ${c.numero_comprobante}` : ''}`;
       return {
         id: c.id, sedeId: c.sede_id, fecha: c.fecha, origen: credito ? 'Compra a crédito' as const : 'Compra de Fabio' as const,
         categoria: gasto?.categorias?.nombre ?? (credito ? A_CREDITO : SIN_RENDIR), tipo: gasto?.categorias?.tipo_gasto ?? null,

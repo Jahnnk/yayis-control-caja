@@ -314,6 +314,8 @@ export interface CompraItem {
   cantidad: number;
   unidad: string;
   precio_total: number;
+  /** El precio salió de repartir el total de la compra entre los productos (no es un precio real). */
+  precio_repartido?: boolean;
 }
 
 export interface CompraDetalle extends Compra {

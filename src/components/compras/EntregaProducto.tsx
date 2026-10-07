@@ -13,8 +13,10 @@ export function PrecioPagadoCelda({ pago }: { pago: PrecioPagado | undefined }) 
   const p = precioMostrado(pago.total / pago.cantidad, pago.unidad);
   return (
     <span className="whitespace-nowrap">
-      <strong className="text-yayis-dark">{formatMonto(pago.total)}</strong>
-      <span className="block text-[11px] text-muted-foreground">{formatMonto(roundTwo(p.valor))} por {p.etiqueta}</span>
+      <strong className="text-yayis-dark">{pago.repartido ? '≈ ' : ''}{formatMonto(pago.total)}</strong>
+      <span className="block text-[11px] text-muted-foreground">
+        {pago.repartido ? 'repartido del total' : `${formatMonto(roundTwo(p.valor))} por ${p.etiqueta}`}
+      </span>
     </span>
   );
 }

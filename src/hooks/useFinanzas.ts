@@ -91,6 +91,8 @@ export function useFinanzas() {
       supabase.from('compra_items')
         .select('id, producto_id, cantidad, unidad, precio_total, created_at, productos(nombre), compras(fecha, sede_id, condicion_pago, sedes(nombre), proveedores(nombre))')
         .gte('created_at', `${hace180}T00:00:00`)
+        .eq('precio_repartido', false) // un total repartido no es un precio real
+        .gt('precio_total', 0)         // un recojo sin pago tampoco
         .order('created_at', { ascending: false })
         .limit(1000),
       // Deliverys del mes y, aparte, todo el efectivo que Fabio aún no entregó (sin importar la fecha).

@@ -446,8 +446,8 @@ export function RutaComprasPage() {
                           <span className="font-medium">{pedidos.find(p => p.id === c.pedido_id)?.sedes?.nombre}</span>
                           <span className="font-bold text-emerald-800">{formatMonto(Number(c.total))}</span>
                           <span className="text-xs text-muted-foreground">
-                            {c.tipo_comprobante === 'sin_comprobante' ? 'Sin comprobante' : c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}
-                            {c.condicion_pago === 'credito' ? ' · a crédito' : c.metodo_pago === 'cuentas' ? ' · Yape/transf.' : ' · efectivo'}
+                            {Number(c.total) === 0 ? 'Recojo sin pago' : c.tipo_comprobante === 'sin_comprobante' ? 'Sin comprobante' : c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}
+                            {Number(c.total) === 0 ? '' : c.condicion_pago === 'credito' ? ' · a crédito' : c.metodo_pago === 'cuentas' ? ' · Yape/transf.' : ' · efectivo'}
                           </span>
                           <Button variant="ghost" size="sm" className="ml-auto text-emerald-700" onClick={() => verFoto(c.evidencia_comprobante_path ?? c.evidencia_producto_path)}>
                             <Eye size={14} className="mr-1" /> Ver foto
