@@ -113,6 +113,16 @@ export function useDeliverys(modo: 'mios' | 'sede') {
     return { error: null };
   }, [fetchDeliverys]);
 
+  /** Corrige el día de un delivery registrado con la fecha equivocada (solo mientras su efectivo no se haya recibido). */
+  const cambiarFecha = useCallback(async (delivery: DeliveryDetalle, fecha: string) => {
+    if (fecha > getTodayLima()) return { error: 'La fecha no puede ser futura.' };
+    const { data, error } = await supabase.from('deliverys').update({ fecha }).eq('id', delivery.id).select('id');
+    if (error) return { error: error.message };
+    if (!data || data.length === 0) return { error: 'Ya no se puede cambiar: pasó el día en que lo registraste o su efectivo ya fue recibido.' };
+    await fetchDeliverys();
+    return { error: null };
+  }, [fetchDeliverys]);
+
   /** El administrador cuenta el efectivo que le entregó Fabio y lo registra. */
   const recibirEfectivo = useCallback(async (ids: string[], recibido: number, nota: string, fechaEntrega?: string) => {
     if (!sedeId) return { error: 'Sin sede', resultado: null };
@@ -126,5 +136,5 @@ export function useDeliverys(modo: 'mios' | 'sede') {
     return { error: null, resultado: data as { esperado: number; recibido: number; diferencia: number; deliverys: number } };
   }, [sedeId, fetchDeliverys]);
 
-  return { deliverys, liquidaciones, loading, fetchDeliverys, crearDelivery, eliminarDelivery, recibirEfectivo };
+  return { deliverys, liquidaciones, loading, fetchDeliverys, crearDelivery, eliminarDelivery, cambiarFecha, recibirEfectivo };
 }

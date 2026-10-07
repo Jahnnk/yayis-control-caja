@@ -2,13 +2,15 @@ import { Button } from '@/components/ui/button';
 import { estadoDelivery, MODALIDAD_LABEL } from '@/lib/deliverys';
 import { fechaCorta } from '@/lib/compras';
 import { formatMonto } from '@/lib/utils';
-import { Eye, Trash2 } from 'lucide-react';
+import { CalendarDays, Eye, Trash2 } from 'lucide-react';
 import type { DeliveryDetalle } from '@/hooks/useDeliverys';
 
 /** Fila por delivery: cliente, montos, cómo pagó y en qué estado está el dinero. */
-export function ListaDeliverys({ deliverys, mostrarSede, puedeBorrar, onBorrar, onVerCaptura }: {
+export function ListaDeliverys({ deliverys, mostrarSede, puedeBorrar, onBorrar, puedeCambiarFecha, onCambiarFecha, onVerCaptura }: {
   deliverys: DeliveryDetalle[];
   mostrarSede?: boolean;
+  puedeCambiarFecha?: (d: DeliveryDetalle) => boolean;
+  onCambiarFecha?: (d: DeliveryDetalle) => void;
   puedeBorrar?: (d: DeliveryDetalle) => boolean;
   onBorrar?: (d: DeliveryDetalle) => void;
   onVerCaptura?: (path: string) => void;
@@ -30,7 +32,10 @@ export function ListaDeliverys({ deliverys, mostrarSede, puedeBorrar, onBorrar, 
             </div>
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${estado.clase}`}>{estado.label}</span>
             <span className="w-24 text-right font-bold">{d.cobrado > 0 ? formatMonto(Number(d.cobrado)) : '—'}</span>
-            <span className="flex w-16 justify-end gap-1">
+            <span className="flex w-24 justify-end gap-1">
+              {puedeCambiarFecha?.(d) && onCambiarFecha && (
+                <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onCambiarFecha(d)} aria-label="Cambiar la fecha" title="Cambiar la fecha"><CalendarDays size={14} /></Button>
+              )}
               {d.evidencia_cobro_path && onVerCaptura && (
                 <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => onVerCaptura(d.evidencia_cobro_path!)} aria-label="Ver captura"><Eye size={14} /></Button>
               )}
