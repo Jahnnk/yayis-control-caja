@@ -7,7 +7,7 @@ import { formatPorcentaje } from '@/lib/precios';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoItem } from '@/types';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, RotateCcw } from 'lucide-react';
 
 /** Lo que se pagó por la línea y, debajo, el precio por unidad (por kg / litro si se pidió en g / ml). */
 export function PrecioPagadoCelda({ pago, referencia }: { pago: PrecioPagado | undefined; referencia?: number | null }) {
@@ -49,15 +49,37 @@ export function CantidadCelda({ item, pago }: { item: Pick<PedidoItem, 'cantidad
 }
 
 /** Estado de un producto ya comprado: «Entregado ✓» o el botón para confirmarlo. */
-export function EntregaCelda({ item, puedeMarcar, onCambiar }: {
-  item: Pick<PedidoItem, 'id' | 'estado' | 'entregado_at'>;
+export function EntregaCelda({ item, puedeMarcar, onCambiar, onVolverAPedir }: {
+  item: Pick<PedidoItem, 'id' | 'estado' | 'entregado_at' | 'repedido_at'>;
   puedeMarcar: boolean;
   onCambiar: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  /** Pasa un producto que no había a la próxima lista del administrador. */
+  onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
 }) {
   const { addToast } = useToast();
   const [trabajando, setTrabajando] = useState(false);
 
-  if (item.estado === 'no_habia') return <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">No había</span>;
+  if (item.estado === 'no_habia') {
+    async function volverAPedir() {
+      if (!onVolverAPedir) return;
+      setTrabajando(true);
+      const { error } = await onVolverAPedir(item.id);
+      setTrabajando(false);
+      if (error) addToast(error, 'error');
+    }
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">No había</span>
+        {item.repedido_at
+          ? <span className="text-[11px] font-medium text-emerald-700">✓ Vuelto a pedir</span>
+          : onVolverAPedir && puedeMarcar && (
+            <Button type="button" size="sm" variant="outline" className="h-7 border-blue-400 px-2 text-xs text-blue-700" disabled={trabajando} onClick={volverAPedir}>
+              {trabajando ? <Loader2 size={12} className="mr-1 animate-spin" /> : <RotateCcw size={12} className="mr-1" />} Volver a pedir
+            </Button>
+          )}
+      </span>
+    );
+  }
   if (item.estado === 'pendiente') return <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Por comprar</span>;
 
   async function cambiar(entregado: boolean) {

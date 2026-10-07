@@ -22,7 +22,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from
 
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
-  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado } = usePedidos();
+  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, marcarRepedido } = usePedidos();
   const { productos, obtenerOCrear, recordarProveedor, recordarUnidad, recordarCategoria } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
@@ -83,6 +83,36 @@ export function PedidosPage() {
     if (error) addToast(`Error: ${error}`, 'error');
   }
 
+  /**
+   * «Volver a pedir»: pasa un producto que no había a la próxima lista en preparación; si no hay ninguna,
+   * crea la lista del próximo día de compra libre. Queda marcado para no pedirlo dos veces.
+   */
+  async function volverAPedir(itemId: string): Promise<{ error: string | null }> {
+    const item = pedidos.flatMap(p => p.pedido_items).find(i => i.id === itemId);
+    if (!item) return { error: 'No se encontró el producto. Recarga la pantalla.' };
+    let destino = pedidos.filter(p => p.estado === 'borrador' && !p.urgente).sort((a, b) => a.fecha_compra.localeCompare(b.fecha_compra))[0];
+    let fechaDestino = destino?.fecha_compra;
+    let idDestino = destino?.id;
+    if (!idDestino) {
+      if (!fechaElegida) return { error: 'No hay un día de compra libre para una lista nueva. Crea la lista y agrégalo ahí.' };
+      const r = await crearPedido(fechaElegida);
+      if (r.error || !r.pedido) return { error: r.error ?? 'No se pudo crear la lista.' };
+      idDestino = r.pedido.id;
+      fechaDestino = fechaElegida;
+    } else if (destino!.pedido_items.some(i => i.producto_id === item.producto_id && i.estado === 'pendiente')) {
+      await marcarRepedido(itemId);
+      return { error: 'Ese producto ya está en tu próxima lista.' };
+    }
+    const { error } = await agregarItem(idDestino, {
+      producto_id: item.producto_id, cantidad: Number(item.cantidad), unidad: item.unidad, nota: item.nota,
+      proveedor_id: item.proveedor_id, urgente: false, precio_referencia: item.precio_referencia ?? null,
+    });
+    if (error) return { error };
+    await marcarRepedido(itemId);
+    addToast(`${item.productos?.nombre ?? 'El producto'} se agregó a tu lista del ${fechaDestino ? fechaCorta(fechaDestino) : 'próximo día'}.`, 'success');
+    return { error: null };
+  }
+
   async function handleUrgente() {
     if (!motivoUrgente.trim()) return addToast('Escribe por qué es urgente', 'error');
     setCreando(true);
@@ -126,13 +156,14 @@ export function PedidosPage() {
           onEliminar={eliminarItem}
           pagos={pagos}
           onEntregado={marcarEntregado}
+          onVolverAPedir={volverAPedir}
           onEnviar={enviarPedido}
           onCancelar={cancelarPedido}
         />
       ))}
 
       {/* Compradas: el administrador confirma lo que fue llegando a su sede */}
-      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} />)}
+      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onVolverAPedir={volverAPedir} />)}
 
       {/* Nueva lista / pedido urgente */}
       <Card>
@@ -192,7 +223,7 @@ export function PedidosPage() {
       {recibidasRecientes.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-yayis-dark">Recibidas esta semana ({recibidasRecientes.length})</h2>
-          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} />)}
+          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onVolverAPedir={volverAPedir} />)}
         </div>
       )}
 

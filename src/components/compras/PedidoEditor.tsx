@@ -53,11 +53,13 @@ interface Props {
   pagos: Map<string, PrecioPagado>;
   /** El administrador confirma (o deshace) que un producto comprado ya llegó a su sede. */
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  /** Pasa un producto que no había a la próxima lista. */
+  onVolverAPedir: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string, motivoSobreTope?: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onVolverAPedir, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -510,7 +512,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                     <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
                     {enviado && (
                       <td className="py-2 pr-2">
-                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} />
+                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} />
                       </td>
                     )}
                     <td className="py-2 text-right">
