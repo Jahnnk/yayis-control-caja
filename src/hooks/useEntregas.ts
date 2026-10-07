@@ -124,7 +124,7 @@ export function useEntregas(modo: 'sede' | 'mias') {
   /** Borra una compra mal registrada (solo mientras la entrega sigue abierta). */
   const eliminarCompra = useCallback(async (compra: CompraDetalle) => {
     const { error } = await supabase.from('compras').delete().eq('id', compra.id);
-    if (error) return { error: error.message };
+    if (error) return { error: error.message.includes('pago_con_compra') ? 'Otra compra se pagó junto con esta (comparten la captura). Elimina primero esa otra compra.' : error.message };
     await borrarEvidencias([compra.evidencia_comprobante_path, compra.evidencia_producto_path, compra.evidencia_pago_path, ...(compra.evidencias_pago_extra ?? [])]);
     await fetchEntregas();
     return { error: null };
