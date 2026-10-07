@@ -162,12 +162,14 @@ function VistaCompras() {
 
 function RecibirEfectivo({ pendientes, onRecibir }: {
   pendientes: DeliveryDetalle[];
-  onRecibir: (ids: string[], recibido: number, nota: string) => Promise<{ error: string | null }>;
+  onRecibir: (ids: string[], recibido: number, nota: string, fechaEntrega?: string) => Promise<{ error: string | null }>;
 }) {
   const { addToast } = useToast();
   const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
   const [recibidoTexto, setRecibidoTexto] = useState<string | null>(null);
   const [nota, setNota] = useState('');
+  const hoy = getTodayLima();
+  const [fechaEntrega, setFechaEntrega] = useState(hoy);
   const [confirmando, setConfirmando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -176,7 +178,10 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
   const recibido = recibidoTexto === null ? esperado : parseFloat(recibidoTexto);
   const diferencia = roundTwo(esperado - (Number.isNaN(recibido) ? 0 : recibido));
   const sinNota = diferencia !== 0 && nota.trim() === '';
-  const invalido = elegidos.length === 0 || Number.isNaN(recibido) || recibido < 0 || sinNota;
+  // Fabio no pudo entregar el efectivo antes de hacer el delivery más reciente que se está entregando.
+  const masReciente = elegidos.reduce((max, d) => (d.fecha > max ? d.fecha : max), '');
+  const fechaMala = !fechaEntrega || fechaEntrega > hoy || (masReciente !== '' && fechaEntrega < masReciente);
+  const invalido = elegidos.length === 0 || Number.isNaN(recibido) || recibido < 0 || sinNota || fechaMala;
 
   function alternar(id: string) {
     setRecibidoTexto(null); // al cambiar la selección, el monto vuelve a ser lo esperado
@@ -185,12 +190,12 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
 
   async function confirmar() {
     setGuardando(true);
-    const { error } = await onRecibir(elegidos.map(d => d.id), recibido, nota);
+    const { error } = await onRecibir(elegidos.map(d => d.id), recibido, nota, fechaEntrega);
     setGuardando(false);
     setConfirmando(false);
     if (error) return addToast(`Error: ${error}`, 'error');
     addToast('Efectivo registrado', 'success');
-    setExcluidos(new Set()); setRecibidoTexto(null); setNota('');
+    setExcluidos(new Set()); setRecibidoTexto(null); setNota(''); setFechaEntrega(hoy);
   }
 
   return (
@@ -221,17 +226,22 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
             <Input id="dl-recibido" type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-36"
               value={recibidoTexto ?? String(esperado)} onChange={e => setRecibidoTexto(e.target.value)} />
           </div>
+          <div>
+            <label className="text-xs font-medium" htmlFor="dl-fecha-entrega">Día en que Fabio te lo entregó</label>
+            <Input id="dl-fecha-entrega" type="date" className="mt-1 w-40" value={fechaEntrega} max={hoy} min={masReciente || undefined}
+              onChange={e => setFechaEntrega(e.target.value)} />
+          </div>
           <p className={`pb-2 text-sm font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
             {diferencia === 0 ? 'Cuadra' : diferencia > 0 ? `Faltan ${formatMonto(diferencia)}` : `Sobran ${formatMonto(-diferencia)}`}
           </p>
         </div>
 
-        {diferencia !== 0 && (
-          <div>
-            <label className="text-xs font-medium" htmlFor="dl-nota">¿Por qué no cuadra? (obligatorio)</label>
-            <Input id="dl-nota" className="mt-1" value={nota} onChange={e => setNota(e.target.value)} placeholder="Ej. Falta el delivery de la señora Ana, lo traerá mañana" />
-          </div>
-        )}
+        <div>
+          <label className="text-xs font-medium" htmlFor="dl-nota">{diferencia !== 0 ? '¿Por qué no cuadra? (obligatorio)' : 'Nota (opcional)'}</label>
+          <Input id="dl-nota" className="mt-1" value={nota} onChange={e => setNota(e.target.value)}
+            placeholder={diferencia !== 0 ? 'Ej. Falta el delivery de la señora Ana, lo traerá mañana' : 'Ej. Fabio lo entregó ayer a caja y me lo pasaron hoy'} />
+        </div>
+        {fechaMala && <p className="text-xs text-red-600">El día de entrega no puede ser futuro ni anterior al delivery más reciente ({masReciente ? fechaCorta(masReciente) : '—'}).</p>}
 
         <Button onClick={() => setConfirmando(true)} disabled={invalido}>Confirmar que recibí el efectivo</Button>
         {sinNota && <p className="text-xs text-red-600">Escribe la razón de la diferencia para poder confirmar.</p>}
@@ -279,8 +289,8 @@ function VistaSede() {
         />
       </div>
 
-      {pendientes.length > 0 && <RecibirEfectivo pendientes={pendientes} onRecibir={async (ids, recibido, nota) => {
-        const { error } = await recibirEfectivo(ids, recibido, nota);
+      {pendientes.length > 0 && <RecibirEfectivo pendientes={pendientes} onRecibir={async (ids, recibido, nota, fechaEntrega) => {
+        const { error } = await recibirEfectivo(ids, recibido, nota, fechaEntrega);
         return { error };
       }} />}
 
@@ -297,7 +307,10 @@ function VistaSede() {
               const dif = roundTwo(Number(l.esperado) - Number(l.recibido));
               return (
                 <div key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="capitalize text-muted-foreground">{fechaCorta(new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
+                  <span className="capitalize text-muted-foreground" title="Día en que Fabio entregó el efectivo">{fechaCorta(l.fecha_entrega ?? new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
+                  {l.fecha_entrega && l.fecha_entrega !== new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) && (
+                    <span className="text-[11px] text-muted-foreground">(confirmado el {fechaCorta(new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))})</span>
+                  )}
                   <span>Esperado {formatMonto(Number(l.esperado))} · recibido {formatMonto(Number(l.recibido))}</span>
                   {l.nota && <span className="text-xs text-muted-foreground">“{l.nota}”</span>}
                   <span className={`ml-auto text-xs font-bold ${dif === 0 ? 'text-emerald-700' : 'text-red-600'}`}>

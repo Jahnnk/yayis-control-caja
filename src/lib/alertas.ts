@@ -90,13 +90,14 @@ export function alertasDeDeliverys(deliverys: DeliveryDetalle[], liquidaciones: 
 
   for (const l of liquidaciones) {
     const dif = roundTwo(Number(l.esperado) - Number(l.recibido));
-    if (dif === 0 || diasEntre(fechaLima(l.created_at), hoy) > 14) continue;
+    const dia = l.fecha_entrega ?? fechaLima(l.created_at);
+    if (dif === 0 || diasEntre(dia, hoy) > 14) continue;
     alertas.push({
       clave: `delivery-descuadre-${l.id}`, nivel: dif > 0 ? 'alta' : 'media', tipo: 'Delivery descuadrado',
       sedeId: l.sede_id, sedeNombre: l.sedes?.nombre ?? '',
       titulo: dif > 0
-        ? `Faltaron ${formatMonto(dif)} en el efectivo de deliverys del ${fechaCorta(fechaLima(l.created_at))}`
-        : `Sobraron ${formatMonto(-dif)} en el efectivo de deliverys del ${fechaCorta(fechaLima(l.created_at))}`,
+        ? `Faltaron ${formatMonto(dif)} en el efectivo de deliverys del ${fechaCorta(dia)}`
+        : `Sobraron ${formatMonto(-dif)} en el efectivo de deliverys del ${fechaCorta(dia)}`,
       detalle: `Esperado ${formatMonto(Number(l.esperado))} · recibido ${formatMonto(Number(l.recibido))}.${l.nota ? ` Nota: ${l.nota}` : ''}`,
       ir: '/deliverys',
     });
