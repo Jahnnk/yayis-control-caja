@@ -40,6 +40,8 @@ export function useGastos() {
     categoria_id?: string;
     metodo_pago?: string;
     estado?: string;
+    /** Solo los que registró el administrador o solo las compras de Fabio. */
+    origen?: 'administrador' | 'compras';
     busqueda?: string;
     page?: number;
     pageSize?: number;
@@ -66,6 +68,7 @@ export function useGastos() {
     if (filters?.categoria_id) query = query.eq('categoria_id', filters.categoria_id);
     if (filters?.metodo_pago) query = query.eq('metodo_pago', filters.metodo_pago);
     if (filters?.estado) query = query.eq('estado', filters.estado);
+    if (filters?.origen) query = query.eq('origen', filters.origen);
     if (filters?.busqueda) query = query.ilike('descripcion', `%${filters.busqueda}%`);
 
     query = query.range(from, to);
