@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useEntregas, fetchUsuariosCompras, gastadoDe, type EntregaDetalle } from '@/hooks/useEntregas';
 import { usePedidos } from '@/hooks/usePedidos';
+import { RecorridoDinero } from '@/components/gastos/RecorridoDinero';
+import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
+import { ComprasRegistradas } from '@/components/gastos/ComprasRegistradas';
+import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { RendicionPage } from '@/pages/RendicionPage';
+import { Link } from 'react-router-dom';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,7 +125,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
 export function RecepcionPage() {
   const { sedeActiva, responsable } = useSedeActiva();
   const { entregas, cerradas, loading, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
-  const { pedidos, confirmarRecepcion } = usePedidos();
+  const { pedidos } = usePedidos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
   const hoy = getTodayLima();
@@ -144,22 +151,8 @@ export function RecepcionPage() {
 
   // Pedidos ya comprados, esperando que el admin confirme que llegaron
   const porRecibir = pedidos.filter(p => p.estado === 'comprado');
-  const [comprasPorPedido, setComprasPorPedido] = useState<Record<string, CompraDetalle[]>>({});
-  const idsPorRecibir = porRecibir.map(p => p.id).join(',');
-  useEffect(() => {
-    if (!idsPorRecibir) { setComprasPorPedido({}); return; }
-    supabase
-      .from('compras')
-      .select('*, proveedores(nombre), compra_items(*, productos(nombre))')
-      .in('pedido_id', idsPorRecibir.split(','))
-      .then(({ data }) => {
-        const agrupadas: Record<string, CompraDetalle[]> = {};
-        for (const c of (data ?? []) as CompraDetalle[]) (agrupadas[c.pedido_id!] ??= []).push(c);
-        setComprasPorPedido(agrupadas);
-      });
-  }, [idsPorRecibir]);
 
-  const [observaciones, setObservaciones] = useState<Record<string, string>>({});
+
   const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string>; saldoContinua: number } | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
@@ -168,6 +161,11 @@ export function RecepcionPage() {
   // Monto semanal que el administrador recibe de Gerencia: lo reparte a Compras según necesidad y
   // con él paga directamente lo que marca «Se paga con el monto semanal» (ver useSaldoSemanal).
   const saldoSemanal = useSaldoSemanal(versionSaldo);
+  const { consolidado, sinRendir } = useConsolidadoReposicion(versionSaldo);
+  const { profile } = useAuth();
+  const esGerencia = profile?.rol === 'owner';
+  // Gerencia puede ver el dinero en manos de Compras de todas las sedes (antes era «Dinero en Compras»).
+  const [verTodas, setVerTodas] = useState(false);
   const porEntregar = Math.max(saldoSemanal.queda, 0);
   const enManosDeCompras = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
@@ -210,31 +208,48 @@ export function RecepcionPage() {
     addToast(`Rendición cerrada: ${resultado?.gastos_creados ?? 0} gasto(s) por ${formatMonto(Number(resultado?.total_gastado ?? 0))} pasaron a la caja de ${encargado}.`, 'success');
   }
 
-  async function handleRecibido(pedidoId: string) {
-    const { error } = await confirmarRecepcion(pedidoId, observaciones[pedidoId] ?? null);
-    if (error) addToast(`Error: ${error}`, 'error');
-    else addToast('Recepción confirmada', 'success');
+
+  if (verTodas) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <Button type="button" size="sm" variant="outline" onClick={() => setVerTodas(false)}>← Volver a esta sede</Button>
+        <RendicionPage />
+      </div>
+    );
   }
 
   if (loading && entregas.length === 0) return <Loading text="Cargando..." />;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold text-yayis-dark">Entregas y recepción{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-yayis-dark">Dinero de la semana{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+        {esGerencia && (
+          <div className="flex gap-1" role="group" aria-label="Qué ver">
+            <Button type="button" size="sm" variant="default" aria-pressed>Esta sede</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setVerTodas(true)}>Todas las sedes</Button>
+          </div>
+        )}
+      </div>
+
+      <RecorridoDinero saldo={saldoSemanal} />
+      <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />
+      <ComprasRegistradas sinRendir={sinRendir} />
 
       {/* 1. Entregar dinero */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={18} /> Entregar dinero a Compras</CardTitle>
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
-          <div className="mt-2">
-            <SaldoMontoSemanal saldo={saldoSemanal}>
+          {saldoSemanal.montoSemanal > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
+              <span>Te queda del monto semanal: <strong className={saldoSemanal.queda < 0 ? 'text-red-600' : 'text-yayis-dark'}>{formatMonto(saldoSemanal.queda)}</strong></span>
               <span className="text-xs text-muted-foreground">Compras tiene sin gastar: {formatMonto(enManosDeCompras)}</span>
               {porEntregar > 0 && (
                 <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
               )}
-            </SaldoMontoSemanal>
-          </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {receptores.length === 0 ? (
@@ -325,46 +340,14 @@ export function RecepcionPage() {
         />
       ))}
 
-      {/* 4. Mercadería por recibir */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><PackageCheck size={18} /> Mercadería por recibir</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {porRecibir.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay compras terminadas esperando tu confirmación.</p>
-          ) : porRecibir.map(p => (
-            <div key={p.id} className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-bold capitalize">{p.urgente ? 'Urgente · ' : ''}{fechaCorta(p.fecha_compra)}</span>
-                <span className="text-xs text-muted-foreground">{p.pedido_items.length} productos</span>
-              </div>
-              <ul className="space-y-1 text-xs">
-                {p.pedido_items.map(i => (
-                  <li key={i.id} className="flex items-center gap-2">
-                    <span className={`rounded-full px-1.5 py-0.5 ${ESTADO_ITEM[i.estado].clase}`}>{ESTADO_ITEM[i.estado].label}</span>
-                    <span>{i.productos?.nombre}</span>
-                    <span className="text-muted-foreground">{formatCantidad(i.cantidad)} {i.unidad}</span>
-                  </li>
-                ))}
-              </ul>
-              {(comprasPorPedido[p.id] ?? []).map(c => <CompraResumen key={c.id} compra={c} />)}
-              <div className="flex flex-wrap items-center gap-2 border-t pt-2">
-                <Input
-                  placeholder="¿Algo llegó mal o faltó? (opcional)"
-                  value={observaciones[p.id] ?? ''}
-                  onChange={e => setObservaciones(prev => ({ ...prev, [p.id]: e.target.value }))}
-                  className="min-w-[14rem] flex-1"
-                  aria-label="Observación de recepción"
-                />
-                <Button size="sm" onClick={() => handleRecibido(p.id)}>
-                  <CheckCircle2 size={14} className="mr-1" /> {observaciones[p.id]?.trim() ? 'Recibido con observaciones' : 'Recibido conforme'}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {/* La mercadería se recibe en «Pedidos y recepción» */}
+      {porRecibir.length > 0 && (
+        <Link to="/pedidos" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+          <PackageCheck size={16} />
+          <span>Tienes <strong>{porRecibir.length}</strong> lista(s) de mercadería por recibir: se revisa producto por producto en <strong>Pedidos y recepción</strong>.</span>
+          <span className="ml-auto text-xs font-medium underline">Ir a recibir →</span>
+        </Link>
+      )}
 
       {/* Historial plegado */}
       {cerradas.length > 0 && (

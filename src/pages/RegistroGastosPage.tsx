@@ -3,9 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
-import { RecorridoDinero } from '@/components/gastos/RecorridoDinero';
-import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
-import { useConsolidadoReposicion, type CompraDeCompras } from '@/hooks/useConsolidadoReposicion';
+import { Link } from 'react-router-dom';
+import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { GastoForm } from '@/components/gastos/GastoForm';
@@ -16,26 +15,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select-native';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes } from '@/lib/dates';
-import { fechaCorta } from '@/lib/compras';
-import { formatMonto, roundTwo } from '@/lib/utils';
+import { formatMonto } from '@/lib/utils';
 import { Search } from 'lucide-react';
 import type { GastoConCategoria, GastoFormData } from '@/types';
-
-/** Filas de compras (fecha, proveedor, total) de una lista. */
-function FilasCompras({ compras }: { compras: CompraDeCompras[] }) {
-  return (
-    <div className="divide-y rounded-md border bg-white text-sm">
-      {compras.map(c => (
-        <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-          <span className="w-24 capitalize text-muted-foreground">{fechaCorta(c.fecha)}</span>
-          <span className="min-w-[8rem] flex-1 font-medium">{c.proveedor}</span>
-          {c.evidenciaPendiente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Falta una foto</span>}
-          <span className="font-bold">{formatMonto(c.total)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function RegistroGastosPage() {
   const { profile } = useAuth();
@@ -138,9 +120,12 @@ export function RegistroGastosPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-yayis-dark">Registro de Gastos</h1>
 
-      <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={responsable ?? 'el administrador'} />
-
-      <RecorridoDinero saldo={saldoSemanal} />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border bg-white px-4 py-3 text-sm">
+        <span>Pendiente de reposición: <strong className="text-yayis-dark">{formatMonto(consolidado.total.total)}</strong>
+          <span className="text-xs text-muted-foreground"> (tuyo {formatMonto(consolidado.administrador.total)} · Compras {formatMonto(consolidado.compras.total)})</span></span>
+        <span>Te queda del monto semanal: <strong className={saldoSemanal.queda < 0 ? 'text-red-600' : 'text-yayis-dark'}>{formatMonto(saldoSemanal.queda)}</strong></span>
+        <Link to="/recepcion" className="ml-auto text-xs font-medium text-yayis-green underline">Ver el recorrido del dinero →</Link>
+      </div>
 
       <ResumenDiario />
 
@@ -166,36 +151,10 @@ export function RegistroGastosPage() {
         ))}
       </div>
 
-      {filterOrigen === 'compras' && (sinRendir.cantidad > 0 || sinRendir.cerradas.length > 0) && (
-        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
-          <div>
-            <p className="text-sm font-bold text-amber-900">Compras que Compras ya registró en el sistema</p>
-            <p className="text-xs text-amber-900">
-              Esto es lo que Compras <strong>ya registró</strong>, según el paso en que va: <strong>registradas</strong> (Compras todavía no rinde cuentas), <strong>rendidas</strong> (Compras ya rindió; falta que tú cierres la rendición en «Entregas y recepción») y <strong>cerradas</strong> (ya son gasto y aparecen en la lista de abajo).
-              Lo que Compras gastó y <strong>todavía no registró</strong> no aparece aquí: se ve como «falta justificar» en el recorrido del dinero, arriba.
-            </p>
-          </div>
-          {(['abierta', 'rendida'] as const).map(estado => {
-            const lista = sinRendir.compras.filter(c => c.estado === estado);
-            if (lista.length === 0) return null;
-            return (
-              <div key={estado}>
-                <p className="mb-1 text-xs font-bold text-amber-900">
-                  {estado === 'abierta' ? 'Registradas, Compras aún no rinde cuentas' : 'Rendidas por Compras: falta cerrar la rendición'} ({lista.length} · {formatMonto(lista.reduce((t, c) => roundTwo(t + c.total), 0))})
-                </p>
-                <FilasCompras compras={lista} />
-              </div>
-            );
-          })}
-          {sinRendir.cerradas.length > 0 && (
-            <details className="rounded-md border bg-white">
-              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-bold text-yayis-dark">
-                Cerradas este mes, ya son gasto ({sinRendir.cerradas.length} · {formatMonto(sinRendir.cerradas.reduce((t, c) => roundTwo(t + c.total), 0))})
-              </summary>
-              <div className="border-t"><FilasCompras compras={sinRendir.cerradas} /></div>
-            </details>
-          )}
-        </div>
+      {filterOrigen === 'compras' && sinRendir.cantidad > 0 && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Aquí solo aparecen las compras de Compras que <strong>ya son gasto</strong> (rendición cerrada). Hay {formatMonto(sinRendir.total)} en {sinRendir.cantidad} compra(s) todavía sin cerrar: míralas en <Link to="/recepcion" className="font-medium underline">Dinero de la semana</Link>.
+        </p>
       )}
 
       {/* Filters */}

@@ -16,7 +16,7 @@ import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import { baseDePrecio, referenciaPorUnidadLinea } from '@/lib/precio-linea';
-import { CantidadCelda, EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
+import { CantidadCelda, EntregaCelda, PrecioPagadoCelda, type DatosProblema } from '@/components/compras/EntregaProducto';
 
 const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
 
@@ -53,13 +53,15 @@ interface Props {
   pagos: Map<string, PrecioPagado>;
   /** El administrador confirma (o deshace) que un producto comprado ya llegó a su sede. */
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  /** Registra un problema al recibir un producto. */
+  onProblema: (itemId: string, datos: DatosProblema) => Promise<{ error: string | null }>;
   /** Pasa un producto que no había a la próxima lista. */
   onVolverAPedir: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string, motivoSobreTope?: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onVolverAPedir, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onProblema, onVolverAPedir, onEnviar, onCancelar }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -512,7 +514,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                     <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
                     {enviado && (
                       <td className="py-2 pr-2">
-                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} />
+                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} />
                       </td>
                     )}
                     <td className="py-2 text-right">

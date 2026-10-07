@@ -69,7 +69,7 @@ function PagarFactura({ compra, onClose, onPagar }: {
 }
 
 export function FinanzasPage() {
-  const { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, loading, pagarCompra } = useFinanzas();
+  const { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, diferencias, loading, pagarCompra } = useFinanzas();
   const { cambiarSede } = useSedeActiva();
   const navigate = useNavigate();
   const { addToast } = useToast();
@@ -77,7 +77,7 @@ export function FinanzasPage() {
   const hoy = getTodayLima();
 
   const presupuesto = useAlertasPresupuesto(hoy);
-  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, presupuesto }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, presupuesto, hoy]);
+  const alertas = useMemo(() => calcularAlertas({ porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, diferencias, presupuesto }, hoy), [porPagar, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, diferencias, presupuesto, hoy]);
   const altas = alertas.filter(a => a.nivel === 'alta').length;
 
   const totalPorPagar = porPagar.reduce((s, c) => roundTwo(s + Number(c.total)), 0);

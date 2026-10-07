@@ -245,6 +245,11 @@ export interface PedidoItem {
   /** El administrador confirmó que el producto ya llegó a su sede y lo verificó. */
   entregado_at?: string | null;
   entregado_por?: string | null;
+  /** Resultado de la revisión del administrador al recibir el producto (null = todavía sin revisar; «entregado_at» marca que ya se revisó). */
+  recepcion_estado?: 'conforme' | 'incompleto' | 'no_llego' | 'llego_mal' | null;
+  /** Si llegó incompleto: cuánto llegó. */
+  cantidad_recibida?: number | null;
+  recepcion_nota?: string | null;
   /** El administrador ya pasó este producto (que no había) a su próxima lista. */
   repedido_at?: string | null;
   /** Precio que el administrador cree que costará (S/ por kg / litro / unidad; por kg si la línea es en g). */

@@ -31,6 +31,20 @@ export interface CompraControl {
   proveedores: { nombre: string } | null;
 }
 
+/** Productos con diferencias al recibirlos (incompleto / no llegó / llegó mal), de las últimas semanas. */
+export interface DiferenciaRecepcion {
+  id: string;
+  sede_id: string;
+  sedeNombre: string;
+  producto: string;
+  cantidad: number;
+  unidad: string;
+  estado: 'incompleto' | 'no_llego' | 'llego_mal';
+  cantidadRecibida: number | null;
+  nota: string | null;
+  fecha: string;
+}
+
 export interface PedidoFinanzas extends Pick<Pedido, 'id' | 'sede_id' | 'fecha_compra' | 'urgente' | 'motivo_urgente' | 'estado' | 'comprado_at' | 'created_at'> {
   sedes: { nombre: string } | null;
 }
@@ -61,6 +75,7 @@ export function useFinanzas() {
   const [pedidos, setPedidos] = useState<PedidoFinanzas[]>([]);
   const [items, setItems] = useState<ItemPrecio[]>([]);
   const [comprasControl, setComprasControl] = useState<CompraControl[]>([]);
+  const [diferencias, setDiferencias] = useState<DiferenciaRecepcion[]>([]);
   const [deliverys, setDeliverys] = useState<DeliveryDetalle[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionDetalle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,6 +123,21 @@ export function useFinanzas() {
         .order('fecha', { ascending: true }),
     ]);
     for (const r of [pp, pg, en, pe, it, dl, lq, cc]) if (r.error) console.error('Error en el panel de Finanzas:', r.error);
+    // Diferencias al recibir mercadería (últimos 14 días).
+    const dif = await supabase.from('pedido_items')
+      .select('id, cantidad, unidad, recepcion_estado, cantidad_recibida, recepcion_nota, entregado_at, productos(nombre), pedidos(sede_id, sedes(nombre))')
+      .in('recepcion_estado', ['incompleto', 'no_llego', 'llego_mal'])
+      .gte('entregado_at', `${sumarDias(hoy, -14)}T00:00:00`)
+      .order('entregado_at', { ascending: false });
+    if (dif.error) console.error('Error cargando las diferencias de recepción:', dif.error);
+    setDiferencias(((dif.data ?? []) as unknown as {
+      id: string; cantidad: number; unidad: string; recepcion_estado: DiferenciaRecepcion['estado']; cantidad_recibida: number | null;
+      recepcion_nota: string | null; entregado_at: string; productos: { nombre: string } | null; pedidos: { sede_id: string; sedes: { nombre: string } | null } | null;
+    }[]).filter(d => d.pedidos).map(d => ({
+      id: d.id, sede_id: d.pedidos!.sede_id, sedeNombre: d.pedidos!.sedes?.nombre ?? '', producto: d.productos?.nombre ?? 'Producto',
+      cantidad: Number(d.cantidad), unidad: d.unidad, estado: d.recepcion_estado,
+      cantidadRecibida: d.cantidad_recibida === null ? null : Number(d.cantidad_recibida), nota: d.recepcion_nota, fecha: d.entregado_at.slice(0, 10),
+    })));
     setPorPagar((pp.data ?? []) as CompraFinanzas[]);
     setPagadas((pg.data ?? []) as CompraFinanzas[]);
     setEntregas((en.data ?? []) as EntregaFinanzas[]);
@@ -149,5 +179,5 @@ export function useFinanzas() {
     return { error: null };
   }, [profile, fetchTodo]);
 
-  return { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, loading, fetchTodo, pagarCompra };
+  return { porPagar, pagadas, entregas, pedidos, items, deliverys, liquidaciones, comprasControl, diferencias, loading, fetchTodo, pagarCompra };
 }
