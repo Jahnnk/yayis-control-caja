@@ -2,12 +2,24 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { roundTwo } from '@/lib/utils';
+import { getTodayLima } from '@/lib/dates';
 
 export interface TotalOrigen { total: number; cantidad: number; efectivo: number; cuentas: number }
 export interface ConsolidadoReposicion { administrador: TotalOrigen; compras: TotalOrigen; total: TotalOrigen }
 
 /** Compras de Fabio ya hechas con dinero entregado, pero cuya rendición todavía no se cierra (aún no son gasto a reponer). */
-export interface SinRendir { total: number; cantidad: number; compras: { id: string; fecha: string; total: number; proveedor: string; evidenciaPendiente: boolean }[] }
+export interface CompraDeCompras {
+  id: string; fecha: string; total: number; proveedor: string; evidenciaPendiente: boolean;
+  /** abierta: Compras todavía no rinde · rendida: Compras ya rindió, falta que el administrador cierre · cerrada: ya es gasto. */
+  estado: 'abierta' | 'rendida' | 'cerrada';
+}
+export interface SinRendir {
+  total: number; cantidad: number;
+  /** Compras con la rendición todavía sin cerrar (por rendir + rendidas sin cerrar). */
+  compras: CompraDeCompras[];
+  /** Compras de este mes cuya rendición ya se cerró (ya son gasto). */
+  cerradas: CompraDeCompras[];
+}
 
 const vacio = (): TotalOrigen => ({ total: 0, cantidad: 0, efectivo: 0, cuentas: 0 });
 const PAGINA = 1000;
@@ -19,7 +31,7 @@ const PAGINA = 1000;
 export function useConsolidadoReposicion(version = 0) {
   const { sedeId } = useSedeActiva();
   const [consolidado, setConsolidado] = useState<ConsolidadoReposicion>({ administrador: vacio(), compras: vacio(), total: vacio() });
-  const [sinRendir, setSinRendir] = useState<SinRendir>({ total: 0, cantidad: 0, compras: [] });
+  const [sinRendir, setSinRendir] = useState<SinRendir>({ total: 0, cantidad: 0, compras: [], cerradas: [] });
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
@@ -43,7 +55,15 @@ export function useConsolidadoReposicion(version = 0) {
         if (!data || data.length < PAGINA) break;
       }
       // Compras al contado de Fabio (con entrega de dinero) que todavía no se convirtieron en gasto: falta cerrar la rendición.
-      const pendientes: SinRendir = { total: 0, cantidad: 0, compras: [] };
+      const pendientes: SinRendir = { total: 0, cantidad: 0, compras: [], cerradas: [] };
+      // Estado de cada entrega abierta o rendida, para saber si Compras ya rindió o todavía no.
+      const { data: entregasAbiertas } = await supabase.from('entregas').select('id, estado').eq('sede_id', sedeId).in('estado', ['abierta', 'rendida']);
+      const estadoEntrega = new Map((entregasAbiertas ?? []).map(e => [e.id as string, e.estado as 'abierta' | 'rendida']));
+      const aCompra = (c: Record<string, unknown>, estado: CompraDeCompras['estado']): CompraDeCompras => ({
+        id: c.id as string, fecha: c.fecha as string, total: Number(c.total),
+        proveedor: ((c.proveedores as unknown as { nombre: string } | null)?.nombre) ?? 'Proveedor',
+        evidenciaPendiente: !!c.evidencia_pendiente, estado,
+      });
       for (let desde = 0; ; desde += PAGINA) {
         const { data, error } = await supabase.from('compras').select('id, fecha, total, entrega_id, evidencia_pendiente, proveedores(nombre)')
           .eq('sede_id', sedeId).is('gasto_id', null).order('id', { ascending: true }).range(desde, desde + PAGINA - 1);
@@ -52,15 +72,17 @@ export function useConsolidadoReposicion(version = 0) {
           if (!c.entrega_id || !(Number(c.total) > 0)) continue;
           pendientes.total = roundTwo(pendientes.total + Number(c.total));
           pendientes.cantidad += 1;
-          pendientes.compras.push({
-            id: c.id as string, fecha: c.fecha as string, total: Number(c.total),
-            proveedor: ((c.proveedores as unknown as { nombre: string } | null)?.nombre) ?? 'Proveedor',
-            evidenciaPendiente: !!c.evidencia_pendiente,
-          });
+          pendientes.compras.push(aCompra(c, estadoEntrega.get(c.entrega_id as string) ?? 'abierta'));
         }
         if (!data || data.length < PAGINA) break;
       }
       pendientes.compras.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+      // Compras de este mes ya rendidas y cerradas (ya son gasto): para ver todo el recorrido en un solo lugar.
+      const inicioMes = `${getTodayLima().slice(0, 7)}-01`;
+      const { data: cerradas } = await supabase.from('compras').select('id, fecha, total, entrega_id, gasto_id, evidencia_pendiente, proveedores(nombre)')
+        .eq('sede_id', sedeId).gte('fecha', inicioMes).order('fecha', { ascending: false }).limit(300);
+      for (const c of cerradas ?? []) if (c.gasto_id && c.entrega_id && Number(c.total) > 0) pendientes.cerradas.push(aCompra(c, 'cerrada'));
       if (vigente) { setConsolidado(r); setSinRendir(pendientes); setCargando(false); }
     })();
     return () => { vigente = false; };

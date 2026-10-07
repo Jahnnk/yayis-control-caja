@@ -5,7 +5,7 @@ import { useCategorias } from '@/hooks/useCategorias';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
 import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
 import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
-import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { useConsolidadoReposicion, type CompraDeCompras } from '@/hooks/useConsolidadoReposicion';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { GastoForm } from '@/components/gastos/GastoForm';
@@ -17,9 +17,25 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select-native';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes } from '@/lib/dates';
 import { fechaCorta } from '@/lib/compras';
-import { formatMonto } from '@/lib/utils';
+import { formatMonto, roundTwo } from '@/lib/utils';
 import { Search } from 'lucide-react';
 import type { GastoConCategoria, GastoFormData } from '@/types';
+
+/** Filas de compras (fecha, proveedor, total) de una lista. */
+function FilasCompras({ compras }: { compras: CompraDeCompras[] }) {
+  return (
+    <div className="divide-y rounded-md border bg-white text-sm">
+      {compras.map(c => (
+        <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+          <span className="w-24 capitalize text-muted-foreground">{fechaCorta(c.fecha)}</span>
+          <span className="min-w-[8rem] flex-1 font-medium">{c.proveedor}</span>
+          {c.evidenciaPendiente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Falta una foto</span>}
+          <span className="font-bold">{formatMonto(c.total)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function RegistroGastosPage() {
   const { profile } = useAuth();
@@ -150,22 +166,34 @@ export function RegistroGastosPage() {
         ))}
       </div>
 
-      {filterOrigen === 'compras' && sinRendir.cantidad > 0 && (
-        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-sm font-bold text-amber-900">Compras por rendir ({sinRendir.cantidad} · {formatMonto(sinRendir.total)})</p>
-          <p className="text-xs text-amber-900">
-            Compras ya hechas con dinero entregado a Compras. <strong>Todavía no son gastos</strong>: aparecen en la lista de abajo cuando Compras rinde cuentas y tú cierras la rendición en «Entregas y recepción».
-          </p>
-          <div className="divide-y rounded-md border bg-white text-sm">
-            {sinRendir.compras.map(c => (
-              <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                <span className="w-24 capitalize text-muted-foreground">{fechaCorta(c.fecha)}</span>
-                <span className="min-w-[8rem] flex-1 font-medium">{c.proveedor}</span>
-                {c.evidenciaPendiente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Falta una foto</span>}
-                <span className="font-bold">{formatMonto(c.total)}</span>
-              </div>
-            ))}
+      {filterOrigen === 'compras' && (sinRendir.cantidad > 0 || sinRendir.cerradas.length > 0) && (
+        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+          <div>
+            <p className="text-sm font-bold text-amber-900">Recorrido de las compras de Compras</p>
+            <p className="text-xs text-amber-900">
+              Una compra pasa por tres pasos: <strong>por rendir</strong> (Compras aún no rinde cuentas), <strong>rendida</strong> (Compras ya rindió; falta que tú cierres la rendición en «Entregas y recepción») y <strong>cerrada</strong> (ya es gasto y aparece en la lista de abajo).
+            </p>
           </div>
+          {(['abierta', 'rendida'] as const).map(estado => {
+            const lista = sinRendir.compras.filter(c => c.estado === estado);
+            if (lista.length === 0) return null;
+            return (
+              <div key={estado}>
+                <p className="mb-1 text-xs font-bold text-amber-900">
+                  {estado === 'abierta' ? 'Por rendir' : 'Rendidas: falta cerrar la rendición'} ({lista.length} · {formatMonto(lista.reduce((t, c) => roundTwo(t + c.total), 0))})
+                </p>
+                <FilasCompras compras={lista} />
+              </div>
+            );
+          })}
+          {sinRendir.cerradas.length > 0 && (
+            <details className="rounded-md border bg-white">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-bold text-yayis-dark">
+                Cerradas este mes: ya son gasto ({sinRendir.cerradas.length} · {formatMonto(sinRendir.cerradas.reduce((t, c) => roundTwo(t + c.total), 0))})
+              </summary>
+              <div className="border-t"><FilasCompras compras={sinRendir.cerradas} /></div>
+            </details>
+          )}
         </div>
       )}
 
