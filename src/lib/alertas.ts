@@ -83,7 +83,7 @@ export function alertasDeDeliverys(deliverys: DeliveryDetalle[], liquidaciones: 
       clave: `delivery-efectivo-${sedeId}`, nivel: dias > 5 ? 'alta' : 'media', tipo: 'Efectivo de delivery',
       sedeId, sedeNombre: lista[0]!.sedes?.nombre ?? '',
       titulo: `${formatMonto(total)} cobrados en deliverys sin entregar al administrador (desde hace ${dias} días)`,
-      detalle: `${lista.length} delivery(s), el más antiguo del ${fechaCorta(masViejo)}. Fabio debe entregarlo y el administrador confirmarlo.`,
+      detalle: `${lista.length} delivery(s), el más antiguo del ${fechaCorta(masViejo)}. Compras debe entregarlo y el administrador confirmarlo.`,
       ir: '/deliverys',
     });
   }
