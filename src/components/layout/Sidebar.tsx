@@ -7,25 +7,45 @@ interface SidebarProps {
   onClose: () => void;
 }
 
+type Grupo = 'ver' | 'compras' | 'dinero' | 'admin';
+
+const TITULO_GRUPO: Record<Grupo, string> = {
+  ver: 'Para ver cómo vamos',
+  compras: 'Compras',
+  dinero: 'Dinero',
+  admin: 'Administración',
+};
+
+// Orden de los grupos según quién entra: Gerencia mira primero; los demás, primero su trabajo del día.
+const ORDEN_GRUPOS: Record<string, Grupo[]> = {
+  owner: ['ver', 'compras', 'dinero', 'admin'],
+  admin: ['compras', 'dinero', 'ver'],
+  compras: ['compras', 'dinero'],
+  viewer: ['dinero', 'ver'],
+};
+
 const navItems = [
-  { to: '/vista-general', label: 'Vista general', icon: Eye, roles: ['owner'] },
-  { to: '/finanzas', label: 'Panel de Finanzas', icon: LayoutDashboard, roles: ['owner'] },
-  { to: '/ruta', label: 'Ruta de compras', icon: Truck, roles: ['owner', 'compras'] },
-  { to: '/deliverys', label: 'Deliverys', icon: Bike, roles: ['owner', 'admin', 'compras'] },
-  { to: '/rendicion', label: 'Mi dinero y rendición', icon: Wallet, roles: ['compras'] },
-  { to: '/presupuesto', label: 'Presupuesto', icon: Gauge, roles: ['owner', 'admin', 'viewer'] },
-  { to: '/gastos', label: 'Registro de Gastos', icon: ClipboardList, roles: ['owner', 'admin', 'viewer'] },
-  { to: '/resumen', label: 'Resumen', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },
-  { to: '/pedidos', label: 'Pedidos y recepción', icon: ShoppingCart, roles: ['owner', 'admin'] },
-  { to: '/recepcion', label: 'Dinero de la semana', icon: PackageCheck, roles: ['owner', 'admin'] },
-  { to: '/proveedores', label: 'Proveedores', icon: Store, roles: ['owner', 'admin', 'compras'] },
-  { to: '/configuracion', label: 'Configuracion', icon: Settings, roles: ['owner'] },
-  { to: '/usuarios', label: 'Usuarios', icon: Users, roles: ['owner'] },
+  { to: '/vista-general', label: 'Vista general', icon: Eye, grupo: 'ver', roles: ['owner'] },
+  { to: '/finanzas', label: 'Panel de Finanzas', icon: LayoutDashboard, grupo: 'ver', roles: ['owner'] },
+  { to: '/resumen', label: 'Resumen', icon: BarChart3, grupo: 'ver', roles: ['owner', 'admin', 'viewer'] },
+  { to: '/presupuesto', label: 'Presupuesto', icon: Gauge, grupo: 'ver', roles: ['owner', 'admin', 'viewer'] },
+  { to: '/pedidos', label: 'Pedidos y recepción', icon: ShoppingCart, grupo: 'compras', roles: ['owner', 'admin'] },
+  { to: '/ruta', label: 'Ruta de compras', icon: Truck, grupo: 'compras', roles: ['owner', 'compras'] },
+  { to: '/proveedores', label: 'Proveedores', icon: Store, grupo: 'compras', roles: ['owner', 'admin', 'compras'] },
+  { to: '/recepcion', label: 'Dinero de la semana', icon: PackageCheck, grupo: 'dinero', roles: ['owner', 'admin'] },
+  { to: '/rendicion', label: 'Mi dinero y rendición', icon: Wallet, grupo: 'dinero', roles: ['compras'] },
+  { to: '/gastos', label: 'Registro de Gastos', icon: ClipboardList, grupo: 'dinero', roles: ['owner', 'admin', 'viewer'] },
+  { to: '/deliverys', label: 'Deliverys', icon: Bike, grupo: 'dinero', roles: ['owner', 'admin', 'compras'] },
+  { to: '/configuracion', label: 'Configuración', icon: Settings, grupo: 'admin', roles: ['owner'] },
+  { to: '/usuarios', label: 'Usuarios', icon: Users, grupo: 'admin', roles: ['owner'] },
 ] as const;
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { profile } = useAuth();
   const rol = profile?.rol ?? 'viewer';
+  const grupos = (ORDEN_GRUPOS[rol] ?? ORDEN_GRUPOS.viewer!)
+    .map(g => ({ g, items: navItems.filter(i => i.grupo === g && (i.roles as readonly string[]).includes(rol)) }))
+    .filter(x => x.items.length > 0);
 
   return (
     <>
@@ -51,26 +71,29 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="mt-4 px-3 space-y-1">
-          {navItems
-            .filter(item => (item.roles as readonly string[]).includes(rol))
-            .map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-white/15 text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }`
-                }
-              >
-                <item.icon size={18} />
-                {item.label}
-              </NavLink>
-            ))}
+        <nav className="mt-2 px-3">
+          {grupos.map(({ g, items }) => (
+            <div key={g} className="mt-3 space-y-1">
+              <p className="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/45">{TITULO_GRUPO[g]}</p>
+              {items.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-white/15 text-white'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }`
+                  }
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
         </nav>
       </aside>
     </>
