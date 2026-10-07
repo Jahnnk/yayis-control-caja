@@ -114,10 +114,12 @@ export function useDeliverys(modo: 'mios' | 'sede') {
   }, [fetchDeliverys]);
 
   /** El administrador cuenta el efectivo que le entregó Fabio y lo registra. */
-  const recibirEfectivo = useCallback(async (ids: string[], recibido: number, nota: string) => {
+  const recibirEfectivo = useCallback(async (ids: string[], recibido: number, nota: string, fechaEntrega?: string) => {
     if (!sedeId) return { error: 'Sin sede', resultado: null };
     const { data, error } = await supabase.rpc('recibir_efectivo_delivery', {
       p_sede: sedeId, p_ids: ids, p_recibido: recibido, p_nota: nota.trim() || null,
+      // La fecha solo se envía si se indicó (la función usa hoy si no llega).
+      ...(fechaEntrega ? { p_fecha: fechaEntrega } : {}),
     });
     if (error) return { error: error.message, resultado: null };
     await fetchDeliverys();

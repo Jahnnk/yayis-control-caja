@@ -358,5 +358,7 @@ export interface LiquidacionDelivery {
   /** Positivo = faltó dinero; negativo = sobró. */
   diferencia: number;
   nota: string | null;
+  /** Día en que Fabio entregó el efectivo (puede ser anterior al día en que se confirmó). */
+  fecha_entrega?: string | null;
   created_at: string;
 }
