@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useEntregas, fetchUsuariosCompras, gastadoDe, type EntregaDetalle } from '@/hooks/useEntregas';
 import { usePedidos } from '@/hooks/usePedidos';
+import { usePreciosPagados } from '@/hooks/usePreciosPagados';
+import { PedidoPorRecibir } from '@/components/compras/PedidoPorRecibir';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,7 +120,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
 export function RecepcionPage() {
   const { sedeActiva, responsable } = useSedeActiva();
   const { entregas, cerradas, loading, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
-  const { pedidos, confirmarRecepcion } = usePedidos();
+  const { pedidos, marcarEntregado, registrarRecepcion, marcarTodoConforme } = usePedidos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
   const hoy = getTodayLima();
@@ -146,6 +148,7 @@ export function RecepcionPage() {
   const porRecibir = pedidos.filter(p => p.estado === 'comprado');
   const [comprasPorPedido, setComprasPorPedido] = useState<Record<string, CompraDetalle[]>>({});
   const idsPorRecibir = porRecibir.map(p => p.id).join(',');
+  const pagosPorRecibir = usePreciosPagados(porRecibir.map(p => p.id), pedidos.map(p => `${p.id}:${p.estado}:${p.pedido_items.filter(i => i.entregado_at).length}`).join('|'));
   useEffect(() => {
     if (!idsPorRecibir) { setComprasPorPedido({}); return; }
     supabase
@@ -159,7 +162,6 @@ export function RecepcionPage() {
       });
   }, [idsPorRecibir]);
 
-  const [observaciones, setObservaciones] = useState<Record<string, string>>({});
   const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string>; saldoContinua: number } | null>(null);
   const [cerrando, setCerrando] = useState(false);
 
@@ -210,11 +212,6 @@ export function RecepcionPage() {
     addToast(`Rendición cerrada: ${resultado?.gastos_creados ?? 0} gasto(s) por ${formatMonto(Number(resultado?.total_gastado ?? 0))} pasaron a la caja de ${encargado}.`, 'success');
   }
 
-  async function handleRecibido(pedidoId: string) {
-    const { error } = await confirmarRecepcion(pedidoId, observaciones[pedidoId] ?? null);
-    if (error) addToast(`Error: ${error}`, 'error');
-    else addToast('Recepción confirmada', 'success');
-  }
 
   if (loading && entregas.length === 0) return <Loading text="Cargando..." />;
 
@@ -334,34 +331,14 @@ export function RecepcionPage() {
           {porRecibir.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay compras terminadas esperando tu confirmación.</p>
           ) : porRecibir.map(p => (
-            <div key={p.id} className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-bold capitalize">{p.urgente ? 'Urgente · ' : ''}{fechaCorta(p.fecha_compra)}</span>
-                <span className="text-xs text-muted-foreground">{p.pedido_items.length} productos</span>
-              </div>
-              <ul className="space-y-1 text-xs">
-                {p.pedido_items.map(i => (
-                  <li key={i.id} className="flex items-center gap-2">
-                    <span className={`rounded-full px-1.5 py-0.5 ${ESTADO_ITEM[i.estado].clase}`}>{ESTADO_ITEM[i.estado].label}</span>
-                    <span>{i.productos?.nombre}</span>
-                    <span className="text-muted-foreground">{formatCantidad(i.cantidad)} {i.unidad}</span>
-                  </li>
-                ))}
-              </ul>
-              {(comprasPorPedido[p.id] ?? []).map(c => <CompraResumen key={c.id} compra={c} />)}
-              <div className="flex flex-wrap items-center gap-2 border-t pt-2">
-                <Input
-                  placeholder="¿Algo llegó mal o faltó? (opcional)"
-                  value={observaciones[p.id] ?? ''}
-                  onChange={e => setObservaciones(prev => ({ ...prev, [p.id]: e.target.value }))}
-                  className="min-w-[14rem] flex-1"
-                  aria-label="Observación de recepción"
-                />
-                <Button size="sm" onClick={() => handleRecibido(p.id)}>
-                  <CheckCircle2 size={14} className="mr-1" /> {observaciones[p.id]?.trim() ? 'Recibido con observaciones' : 'Recibido conforme'}
-                </Button>
-              </div>
-            </div>
+            <PedidoPorRecibir key={p.id} pedido={p} pagos={pagosPorRecibir} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme}>
+              {(comprasPorPedido[p.id] ?? []).length > 0 && (
+                <details className="rounded-md border bg-white">
+                  <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-yayis-dark">Ver los comprobantes de las compras ({(comprasPorPedido[p.id] ?? []).length})</summary>
+                  <div className="space-y-2 border-t p-3">{(comprasPorPedido[p.id] ?? []).map(c => <CompraResumen key={c.id} compra={c} />)}</div>
+                </details>
+              )}
+            </PedidoPorRecibir>
           ))}
         </CardContent>
       </Card>

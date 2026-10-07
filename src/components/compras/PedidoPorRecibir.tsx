@@ -1,24 +1,43 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CantidadCelda, EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
+import { CantidadCelda, EntregaCelda, PrecioPagadoCelda, type DatosProblema } from '@/components/compras/EntregaProducto';
+import { Button } from '@/components/ui/button';
 import { ESTADO_PEDIDO, fechaCorta, fechaLarga } from '@/lib/compras';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoConItems } from '@/types';
-import { AlertTriangle, ChevronDown, PackageCheck } from 'lucide-react';
+import { useState } from 'react';
+import { useToast } from '@/components/ui/toast';
+import { AlertTriangle, Check, ChevronDown, PackageCheck } from 'lucide-react';
 
 /**
  * Lista ya comprada por Compras: el administrador confirma producto por producto lo que llegó
  * a su sede. Cuando todo lo comprado está entregado, la lista pasa sola a «Recibido».
  */
-export function PedidoPorRecibir({ pedido, pagos, onEntregado, onVolverAPedir }: {
+export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTodoConforme, onVolverAPedir, children }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  onProblema?: (itemId: string, datos: DatosProblema) => Promise<{ error: string | null }>;
+  /** «Marcar todo conforme»: deja conforme lo que aún no se revisó. */
+  onTodoConforme?: (pedidoId: string) => Promise<{ error: string | null }>;
   onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
+  /** Contenido extra al final (por ejemplo, los comprobantes de las compras). */
+  children?: React.ReactNode;
 }) {
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const comprados = items.filter(i => i.estado === 'comprado');
-  const entregados = comprados.filter(i => i.entregado_at).length;
+  const revisados = comprados.filter(i => i.entregado_at).length;
+  const conDiferencias = comprados.filter(i => i.entregado_at && i.recepcion_estado && i.recepcion_estado !== 'conforme').length;
+  const sinRevisar = comprados.length - revisados;
+  const [trabajando, setTrabajando] = useState(false);
+  const { addToast } = useToast();
+  async function todoConforme() {
+    if (!onTodoConforme) return;
+    setTrabajando(true);
+    const { error } = await onTodoConforme(pedido.id);
+    setTrabajando(false);
+    if (error) addToast(error, 'error');
+  }
   const noHabia = items.filter(i => i.estado === 'no_habia').length;
   const pagado = comprados.reduce((t, i) => roundTwo(t + (pagos.get(i.id)?.total ?? 0)), 0);
 
@@ -38,7 +57,8 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onVolverAPedir }:
           </div>
         </div>
         <p className="text-sm">
-          <strong className="text-yayis-dark">{entregados} de {comprados.length}</strong> productos entregados a tu sede
+          <strong className="text-yayis-dark">{revisados} de {comprados.length}</strong> productos revisados al recibirlos
+          {conDiferencias > 0 && <span className="font-medium text-amber-700"> · {conDiferencias} con diferencias</span>}
           {noHabia > 0 && <span className="text-red-600"> · {noHabia} no había</span>}
         </p>
       </CardHeader>
@@ -61,16 +81,24 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onVolverAPedir }:
                   <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                   <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
                   <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} /> : ''}</td>
-                  <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} /></td>
+                  <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
-          <span className="text-xs text-muted-foreground">Marca «Entregado» cuando el producto ya llegó a tu sede y lo verificaste. Al marcar todos, la lista pasa a «Recibido».</span>
-          <span>Pagado en esta lista: <strong className="text-yayis-dark">{formatMonto(pagado)}</strong></span>
+          <span className="text-xs text-muted-foreground">Revisa cada producto cuando llegue: «Conforme» si está bien, «Problema» si llegó incompleto, no llegó o llegó mal (con una nota). Cuando todos estén revisados, la lista pasa a «Recibida».</span>
+          <span className="flex flex-wrap items-center gap-3">
+            <span>Pagado en esta lista: <strong className="text-yayis-dark">{formatMonto(pagado)}</strong></span>
+            {onTodoConforme && sinRevisar > 0 && (
+              <Button size="sm" onClick={todoConforme} disabled={trabajando}>
+                <Check size={14} className="mr-1" /> Marcar todo conforme ({sinRevisar})
+              </Button>
+            )}
+          </span>
         </div>
+        {children}
       </CardContent>
     </Card>
   );
@@ -80,10 +108,11 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onVolverAPedir }:
  * Lista ya recibida (todo lo comprado llegó a la sede), en una línea con su resumen y el detalle plegado.
  * Se ve unos días para poder cuadrar con Compras; después pasa a «Pedidos anteriores».
  */
-export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onVolverAPedir }: {
+export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onProblema, onVolverAPedir }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  onProblema?: (itemId: string, datos: DatosProblema) => Promise<{ error: string | null }>;
   onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
 }) {
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
@@ -97,7 +126,9 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onVolverAPed
         <span className="font-bold capitalize text-yayis-dark">{pedido.urgente ? 'Urgente · ' : ''}{fechaCorta(pedido.fecha_compra)}</span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>{ESTADO_PEDIDO[pedido.estado].label}</span>
         <span className="text-xs text-muted-foreground">
-          {comprados.length} producto(s) entregado(s){noHabia > 0 && <span className="text-red-600"> · {noHabia} no había</span>} · pagado <strong className="text-yayis-dark">{formatMonto(pagado)}</strong>
+          {comprados.length} producto(s) recibido(s)
+          {comprados.some(i => i.recepcion_estado && i.recepcion_estado !== 'conforme') && <span className="font-medium text-amber-700"> · {comprados.filter(i => i.recepcion_estado && i.recepcion_estado !== 'conforme').length} con diferencias</span>}
+          {noHabia > 0 && <span className="text-red-600"> · {noHabia} no había</span>} · pagado <strong className="text-yayis-dark">{formatMonto(pagado)}</strong>
         </span>
         <ChevronDown size={16} className="ml-auto transition-transform group-open:rotate-180" />
       </summary>
@@ -119,7 +150,7 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onVolverAPed
                 <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                 <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
                 <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} /> : ''}</td>
-                <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} /></td>
+                <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} /></td>
               </tr>
             ))}
           </tbody>

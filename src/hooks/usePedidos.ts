@@ -118,28 +118,6 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  /** El admin confirma que la mercadería llegó (conforme o con observaciones). */
-  const confirmarRecepcion = useCallback(async (pedidoId: string, observacion: string | null) => {
-    if (!profile) return { error: 'Sin sesión' };
-    const { error } = await supabase
-      .from('pedidos')
-      .update({
-        estado: 'recibido',
-        recibido_at: new Date().toISOString(),
-        recibido_por: profile.id,
-        observacion_recepcion: observacion?.trim() || null,
-      })
-      .eq('id', pedidoId)
-      .eq('estado', 'comprado');
-    if (error) return { error: error.message };
-    // «Recibido conforme» de toda la lista = todos sus productos comprados quedan entregados.
-    await supabase.from('pedido_items')
-      .update({ entregado_at: new Date().toISOString() })
-      .eq('pedido_id', pedidoId).eq('estado', 'comprado').is('entregado_at', null);
-    await fetchPedidos();
-    return { error: null };
-  }, [profile, fetchPedidos]);
-
   /**
    * El administrador marca (o desmarca) que un producto ya llegó a su sede y lo verificó.
    * La base hace cumplir que solo lo haga el administrador y que el producto ya esté comprado;
@@ -148,12 +126,42 @@ export function usePedidos() {
   const marcarEntregado = useCallback(async (itemId: string, entregado: boolean) => {
     const { data, error } = await supabase
       .from('pedido_items')
-      .update({ entregado_at: entregado ? new Date().toISOString() : null })
+      .update(entregado ? { entregado_at: new Date().toISOString(), recepcion_estado: 'conforme' } : { entregado_at: null })
       .eq('id', itemId)
       .eq('estado', 'comprado')
       .select('id');
     if (error) return { error: error.message };
     if (!data || data.length === 0) return { error: 'Ese producto ya no está comprado. Recarga la pantalla.' };
+    await fetchPedidos();
+    return { error: null };
+  }, [fetchPedidos]);
+
+  /** El administrador registra un problema al recibir un producto: llegó incompleto, no llegó o llegó mal (con su nota). */
+  const registrarRecepcion = useCallback(async (itemId: string, datos: { estado: 'incompleto' | 'no_llego' | 'llego_mal'; cantidadRecibida?: number; nota: string }) => {
+    const { data, error } = await supabase
+      .from('pedido_items')
+      .update({
+        entregado_at: new Date().toISOString(),
+        recepcion_estado: datos.estado,
+        cantidad_recibida: datos.estado === 'incompleto' ? datos.cantidadRecibida ?? null : datos.estado === 'no_llego' ? 0 : null,
+        recepcion_nota: datos.nota.trim(),
+      })
+      .eq('id', itemId)
+      .eq('estado', 'comprado')
+      .select('id');
+    if (error) return { error: error.message };
+    if (!data || data.length === 0) return { error: 'Ese producto ya no está comprado. Recarga la pantalla.' };
+    await fetchPedidos();
+    return { error: null };
+  }, [fetchPedidos]);
+
+  /** «Marcar todo conforme»: lo que aún no se revisó en la lista queda conforme (y la lista pasa sola a recibida). */
+  const marcarTodoConforme = useCallback(async (pedidoId: string) => {
+    const { error } = await supabase
+      .from('pedido_items')
+      .update({ entregado_at: new Date().toISOString(), recepcion_estado: 'conforme' })
+      .eq('pedido_id', pedidoId).eq('estado', 'comprado').is('entregado_at', null);
+    if (error) return { error: error.message };
     await fetchPedidos();
     return { error: null };
   }, [fetchPedidos]);
@@ -166,5 +174,5 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion, marcarEntregado, marcarRepedido };
+  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido };
 }

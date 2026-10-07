@@ -3,7 +3,7 @@ import { precioMostrado } from '@/lib/precio-linea';
 import { diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { calcularCambiosPrecio, formatPorcentaje, type CompraDePrecio } from '@/lib/precios';
 import { DIAS_PARA_ENTREGAR_EFECTIVO, esEfectivoPendiente } from '@/lib/deliverys';
-import type { CompraControl, CompraFinanzas, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
+import type { CompraControl, CompraFinanzas, DiferenciaRecepcion, EntregaFinanzas, ItemPrecio, PedidoFinanzas } from '@/hooks/useFinanzas';
 import type { DeliveryDetalle, LiquidacionDetalle } from '@/hooks/useDeliverys';
 import type { SobreTopeGasto, SobreTopePedido, UsoSede } from '@/hooks/useAlertasPresupuesto';
 import { nombreCategoria } from '@/lib/presupuesto';
@@ -160,10 +160,25 @@ export function alertasDePresupuesto(usoPorSede: UsoSede[], gastos: SobreTopeGas
   return alertas;
 }
 
+/** Mercadería que llegó con diferencias (incompleta, no llegó o llegó mal): una alerta por sede, con el detalle por producto. */
+export function alertasDeRecepcion(diferencias: DiferenciaRecepcion[]): Alerta[] {
+  const porSede = new Map<string, DiferenciaRecepcion[]>();
+  for (const d of diferencias) (porSede.get(d.sede_id) ?? porSede.set(d.sede_id, []).get(d.sede_id)!).push(d);
+  const texto = (d: DiferenciaRecepcion) =>
+    `${d.producto}: ${d.estado === 'no_llego' ? 'no llegó' : d.estado === 'llego_mal' ? 'llegó mal' : `llegaron ${formatCantidad(d.cantidadRecibida ?? 0)} de ${formatCantidad(d.cantidad)} ${d.unidad}`}${d.nota ? ` (${d.nota})` : ''}`;
+  return Array.from(porSede.entries()).map(([sedeId, lista]) => ({
+    clave: `recepcion-${sedeId}`, nivel: lista.some(d => d.estado === 'no_llego') ? 'alta' as const : 'media' as const, tipo: 'Mercadería con diferencias',
+    sedeId, sedeNombre: lista[0]!.sedeNombre,
+    titulo: `${lista.length} producto(s) llegaron con diferencias en los últimos 14 días`,
+    detalle: lista.slice(0, 4).map(texto).join(' · ') + (lista.length > 4 ? ` · y ${lista.length - 4} más` : ''),
+    ir: '/pedidos' as const,
+  }));
+}
+
 export function calcularAlertas(
-  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [], comprasControl = [], presupuesto }: {
+  { porPagar, entregas, pedidos, items, deliverys = [], liquidaciones = [], comprasControl = [], diferencias = [], presupuesto }: {
     porPagar: CompraFinanzas[]; entregas: EntregaFinanzas[]; pedidos: PedidoFinanzas[]; items: ItemPrecio[];
-    deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[]; comprasControl?: CompraControl[];
+    deliverys?: DeliveryDetalle[]; liquidaciones?: LiquidacionDetalle[]; comprasControl?: CompraControl[]; diferencias?: DiferenciaRecepcion[];
     presupuesto?: { usoPorSede: UsoSede[]; gastos: SobreTopeGasto[]; pedidos: SobreTopePedido[] };
   },
   hoy: string,
@@ -239,6 +254,7 @@ export function calcularAlertas(
   alertas.push(...alertasDePrecio(items, hoy));
   alertas.push(...alertasDeDeliverys(deliverys, liquidaciones, hoy));
   alertas.push(...alertasDeEvidencia(comprasControl, hoy));
+  alertas.push(...alertasDeRecepcion(diferencias));
   if (presupuesto) alertas.push(...alertasDePresupuesto(presupuesto.usoPorSede, presupuesto.gastos, presupuesto.pedidos));
   return alertas.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'alta' ? -1 : 1));
 }

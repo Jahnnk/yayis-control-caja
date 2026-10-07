@@ -22,7 +22,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from
 
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
-  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, marcarRepedido } = usePedidos();
+  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido } = usePedidos();
   const { productos, obtenerOCrear, recordarProveedor, recordarUnidad, recordarCategoria } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
@@ -156,6 +156,7 @@ export function PedidosPage() {
           onEliminar={eliminarItem}
           pagos={pagos}
           onEntregado={marcarEntregado}
+          onProblema={registrarRecepcion}
           onVolverAPedir={volverAPedir}
           onEnviar={enviarPedido}
           onCancelar={cancelarPedido}
@@ -163,7 +164,7 @@ export function PedidosPage() {
       ))}
 
       {/* Compradas: el administrador confirma lo que fue llegando a su sede */}
-      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onVolverAPedir={volverAPedir} />)}
+      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme} onVolverAPedir={volverAPedir} />)}
 
       {/* Nueva lista / pedido urgente */}
       <Card>
@@ -223,7 +224,7 @@ export function PedidosPage() {
       {recibidasRecientes.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-yayis-dark">Recibidas esta semana ({recibidasRecientes.length})</h2>
-          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onVolverAPedir={volverAPedir} />)}
+          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onVolverAPedir={volverAPedir} />)}
         </div>
       )}
 
