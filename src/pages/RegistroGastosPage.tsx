@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
-import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
+import { RecorridoDinero } from '@/components/gastos/RecorridoDinero';
 import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
 import { useConsolidadoReposicion, type CompraDeCompras } from '@/hooks/useConsolidadoReposicion';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
@@ -140,7 +140,7 @@ export function RegistroGastosPage() {
 
       <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={responsable ?? 'el administrador'} />
 
-      <SaldoMontoSemanal saldo={saldoSemanal} />
+      <RecorridoDinero saldo={saldoSemanal} />
 
       <ResumenDiario />
 
