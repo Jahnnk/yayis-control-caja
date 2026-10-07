@@ -17,7 +17,7 @@ export function SaldoMontoSemanal({ saldo, children }: { saldo: SaldoSemanal; ch
         {children}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        De lunes a hoy. «Pagado por ti» son los gastos que marcas como «Se paga con el monto semanal».
+        De lunes a hoy. «Pagado por ti» son los gastos que marcas como «Lo pagué con el monto semanal»; igual se reponen.
         {saldo.queda < 0 && <span className="font-medium text-red-600"> Ya te pasaste del monto semanal.</span>}
       </p>
     </div>

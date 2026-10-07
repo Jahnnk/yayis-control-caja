@@ -29,8 +29,6 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
 
   const isOwner = profile?.rol === 'owner';
   const { sedeActiva, sedeId } = useSedeActiva();
-  // Un gasto ya repuesto por Gerencia no puede pasar a pagarse con el monto semanal.
-  const yaRepuesto = !!editData && editData.estado === 'pagado' && !editData.con_monto_semanal;
   const today = getTodayLima();
 
   const [form, setForm] = useState<GastoFormData>({
@@ -130,7 +128,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
     setSaving(true);
 
     if (editData?.id) {
-      // Solo se envía la casilla si cambió (cambiarla cambia también si se le repone o no).
+      // Solo se envía la casilla si cambió.
       const cambios: Partial<GastoFormData> = { ...datos };
       if (form.con_monto_semanal === editData.con_monto_semanal) delete cambios.con_monto_semanal;
       const { error } = await updateGasto(editData.id, cambios, {
@@ -286,18 +284,17 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
         {/* Monto semanal */}
         {(sedeActiva?.monto_semanal_compras ?? 0) > 0 && (
           <div className="sm:col-span-2 lg:col-span-3">
-            <label className={`flex items-start gap-2 text-sm ${yaRepuesto ? 'text-muted-foreground' : ''}`}>
+            <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
                 className="mt-0.5"
                 checked={form.con_monto_semanal}
-                disabled={saving || yaRepuesto}
+                disabled={saving}
                 onChange={e => updateField('con_monto_semanal', e.target.checked)}
               />
               <span>
-                <strong>Se paga con el monto semanal</strong> (por ejemplo, pagos a proveedores que ya no hace Gerencia).
-                Resta del monto semanal y <strong>no se te repone</strong>.
-                {yaRepuesto && <span className="block text-xs">Este gasto ya fue repuesto: no se puede cambiar.</span>}
+                <strong>Lo pagué con el monto semanal</strong> (por ejemplo, un pago a un proveedor que hice yo y no Fabio).
+                Resta del saldo del monto semanal. <strong>Se repone igual</strong>, como todo gasto.
               </span>
             </label>
           </div>
