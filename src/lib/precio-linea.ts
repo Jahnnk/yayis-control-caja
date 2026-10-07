@@ -27,6 +27,12 @@ export function baseDePrecio(unidad: string): { factor: number; etiqueta: string
   return { factor: 1, etiqueta: unidad };
 }
 
+/** Precio de referencia (por kg / litro / unidad, como lo escribe la gente) -> precio por unidad de la línea (g, ml…). */
+export function referenciaPorUnidadLinea(referencia: number | null | undefined, unidad: string): number | undefined {
+  if (referencia === null || referencia === undefined || !(referencia >= 0)) return undefined;
+  return referencia / baseDePrecio(unidad).factor;
+}
+
 /** Precio por unidad pedida (g, ml…) -> precio por kg / litro para mostrarlo. */
 export function precioMostrado(unitario: number, unidad: string): { valor: number; etiqueta: string } {
   const b = baseDePrecio(unidad);

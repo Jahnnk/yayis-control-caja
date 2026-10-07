@@ -5,6 +5,7 @@ import { RegistrarCompraModal, type LineaCandidata } from '@/components/compras/
 import { abrirEvidencia } from '@/lib/evidencias';
 import { leerCompraAbierta } from '@/lib/borradores';
 import { formatMonto } from '@/lib/utils';
+import { baseDePrecio } from '@/lib/precio-linea';
 import { useRutaCompras, type ItemRuta, type PedidoRuta } from '@/hooks/useRutaCompras';
 import { useProveedores } from '@/hooks/useProveedores';
 import { useToast } from '@/components/ui/toast';
@@ -177,6 +178,7 @@ export function RutaComprasPage() {
           nombre: prod.nombre,
           cantidad: Number(item.cantidad),
           unidad: item.unidad,
+          precio_referencia: item.precio_referencia ?? null,
         });
         porSede.set(pedido.sede_id, entrada);
       }
@@ -397,6 +399,9 @@ export function RutaComprasPage() {
                           <div key={item.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
                             <span className="min-w-[4.5rem] rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{pedido.sedes?.nombre}</span>
                             <span className="font-medium">{formatCantidad(item.cantidad)} {item.unidad}</span>
+                            {item.precio_referencia !== null && item.precio_referencia !== undefined && (
+                              <span className="text-xs text-blue-700" title="Precio de referencia que puso la sede">Ref. {formatMonto(Number(item.precio_referencia))} por {baseDePrecio(item.unidad).etiqueta}</span>
+                            )}
                             {item.urgente && item.estado === 'pendiente' && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
                             {etiquetaPedido(pedido)}
                             {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}

@@ -15,6 +15,7 @@ import type { PrecioHabitual } from '@/lib/precios';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
+import { baseDePrecio, referenciaPorUnidadLinea } from '@/lib/precio-linea';
 import { CantidadCelda, EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
 
 const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
@@ -46,7 +47,7 @@ interface Props {
   otrosPorCategoria: Map<string, number>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
-  onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean }) => Promise<{ error: string | null }>;
+  onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean; precio_referencia?: number | null }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
   /** Lo pagado por cada línea ya comprada (clave: id de la línea del pedido). */
   pagos: Map<string, PrecioPagado>;
@@ -64,6 +65,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const [nota, setNota] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [urgenteNuevo, setUrgenteNuevo] = useState(false);
+  const [referenciaNueva, setReferenciaNueva] = useState('');
   const [categoriaNueva, setCategoriaNueva] = useState('');
   const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
   const [motivoTope, setMotivoTope] = useState('');
@@ -134,6 +136,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
       nota: nota.trim() || null,
       proveedor_id: proveedorId || producto.proveedor_id,
       urgente: urgenteNuevo,
+      ...(referenciaNueva.trim() !== '' && parseFloat(referenciaNueva) >= 0 ? { precio_referencia: parseFloat(referenciaNueva) } : {}),
     });
     setGuardando(false);
     if (errItem) return addToast(`Error: ${errItem}`, 'error');
@@ -146,6 +149,16 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     setNota('');
     setProveedorId('');
     setUrgenteNuevo(false);
+    setReferenciaNueva('');
+  }
+
+  /** Guarda (o borra, si se deja vacío) el precio de referencia de una línea. */
+  async function handleReferencia(itemId: string, actual: number | null | undefined, valor: string) {
+    const nuevo = valor.trim() === '' ? null : parseFloat(valor);
+    if (nuevo !== null && !(nuevo >= 0)) return;
+    if ((nuevo ?? null) === (actual === undefined || actual === null ? null : Number(actual))) return;
+    const { error } = await onActualizar(itemId, { precio_referencia: nuevo });
+    if (error) addToast(`Error: ${error}`, 'error');
   }
 
   async function handleCantidad(itemId: string, actual: number, valor: string) {
@@ -330,7 +343,16 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
               <OpcionesCategoria />
             </Select>
           </div>
-          <div className="col-span-2 sm:col-span-12">
+          <div className="col-span-2 sm:col-span-4">
+            <label className="text-xs font-medium" htmlFor={`ref-${pedido.id}`}>Precio de referencia (opcional)</label>
+            <div className="mt-1 flex items-center gap-1 text-sm">
+              S/
+              <Input id={`ref-${pedido.id}`} type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={referenciaNueva}
+                onChange={e => setReferenciaNueva(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAgregar()} />
+              <span className="whitespace-nowrap text-xs text-muted-foreground">por {baseDePrecio(unidad || 'unidad').etiqueta}</span>
+            </div>
+          </div>
+          <div className="col-span-2 sm:col-span-8">
             <label className="text-xs font-medium" htmlFor={`nota-${pedido.id}`}>Nota (opcional)</label>
             <Input
               id={`nota-${pedido.id}`}
@@ -368,6 +390,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                   <th className="py-2 font-medium">Cantidad</th>
                   <th className="py-2 font-medium">Proveedor</th>
                   <th className="py-2 font-medium">Categoría</th>
+                  <th className="py-2 font-medium" title="Lo que crees que costará. Compras la recibe con la lista y, si cambia al comprar, ve cuánto subió o bajó.">Precio ref.</th>
                   <th className="py-2 text-right font-medium" title="Lo que costaría (precio habitual) si falta comprar; lo que se pagó si ya se compró">Precio</th>
                   <th className="py-2 text-center font-medium">⚡ Urgente</th>
                   <th className="py-2 font-medium">Nota</th>
@@ -440,10 +463,33 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                         <span className="text-xs">{categoriaDe(i.producto_id) ? nombreCategoria(categoriaDe(i.producto_id)!) : '—'}</span>
                       )}
                     </td>
+                    <td className="py-2 pr-2 whitespace-nowrap">
+                      {i.estado === 'pendiente' ? (
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          S/
+                          <Input
+                            key={`${i.id}-${i.precio_referencia ?? ''}`}
+                            type="number" inputMode="decimal" min="0" step="0.01" placeholder="—"
+                            defaultValue={i.precio_referencia ?? ''}
+                            onBlur={e => handleReferencia(i.id, i.precio_referencia, e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                            className="h-8 w-20"
+                            aria-label={`Precio de referencia de ${i.productos?.nombre ?? 'producto'}`}
+                          />
+                          <span className="text-muted-foreground">/{baseDePrecio(i.unidad).etiqueta}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs tabular-nums">
+                          {i.precio_referencia !== null && i.precio_referencia !== undefined ? `${formatMonto(Number(i.precio_referencia))}/${baseDePrecio(i.unidad).etiqueta}` : '—'}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-2 text-right text-xs tabular-nums text-muted-foreground">
                       {(() => {
-                        if (i.estado === 'comprado') return <PrecioPagadoCelda pago={pagos.get(i.id)} />;
+                        if (i.estado === 'comprado') return <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} />;
                         if (i.estado !== 'pendiente') return '';
+                        const ref = referenciaPorUnidadLinea(i.precio_referencia, i.unidad);
+                        if (ref !== undefined) return <span title="Estimado con tu precio de referencia">≈ {formatMonto(roundTwo(ref * Number(i.cantidad)))}</span>;
                         const h = habituales.get(`${i.producto_id}|${i.unidad}`);
                         return h ? <span title="Estimado con el precio habitual">≈ {formatMonto(roundTwo(h.unitario * Number(i.cantidad)))}</span> : '—';
                       })()}

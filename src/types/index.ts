@@ -243,6 +243,8 @@ export interface PedidoItem {
   /** El administrador confirmó que el producto ya llegó a su sede y lo verificó. */
   entregado_at?: string | null;
   entregado_por?: string | null;
+  /** Precio que el administrador cree que costará (S/ por kg / litro / unidad; por kg si la línea es en g). */
+  precio_referencia?: number | null;
   created_at: string;
 }
 

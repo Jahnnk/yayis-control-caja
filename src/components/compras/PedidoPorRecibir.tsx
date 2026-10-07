@@ -59,7 +59,7 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado }: {
                   <td className="py-2 pr-2 font-medium">{i.productos?.nombre ?? '—'}{i.urgente && <span className="ml-1 text-xs font-bold text-red-700">⚡</span>}</td>
                   <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                   <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
-                  <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} /> : ''}</td>
+                  <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} /> : ''}</td>
                   <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} /></td>
                 </tr>
               ))}
