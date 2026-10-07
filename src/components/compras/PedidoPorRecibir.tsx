@@ -10,10 +10,11 @@ import { AlertTriangle, ChevronDown, PackageCheck } from 'lucide-react';
  * Lista ya comprada por Compras: el administrador confirma producto por producto lo que llegó
  * a su sede. Cuando todo lo comprado está entregado, la lista pasa sola a «Recibido».
  */
-export function PedidoPorRecibir({ pedido, pagos, onEntregado }: {
+export function PedidoPorRecibir({ pedido, pagos, onEntregado, onVolverAPedir }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
 }) {
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const comprados = items.filter(i => i.estado === 'comprado');
@@ -60,7 +61,7 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado }: {
                   <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                   <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
                   <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} /> : ''}</td>
-                  <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} /></td>
+                  <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} /></td>
                 </tr>
               ))}
             </tbody>
@@ -79,10 +80,11 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado }: {
  * Lista ya recibida (todo lo comprado llegó a la sede), en una línea con su resumen y el detalle plegado.
  * Se ve unos días para poder cuadrar con Compras; después pasa a «Pedidos anteriores».
  */
-export function PedidoRecibidoResumen({ pedido, pagos, onEntregado }: {
+export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onVolverAPedir }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
+  onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
 }) {
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const comprados = items.filter(i => i.estado === 'comprado');
@@ -117,7 +119,7 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado }: {
                 <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                 <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
                 <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} /> : ''}</td>
-                <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} /></td>
+                <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onVolverAPedir={onVolverAPedir} /></td>
               </tr>
             ))}
           </tbody>

@@ -51,6 +51,8 @@ interface Props {
 
 interface EstadoLinea extends CamposPrecio {
   incluir: boolean;
+  /** Si se compró menos de lo pedido: el resto queda pendiente (se compra otro día) o ya no se compra («no había»). */
+  resto?: 'pendiente' | 'no_habia';
   /** El precio salió solo (de la referencia de la lista o de la última compra) y Fabio todavía no lo tocó. */
   sugerido?: boolean;
   origenSugerido?: 'referencia' | 'ultimo';
@@ -376,6 +378,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             cantidad: parseFloat(l.cantidad) || 0,
             unidad: c.unidad,
             nombre: c.nombre,
+            cantidad_pedida: c.cantidad,
+            resto: l.resto ?? 'pendiente',
             precio_total: soloTotal ? (repartido.get(`L:${c.pedido_item_id}`) ?? NaN) : l.precio === '' ? NaN : parseFloat(l.precio),
             precio_repartido: soloTotal && !esRecojo,
           };
@@ -395,9 +399,10 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       setGuardando(false);
       return addToast(invalida, 'error');
     }
-    const { error } = await registrarCompra(compra);
+    const { error, aviso } = await registrarCompra(compra);
     setGuardando(false);
     if (error) return addToast(`Error: ${error}`, 'error');
+    if (aviso) addToast(aviso, 'warning');
     addToast(esRecojo ? `Recojo sin pago a ${proveedor.nombre} registrado` : `Compra a ${proveedor.nombre} registrada (${formatMonto(total)})`, 'success');
     onGuardado();
     cerrarYDescartar();
@@ -444,6 +449,15 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                   ) : (
                     <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} permitirSinCosto={l.sugerido}
                       onChange={n => cambiarLinea(c.pedido_item_id, { ...n, sugerido: false })} />
+                  )}
+                  {l.incluir && parseFloat(l.cantidad) > 0 && parseFloat(l.cantidad) < c.cantidad - 0.005 && (
+                    <div className="flex w-full flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                      <span>Compraste menos de lo pedido: faltan <strong>{formatCantidad(roundTwo(c.cantidad - parseFloat(l.cantidad)))} {c.unidad}</strong>.</span>
+                      <Select className="h-7 w-52 text-xs" value={l.resto ?? 'pendiente'} onChange={e => cambiarLinea(c.pedido_item_id, { resto: e.target.value as 'pendiente' | 'no_habia' })} aria-label={`Qué pasa con lo que falta de ${c.nombre}`}>
+                        <option value="pendiente">Lo compro otro día</option>
+                        <option value="no_habia">Ya no se compra (no había)</option>
+                      </Select>
+                    </div>
                   )}
                   {!soloTotal && l.incluir && l.sugerido && (
                     <p className="w-full text-xs text-blue-700">

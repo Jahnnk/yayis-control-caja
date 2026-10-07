@@ -158,5 +158,13 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion, marcarEntregado };
+  /** Marca que un producto que no había ya se pasó a una lista nueva (así no se pide dos veces). */
+  const marcarRepedido = useCallback(async (itemId: string) => {
+    const { error } = await supabase.from('pedido_items').update({ repedido_at: new Date().toISOString() }).eq('id', itemId);
+    if (error) return { error: error.message };
+    await fetchPedidos();
+    return { error: null };
+  }, [fetchPedidos]);
+
+  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, confirmarRecepcion, marcarEntregado, marcarRepedido };
 }

@@ -16,6 +16,10 @@ export interface LineaCompra {
   nombre?: string;
   /** El precio salió de repartir el total de la compra (no es el precio real del producto). */
   precio_repartido?: boolean;
+  /** Cantidad que se había pedido en la línea del pedido; si se compró menos, el resto se separa en otra línea. */
+  cantidad_pedida?: number;
+  /** Qué pasa con lo que falta de lo pedido: se compra otro día (pendiente) o ya no se compra (no había). */
+  resto?: 'pendiente' | 'no_habia';
 }
 
 export interface NuevaCompra {
@@ -174,6 +178,16 @@ export function useCompras() {
       return { error: `No se pudo guardar el detalle: ${errItems.message}` };
     }
 
+    // 3b. Si se compró MENOS de lo pedido, lo que falta se separa en otra línea (pendiente o «no había») para no perderlo.
+    let aviso: string | null = null;
+    for (const l of c.lineas) {
+      if (!l.pedido_item_id || l.cantidad_pedida === undefined || l.cantidad >= l.cantidad_pedida - 0.005) continue;
+      const { error: errDividir } = await supabase.rpc('dividir_linea_pedido', {
+        p_item: l.pedido_item_id, p_comprada: l.cantidad, p_resto_estado: l.resto ?? 'pendiente',
+      });
+      if (errDividir) aviso = `La compra se guardó, pero no se pudo separar lo que faltaba de ${l.nombre ?? 'un producto'}: ${errDividir.message}`;
+    }
+
     // 4. Las líneas del pedido incluidas quedan como compradas (y el pedido, si ya no le falta nada).
     const idsPedido = c.lineas.map(l => l.pedido_item_id).filter((id): id is string => !!id);
     if (idsPedido.length > 0) {
@@ -189,7 +203,7 @@ export function useCompras() {
         }
       }
     }
-    return { error: null };
+    return { error: null, aviso };
   }, [profile]);
 
   return { registrarCompra };
