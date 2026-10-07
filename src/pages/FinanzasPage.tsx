@@ -334,7 +334,7 @@ export function FinanzasPage() {
         </summary>
         <div className="space-y-2 border-t p-4">
           <p className="text-xs text-muted-foreground">
-            Lo que Fabio entregó a clientes con pedidos de cada sede. «Efectivo por entregar» es el dinero que cobró en la puerta y aún no pasó al administrador
+            Lo que Compras entregó a clientes con pedidos de cada sede. «Efectivo por entregar» es el dinero que cobró en la puerta y aún no pasó al administrador
             (se alerta si pasan {DIAS_PARA_ENTREGAR_EFECTIVO} días). Este control no mueve la caja chica de ninguna sede.
           </p>
           {deliverysPorSede.length === 0 ? (

@@ -103,7 +103,7 @@ export function PresupuestoPage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-yayis-dark"><Gauge size={22} /> {esGerencia ? 'Presupuesto por sede' : 'Mi presupuesto del mes'}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cada barra se llena con los gastos de la sede y las compras de Fabio. Verde: vas bien · Ámbar: desde {Math.round(UMBRAL_OJO * 100)}% · Rojo: te pasaste.
+            Cada barra se llena con los gastos de la sede y lo que compra Compras. Verde: vas bien · Ámbar: desde {Math.round(UMBRAL_OJO * 100)}% · Rojo: te pasaste.
           </p>
         </div>
         <div className="inline-flex items-center gap-1 rounded-lg border bg-white p-1">

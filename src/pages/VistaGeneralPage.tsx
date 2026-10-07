@@ -151,12 +151,12 @@ export function VistaGeneralPage() {
         <Cifra titulo="Total gastado" valor={formatMonto(v.totalGastado)} detalle={<>Caja {formatMonto(v.totalCaja)} + compras {formatMonto(v.totalCompras)}</>} />
         <Cifra titulo="Gastos de caja (administradores)" valor={formatMonto(v.totalCaja)} detalle={`${v.gastosCaja.length} gasto(s) registrados`} />
         <Cifra
-          titulo="Compras de Fabio"
+          titulo="Compras a proveedores"
           valor={formatMonto(v.totalCompras)}
           detalle={<>{v.compras.length} compra(s) · contado {formatMonto(v.comprasContado)} · crédito {formatMonto(v.comprasCredito)}{v.sinBoleta > 0 && <> · sin boleta {formatMonto(v.sinBoleta)}</>}{v.fotosPendientes > 0 && <> · <strong className="text-amber-700">{v.fotosPendientes} con foto pendiente</strong></>}</>}
           alerta={v.fotosPendientes > 0}
         />
-        <Cifra titulo="Dinero entregado a Fabio" valor={formatMonto(v.entregado)} detalle={`${v.entregas.length} entrega(s) de los administradores`} />
+        <Cifra titulo="Dinero entregado a Compras" valor={formatMonto(v.entregado)} detalle={`${v.entregas.length} entrega(s) de los administradores`} />
         <Cifra
           titulo="Deliverys"
           valor={String(v.resumenDeliverys.cantidad)}
@@ -187,7 +187,7 @@ export function VistaGeneralPage() {
                   <th className="py-2 text-right font-medium">Caja</th>
                   <th className="py-2 text-right font-medium">Compras</th>
                   <th className="py-2 text-right font-medium">Total</th>
-                  <th className="py-2 text-right font-medium">A Fabio</th>
+                  <th className="py-2 text-right font-medium">A Compras</th>
                   <th className="py-2 text-right font-medium">Deliverys</th>
                 </tr>
               </thead>
@@ -211,7 +211,7 @@ export function VistaGeneralPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">¿En qué se gastó?</CardTitle>
-            <p className="text-xs text-muted-foreground">Gastos de caja y compras de Fabio, por categoría. Una compra toma la categoría al cerrarse su rendición.</p>
+            <p className="text-xs text-muted-foreground">Gastos de caja y compras a proveedores, por categoría. Una compra toma la categoría al cerrarse su rendición.</p>
           </CardHeader>
           <CardContent>
             {v.porCategoria.length === 0 ? (
@@ -352,10 +352,10 @@ export function VistaGeneralPage() {
         )}
       </Desplegable>
 
-      {/* Compras de Fabio */}
+      {/* Compras a proveedores */}
       <Desplegable
         icono={<ShoppingCart size={16} />}
-        titulo="Compras de Fabio"
+        titulo="Compras a proveedores"
         resumen={<>
           <span>{v.compras.length} compra(s) · <strong className="text-yayis-dark">{formatMonto(v.totalCompras)}</strong></span>
           {v.sinBoleta > 0 && <span>sin boleta {formatMonto(v.sinBoleta)}</span>}
@@ -409,7 +409,7 @@ export function VistaGeneralPage() {
               <div key={e.id} className="flex flex-wrap items-center gap-2 py-2">
                 <Sede nombre={e.sedes?.nombre} />
                 <span className="text-muted-foreground">entrega del {fechaCorta(e.fecha)}</span>
-                <span>Recibió <strong>{formatMonto(Number(e.monto))}</strong> · gastó <strong>{formatMonto(gastado)}</strong>{e.estado !== 'abierta' && <> · vuelto <strong>{formatMonto(Number(e.vuelto_recibido ?? e.vuelto ?? 0))}</strong></>}{Number(e.saldo_continua) > 0 && <> · sigue con Fabio {formatMonto(Number(e.saldo_continua))}</>}</span>
+                <span>Recibió <strong>{formatMonto(Number(e.monto))}</strong> · gastó <strong>{formatMonto(gastado)}</strong>{e.estado !== 'abierta' && <> · vuelto <strong>{formatMonto(Number(e.vuelto_recibido ?? e.vuelto ?? 0))}</strong></>}{Number(e.saldo_continua) > 0 && <> · sigue con Compras {formatMonto(Number(e.saldo_continua))}</>}</span>
                 <span className={`ml-auto text-xs font-bold ${e.estado === 'abierta' ? 'text-blue-700' : e.estado === 'rendida' ? 'text-amber-700' : diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                   {e.estado === 'abierta' ? 'Sin rendir' : e.estado === 'rendida' ? 'Rendida, falta cerrar' : diferencia === 0 ? 'Cuadró' : diferencia! > 0 ? `Faltaron ${formatMonto(diferencia!)}` : `Sobraron ${formatMonto(-diferencia!)}`}
                 </span>

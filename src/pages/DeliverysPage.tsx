@@ -277,7 +277,7 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
     <Card className="border-amber-300">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={17} className="text-amber-700" /> Efectivo por recibir de Compras</CardTitle>
-        <p className="text-xs text-muted-foreground">Fabio cobró este efectivo en deliverys de tu sede. Cuando te lo entregue, cuéntalo y confírmalo aquí.</p>
+        <p className="text-xs text-muted-foreground">Compras cobró este efectivo en deliverys de tu sede. Cuando te lo entregue, cuéntalo y confírmalo aquí.</p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="divide-y rounded-md border text-sm">
@@ -302,7 +302,7 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
               value={recibidoTexto ?? String(esperado)} onChange={e => setRecibidoTexto(e.target.value)} />
           </div>
           <div>
-            <label className="text-xs font-medium" htmlFor="dl-fecha-entrega">Día en que Fabio te lo entregó</label>
+            <label className="text-xs font-medium" htmlFor="dl-fecha-entrega">Día en que Compras te lo entregó</label>
             <Input id="dl-fecha-entrega" type="date" className="mt-1 w-40" value={fechaEntrega} max={hoy} min={masReciente || undefined}
               onChange={e => setFechaEntrega(e.target.value)} />
           </div>
@@ -314,7 +314,7 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
         <div>
           <label className="text-xs font-medium" htmlFor="dl-nota">{diferencia !== 0 ? '¿Por qué no cuadra? (obligatorio)' : 'Nota (opcional)'}</label>
           <Input id="dl-nota" className="mt-1" value={nota} onChange={e => setNota(e.target.value)}
-            placeholder={diferencia !== 0 ? 'Ej. Falta el delivery de la señora Ana, lo traerá mañana' : 'Ej. Fabio lo entregó ayer a caja y me lo pasaron hoy'} />
+            placeholder={diferencia !== 0 ? 'Ej. Falta el delivery de la señora Ana, lo traerá mañana' : 'Ej. Lo entregaron ayer a caja y me lo pasaron hoy'} />
         </div>
         {fechaMala && <p className="text-xs text-red-600">El día de entrega no puede ser futuro ni anterior al delivery más reciente ({masReciente ? fechaCorta(masReciente) : '—'}).</p>}
 
@@ -387,7 +387,7 @@ function VistaSede() {
               const dif = roundTwo(Number(l.esperado) - Number(l.recibido));
               return (
                 <div key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="capitalize text-muted-foreground" title="Día en que Fabio entregó el efectivo">{fechaCorta(l.fecha_entrega ?? new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
+                  <span className="capitalize text-muted-foreground" title="Día en que Compras entregó el efectivo">{fechaCorta(l.fecha_entrega ?? new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
                   {l.fecha_entrega && l.fecha_entrega !== new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) && (
                     <span className="text-[11px] text-muted-foreground">(confirmado el {fechaCorta(new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))})</span>
                   )}

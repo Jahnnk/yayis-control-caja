@@ -80,7 +80,7 @@ export function GastosTable({ gastos, total, page, pageSize, onPageChange, onEdi
                   }`}>
                     {g.estado === 'pagado' ? 'Pagado' : 'Pendiente'}
                   </span>
-                  {g.origen === 'compras' && <span className="ml-1 inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Compra de Fabio</span>}
+                  {g.origen === 'compras' && <span className="ml-1 inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Compras</span>}
                   {g.con_monto_semanal && <span className="ml-1 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">Monto semanal</span>}
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{g.profiles?.nombre ?? '-'}</td>

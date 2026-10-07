@@ -23,18 +23,18 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
         <div>
           <p className="text-sm font-bold text-yayis-dark">Consolidado para reposición</p>
           <p className="text-xs text-muted-foreground">
-            Todo lo que Gerencia debe reponer a {responsable} (gastos pendientes), separado por quién lo pagó. Las compras de Fabio entran aquí cuando se cierra su rendición.
+            Todo lo que Gerencia debe reponer a {responsable} (gastos pendientes), separado por quién lo pagó. Lo que compra Compras entra aquí cuando se cierra su rendición.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Columna titulo={`Pagado por ${responsable}`} icono={<UserRound size={14} />} t={datos.administrador} />
-          <Columna titulo="Compras de Fabio" icono={<ShoppingBasket size={14} />} t={datos.compras} />
+          <Columna titulo="Compras (a proveedores)" icono={<ShoppingBasket size={14} />} t={datos.compras} />
           <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={datos.total} destacado />
         </div>
         {sinRendir && sinRendir.cantidad > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Además hay <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) de Fabio que <strong>todavía no se rinden</strong>.
-            No suman al total de arriba: entran cuando Fabio rinda cuentas y el administrador cierre la rendición.
+            Además hay <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) hechas por Compras que <strong>todavía no se rinden</strong>.
+            No suman al total de arriba: entran cuando Compras rinda cuentas y el administrador cierre la rendición.
           </p>
         )}
       </CardContent>

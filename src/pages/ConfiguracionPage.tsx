@@ -308,7 +308,7 @@ export function ConfiguracionPage() {
       <Card>
         <CardHeader>
           <CardTitle>Sedes y días de compra</CardTitle>
-          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Fabio cada semana. El <strong>tope sin boleta</strong> es lo máximo que Compras puede comprar en efectivo, por compra, cuando no le dan boleta.</p>
+          <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Compras cada semana. El <strong>tope sin boleta</strong> es lo máximo que Compras puede comprar en efectivo, por compra, cuando no le dan boleta.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
@@ -348,7 +348,7 @@ export function ConfiguracionPage() {
                     );
                   })}
                 </div>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Dinero semanal que el administrador maneja para las compras de Fabio">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Dinero semanal que el administrador maneja para las compras (Compras)">
                   Monto semanal para compras S/
                   <Input
                     key={`${s.id}-${s.monto_semanal_compras ?? ''}`}

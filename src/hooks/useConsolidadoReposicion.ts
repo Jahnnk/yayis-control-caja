@@ -7,7 +7,7 @@ export interface TotalOrigen { total: number; cantidad: number; efectivo: number
 export interface ConsolidadoReposicion { administrador: TotalOrigen; compras: TotalOrigen; total: TotalOrigen }
 
 /** Compras de Fabio ya hechas con dinero entregado, pero cuya rendición todavía no se cierra (aún no son gasto a reponer). */
-export interface SinRendir { total: number; cantidad: number }
+export interface SinRendir { total: number; cantidad: number; compras: { id: string; fecha: string; total: number; proveedor: string; evidenciaPendiente: boolean }[] }
 
 const vacio = (): TotalOrigen => ({ total: 0, cantidad: 0, efectivo: 0, cuentas: 0 });
 const PAGINA = 1000;
@@ -19,7 +19,7 @@ const PAGINA = 1000;
 export function useConsolidadoReposicion(version = 0) {
   const { sedeId } = useSedeActiva();
   const [consolidado, setConsolidado] = useState<ConsolidadoReposicion>({ administrador: vacio(), compras: vacio(), total: vacio() });
-  const [sinRendir, setSinRendir] = useState<SinRendir>({ total: 0, cantidad: 0 });
+  const [sinRendir, setSinRendir] = useState<SinRendir>({ total: 0, cantidad: 0, compras: [] });
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
@@ -43,18 +43,24 @@ export function useConsolidadoReposicion(version = 0) {
         if (!data || data.length < PAGINA) break;
       }
       // Compras al contado de Fabio (con entrega de dinero) que todavía no se convirtieron en gasto: falta cerrar la rendición.
-      const pendientes: SinRendir = { total: 0, cantidad: 0 };
+      const pendientes: SinRendir = { total: 0, cantidad: 0, compras: [] };
       for (let desde = 0; ; desde += PAGINA) {
-        const { data, error } = await supabase.from('compras').select('total, entrega_id')
+        const { data, error } = await supabase.from('compras').select('id, fecha, total, entrega_id, evidencia_pendiente, proveedores(nombre)')
           .eq('sede_id', sedeId).is('gasto_id', null).order('id', { ascending: true }).range(desde, desde + PAGINA - 1);
         if (error) { console.error('Error calculando las compras sin rendir:', error); break; }
         for (const c of data ?? []) {
           if (!c.entrega_id || !(Number(c.total) > 0)) continue;
           pendientes.total = roundTwo(pendientes.total + Number(c.total));
           pendientes.cantidad += 1;
+          pendientes.compras.push({
+            id: c.id as string, fecha: c.fecha as string, total: Number(c.total),
+            proveedor: ((c.proveedores as unknown as { nombre: string } | null)?.nombre) ?? 'Proveedor',
+            evidenciaPendiente: !!c.evidencia_pendiente,
+          });
         }
         if (!data || data.length < PAGINA) break;
       }
+      pendientes.compras.sort((a, b) => b.fecha.localeCompare(a.fecha));
       if (vigente) { setConsolidado(r); setSinRendir(pendientes); setCargando(false); }
     })();
     return () => { vigente = false; };

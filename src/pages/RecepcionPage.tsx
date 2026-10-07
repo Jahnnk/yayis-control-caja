@@ -79,7 +79,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
           </div>
           <p className={`pb-2 text-sm font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
             {diferencia === 0
-              ? (saldoContinua > 0 ? `✓ Cuadra: ${formatMonto(saldoContinua)} siguen con Fabio` : '✓ Cuadra al céntimo')
+              ? (saldoContinua > 0 ? `✓ Cuadra: ${formatMonto(saldoContinua)} siguen con Compras` : '✓ Cuadra al céntimo')
               : diferencia > 0
                 ? `Faltan ${formatMonto(diferencia)}`
                 : `La sede le debe ${formatMonto(-diferencia)} a Compras (puso de su bolsillo)`}
@@ -88,7 +88,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
 
         {fotosPendientes > 0 && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            {fotosPendientes === 1 ? '1 compra tiene' : `${fotosPendientes} compras tienen`} <strong>evidencia pendiente</strong>: Fabio debe subir las fotos que faltan antes de que puedas cerrar. Si prefieres, devuélvela a Compras.
+            {fotosPendientes === 1 ? '1 compra tiene' : `${fotosPendientes} compras tienen`} <strong>evidencia pendiente</strong>: Compras debe subir las fotos que faltan antes de que puedas cerrar. Si prefieres, devuélvela a Compras.
           </p>
         )}
 
@@ -96,8 +96,8 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
           <label className="flex cursor-pointer items-start gap-2 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-sm">
             <input type="checkbox" className="mt-1" checked={sigueConFabio} onChange={e => setSigueConFabio(e.target.checked)} />
             <span>
-              <strong>Fabio se queda con {formatMonto(diferenciaBruta)} para la próxima semana.</strong>
-              <span className="block text-xs text-muted-foreground">Marca esto si ese dinero no es un faltante: sigue con Fabio para sus próximas compras. Se abre una entrega nueva con ese saldo y la próxima semana solo le completas hasta el monto semanal.</span>
+              <strong>Compras se queda con {formatMonto(diferenciaBruta)} para la próxima semana.</strong>
+              <span className="block text-xs text-muted-foreground">Marca esto si ese dinero no es un faltante: sigue con Compras para sus próximas compras. Se abre una entrega nueva con ese saldo y la próxima semana solo le completas hasta el monto semanal.</span>
             </span>
           </label>
         )}
@@ -169,7 +169,7 @@ export function RecepcionPage() {
   // con él paga directamente lo que marca «Se paga con el monto semanal» (ver useSaldoSemanal).
   const saldoSemanal = useSaldoSemanal(versionSaldo);
   const porEntregar = Math.max(saldoSemanal.queda, 0);
-  const enManosDeFabio = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
+  const enManosDeCompras = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
 
   async function handleEntregar() {
@@ -229,7 +229,7 @@ export function RecepcionPage() {
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
           <div className="mt-2">
             <SaldoMontoSemanal saldo={saldoSemanal}>
-              <span className="text-xs text-muted-foreground">Fabio tiene sin gastar: {formatMonto(enManosDeFabio)}</span>
+              <span className="text-xs text-muted-foreground">Compras tiene sin gastar: {formatMonto(enManosDeCompras)}</span>
               {porEntregar > 0 && (
                 <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
               )}
@@ -279,12 +279,24 @@ export function RecepcionPage() {
             <CardTitle className="flex items-center gap-2 text-base"><Wallet size={18} /> Dinero en manos de Compras</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {abiertas.length > 1 && (
+              <p className="rounded-md bg-yayis-cream px-3 py-2 text-sm">
+                <strong>En total, {abiertas.length} entregas:</strong> entregado <strong>{formatMonto(abiertas.reduce((t, e) => roundTwo(t + Number(e.monto)), 0))}</strong> · gastado <strong>{formatMonto(abiertas.reduce((t, e) => roundTwo(t + gastadoDe(e)), 0))}</strong> · le quedan <strong>{formatMonto(enManosDeCompras)}</strong>.
+                <span className="block text-xs text-muted-foreground">Cada entrega se lleva su propia cuenta: Compras elige de cuál sale cada compra.</span>
+              </p>
+            )}
             {abiertas.map(e => {
               const gastado = gastadoDe(e);
+              const delMismoDia = abiertas.filter(x => x.fecha === e.fecha).sort((a, b) => a.created_at.localeCompare(b.created_at));
               return (
                 <div key={e.id} className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium capitalize">{fechaCorta(e.fecha)}</span>
+                    <span className="font-medium capitalize">
+                      {delMismoDia.length > 1 ? `Entrega ${delMismoDia.indexOf(e) + 1} de ${delMismoDia.length} · ` : ''}{fechaCorta(e.fecha)}
+                    </span>
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                      {e.metodo_pago === 'efectivo' ? 'Efectivo' : 'Yape/Plin'} · {new Date(e.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' })}
+                    </span>
                     <span>Entregado <strong>{formatMonto(Number(e.monto))}</strong> · gastado <strong>{formatMonto(gastado)}</strong> · le quedan <strong className={Number(e.monto) - gastado < 0 ? 'text-red-600' : ''}>{formatMonto(roundTwo(Number(e.monto) - gastado))}</strong></span>
                     {e.compras.length === 0 && (
                       <Button variant="ghost" size="sm" className="ml-auto text-red-600" onClick={() => handleAnular(e)}>Anular</Button>
@@ -367,7 +379,7 @@ export function RecepcionPage() {
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
                   <span className="capitalize">{fechaCorta(e.fecha)}</span>
-                  <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Fabio ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
+                  <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Compras ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
                   </span>
@@ -382,7 +394,7 @@ export function RecepcionPage() {
         open={porCerrar !== null}
         title="¿Confirmar y cerrar esta rendición?"
         message={porCerrar
-          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y registras que recibiste ${formatMonto(porCerrar.vuelto)} de vuelto.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Fabio: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
+          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y registras que recibiste ${formatMonto(porCerrar.vuelto)} de vuelto.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Compras: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
           : ''}
         confirmLabel={cerrando ? 'Cerrando...' : 'Sí, cerrar'}
         onConfirm={confirmarCierre}

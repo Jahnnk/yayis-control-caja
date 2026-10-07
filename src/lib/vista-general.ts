@@ -92,7 +92,7 @@ export interface FilaCategoria { nombre: string; tipo: TipoGasto | null; monto: 
 export const SIN_RENDIR = 'Compras sin rendir aún';
 export const A_CREDITO = 'Compras a crédito';
 
-export type OrigenMovimiento = 'Gasto de caja' | 'Compra de Fabio' | 'Compra a crédito';
+export type OrigenMovimiento = 'Gasto de caja' | 'Compras' | 'Compra a crédito';
 
 /** Una línea de gasto: un gasto de caja o una compra. Es la misma lista para la pantalla y para el Excel. */
 export interface Movimiento {
@@ -225,7 +225,7 @@ export function calcularVistaGeneral(
       const credito = c.condicion_pago === 'credito';
       const comprobante = Number(c.total) === 0 ? 'Recojo sin pago' : c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : `${c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${c.numero_comprobante ? ` ${c.numero_comprobante}` : ''}`;
       return {
-        id: c.id, sedeId: c.sede_id, fecha: c.fecha, origen: credito ? 'Compra a crédito' as const : 'Compra de Fabio' as const,
+        id: c.id, sedeId: c.sede_id, fecha: c.fecha, origen: credito ? 'Compra a crédito' as const : 'Compras' as const,
         categoria: gasto?.categorias?.nombre ?? (credito ? A_CREDITO : SIN_RENDIR), tipo: gasto?.categorias?.tipo_gasto ?? null,
         detalle: c.proveedores?.nombre ?? 'Proveedor',
         productos: c.compra_items.map(i => `${i.productos?.nombre ?? 'Producto'} ${formatCantidad(Number(i.cantidad))} ${i.unidad}`).join(', '),

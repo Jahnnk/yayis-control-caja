@@ -293,7 +293,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit }: GastoFormProps) {
                 onChange={e => updateField('con_monto_semanal', e.target.checked)}
               />
               <span>
-                <strong>Lo pagué con el monto semanal</strong> (por ejemplo, un pago a un proveedor que hice yo y no Fabio).
+                <strong>Lo pagué con el monto semanal</strong> (por ejemplo, un pago a un proveedor que hice yo y no Compras).
                 Resta del saldo del monto semanal. <strong>Se repone igual</strong>, como todo gasto.
               </span>
             </label>

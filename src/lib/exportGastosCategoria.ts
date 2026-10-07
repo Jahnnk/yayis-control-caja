@@ -88,7 +88,7 @@ function hojaResumen(ws: Worksheet, movs: Movimiento[], meta: MetaExcel) {
   resaltar(fila(['TOTAL GASTADO', '', ...totalDe(movs)]), OSCURO, 'FFFFFFFF');
 
   ws.addRow([]);
-  const nota = ws.addRow(['Cada compra de Fabio se cuenta una sola vez. «Compras sin rendir aún» toma su categoría cuando el administrador cierra la rendición; «Compras a crédito» todavía no tiene categoría. El tipo (fijo/variable) se cambia en Configuración → Categorías.']);
+  const nota = ws.addRow(['Cada compra hecha por Compras se cuenta una sola vez. «Compras sin rendir aún» toma su categoría cuando el administrador cierra la rendición; «Compras a crédito» todavía no tiene categoría. El tipo (fijo/variable) se cambia en Configuración → Categorías.']);
   nota.font = { italic: true, color: { argb: 'FF5C5C5C' } };
   nota.alignment = { wrapText: true, vertical: 'top' };
   nota.height = 45;
