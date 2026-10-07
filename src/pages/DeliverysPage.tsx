@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select-native';
+import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { Loading } from '@/components/ui/loading';
 import { FormularioDelivery } from '@/components/deliverys/FormularioDelivery';
 import { ListaDeliverys } from '@/components/deliverys/ListaDeliverys';
@@ -16,6 +18,7 @@ import { esEfectivoPendiente, resumirDeliverys, sumarCobrado, DIAS_PARA_ENTREGAR
 import { fechaCorta, fechaLarga, sumarDias } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto, roundTwo } from '@/lib/utils';
+import type { MetodoPago } from '@/types';
 import { Bike, ChevronDown, HandCoins, Loader2, Wallet } from 'lucide-react';
 
 const mesDe = (fecha: string) => fecha.slice(0, 7);
@@ -32,41 +35,66 @@ function Cifra({ icono, titulo, valor, detalle, resaltar }: { icono: React.React
   );
 }
 
-/** Ventana para corregir el día de un delivery registrado con la fecha equivocada. */
-function CambiarFecha({ delivery, onCambiar, onCerrar }: {
+/** Ventana para corregir un delivery mal registrado: el día y/o cómo pagó el cliente. Los montos no se cambian. */
+function CorregirDelivery({ delivery, onCorregir, onCerrar }: {
   delivery: DeliveryDetalle;
-  onCambiar: (d: DeliveryDetalle, fecha: string) => Promise<{ error: string | null }>;
+  onCorregir: (d: DeliveryDetalle, cambios: { fecha: string; metodo_cobro: MetodoPago | null; captura: File | null }) => Promise<{ error: string | null }>;
   onCerrar: () => void;
 }) {
   const { addToast } = useToast();
   const hoy = getTodayLima();
   const [fecha, setFecha] = useState(delivery.fecha);
+  const [metodo, setMetodo] = useState<MetodoPago | null>(delivery.metodo_cobro);
+  const [captura, setCaptura] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  const cambiaMetodo = delivery.metodo_cobro !== null && metodo !== delivery.metodo_cobro;
+  const faltaCaptura = cambiaMetodo && metodo === 'cuentas' && !captura;
+  const hayCambios = fecha !== delivery.fecha || cambiaMetodo;
 
   async function guardar() {
     setGuardando(true);
-    const { error } = await onCambiar(delivery, fecha);
+    const { error } = await onCorregir(delivery, { fecha, metodo_cobro: metodo, captura });
     setGuardando(false);
     if (error) return addToast(error, 'error');
-    addToast(`Fecha corregida: ${fechaCorta(fecha)}`, 'success');
+    addToast('Delivery corregido', 'success');
     onCerrar();
   }
 
   return (
-    <Modal open onClose={onCerrar} title="Cambiar la fecha del delivery">
+    <Modal open onClose={onCerrar} title="Corregir el delivery">
       <div className="space-y-4">
         <p className="text-sm">
           <strong>{delivery.cliente}</strong> · {formatMonto(Number(delivery.monto_producto))} de producto + {formatMonto(Number(delivery.monto_delivery))} de delivery.
-          Fecha registrada: <strong className="capitalize">{fechaCorta(delivery.fecha)}</strong>.
+          Registrado: <strong className="capitalize">{fechaCorta(delivery.fecha)}</strong>
+          {delivery.metodo_cobro && <> · cobrado en <strong>{delivery.metodo_cobro === 'efectivo' ? 'efectivo' : 'Yape o transferencia'}</strong></>}.
+          Los montos no se pueden cambiar aquí.
         </p>
         <div>
           <label className="text-xs font-medium" htmlFor="dl-nueva-fecha">Fecha correcta</label>
           <Input id="dl-nueva-fecha" type="date" className="mt-1 w-44" value={fecha} max={hoy} onChange={e => setFecha(e.target.value)} />
         </div>
+        {delivery.metodo_cobro !== null && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium" htmlFor="dl-nuevo-metodo">¿Cómo te pagó?</label>
+              <Select id="dl-nuevo-metodo" className="mt-1 sm:w-64" value={metodo ?? 'efectivo'} onChange={e => setMetodo(e.target.value as MetodoPago)}>
+                <option value="efectivo">Efectivo</option>
+                <option value="cuentas">Yape o transferencia</option>
+              </Select>
+            </div>
+            {cambiaMetodo && metodo === 'cuentas' && (
+              <EvidenciaInput id="dl-nueva-captura" label="Captura del Yape o transferencia" archivo={captura} onChange={setCaptura} requerido />
+            )}
+            {cambiaMetodo && metodo === 'efectivo' && (
+              <p className="text-xs text-amber-900">Pasará a «efectivo por entregar» a tu cargo y la captura anterior se borra.</p>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button variant="outline" onClick={onCerrar} disabled={guardando}>Cancelar</Button>
-          <Button onClick={guardar} disabled={guardando || !fecha || fecha === delivery.fecha || fecha > hoy}>
-            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} Guardar fecha
+          <Button onClick={guardar} disabled={guardando || !fecha || fecha > hoy || !hayCambios || faltaCaptura}>
+            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} Guardar cambios
           </Button>
         </div>
       </div>
@@ -119,7 +147,7 @@ function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar, puedeCamb
 /* ───────────── Vista de Fabio (Compras) ───────────── */
 
 function VistaCompras() {
-  const { deliverys, loading, crearDelivery, eliminarDelivery, cambiarFecha } = useDeliverys('mios');
+  const { deliverys, loading, crearDelivery, eliminarDelivery, corregirDelivery } = useDeliverys('mios');
   const { addToast } = useToast();
   const [porBorrar, setPorBorrar] = useState<DeliveryDetalle | null>(null);
   const [porCambiarFecha, setPorCambiarFecha] = useState<DeliveryDetalle | null>(null);
@@ -190,7 +218,7 @@ function VistaCompras() {
       </p>
 
       <ListasPorMes deliverys={deliverys} mostrarSede puedeBorrar={puedeBorrar} onBorrar={setPorBorrar} puedeCambiarFecha={puedeBorrar} onCambiarFecha={setPorCambiarFecha} />
-      {porCambiarFecha && <CambiarFecha delivery={porCambiarFecha} onCambiar={cambiarFecha} onCerrar={() => setPorCambiarFecha(null)} />}
+      {porCambiarFecha && <CorregirDelivery delivery={porCambiarFecha} onCorregir={corregirDelivery} onCerrar={() => setPorCambiarFecha(null)} />}
 
       <ConfirmDialog
         open={porBorrar !== null}
@@ -308,7 +336,7 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
 
 function VistaSede() {
   const { sedeActiva } = useSedeActiva();
-  const { deliverys, liquidaciones, loading, recibirEfectivo, cambiarFecha } = useDeliverys('sede');
+  const { deliverys, liquidaciones, loading, recibirEfectivo, corregirDelivery } = useDeliverys('sede');
   const { profile } = useAuth();
   // Gerencia puede corregir la fecha de un delivery mientras su efectivo no se haya recibido.
   const [porCambiarFecha, setPorCambiarFecha] = useState<DeliveryDetalle | null>(null);
@@ -346,7 +374,7 @@ function VistaSede() {
       }} />}
 
       <ListasPorMes deliverys={deliverys} puedeCambiarFecha={puedeCambiarFecha} onCambiarFecha={setPorCambiarFecha} />
-      {porCambiarFecha && <CambiarFecha delivery={porCambiarFecha} onCambiar={cambiarFecha} onCerrar={() => setPorCambiarFecha(null)} />}
+      {porCambiarFecha && <CorregirDelivery delivery={porCambiarFecha} onCorregir={corregirDelivery} onCerrar={() => setPorCambiarFecha(null)} />}
 
       {liquidaciones.length > 0 && (
         <details className="group rounded-lg border bg-white shadow-sm">

@@ -113,15 +113,40 @@ export function useDeliverys(modo: 'mios' | 'sede') {
     return { error: null };
   }, [fetchDeliverys]);
 
-  /** Corrige el día de un delivery registrado con la fecha equivocada (solo mientras su efectivo no se haya recibido). */
-  const cambiarFecha = useCallback(async (delivery: DeliveryDetalle, fecha: string) => {
-    if (fecha > getTodayLima()) return { error: 'La fecha no puede ser futura.' };
-    const { data, error } = await supabase.from('deliverys').update({ fecha }).eq('id', delivery.id).select('id');
-    if (error) return { error: error.message };
-    if (!data || data.length === 0) return { error: 'Ya no se puede cambiar: pasó el día en que lo registraste o su efectivo ya fue recibido.' };
+  /**
+   * Corrige un delivery mal registrado: el día y/o cómo pagó el cliente (efectivo o Yape/transferencia).
+   * Solo mientras su efectivo no se haya recibido (y, para Compras, dentro de las 24 h). Los montos no se tocan.
+   * Si pasa a Yape/transferencia hay que subir la captura; si pasa a efectivo, la captura anterior se borra.
+   */
+  const corregirDelivery = useCallback(async (delivery: DeliveryDetalle, cambios: { fecha: string; metodo_cobro: MetodoPago | null; captura: File | null }) => {
+    if (!profile) return { error: 'Sin sesión' };
+    if (cambios.fecha > getTodayLima()) return { error: 'La fecha no puede ser futura.' };
+    const cambiaMetodo = delivery.metodo_cobro !== null && cambios.metodo_cobro !== null && cambios.metodo_cobro !== delivery.metodo_cobro;
+
+    let nuevaCaptura: string | null = null;
+    const actualizacion: Record<string, unknown> = { fecha: cambios.fecha };
+    if (cambiaMetodo) {
+      actualizacion.metodo_cobro = cambios.metodo_cobro;
+      if (cambios.metodo_cobro === 'cuentas') {
+        if (!cambios.captura) return { error: 'Sube la captura del Yape o transferencia.' };
+        const subida = await subirEvidencia(cambios.captura, delivery.sede_id, profile.id, 'delivery');
+        if (subida.error || !subida.path) return { error: subida.error ?? 'No se pudo subir la captura' };
+        nuevaCaptura = subida.path;
+        actualizacion.evidencia_cobro_path = nuevaCaptura;
+      } else {
+        actualizacion.evidencia_cobro_path = null;
+      }
+    }
+
+    const { data, error } = await supabase.from('deliverys').update(actualizacion).eq('id', delivery.id).select('id');
+    if (error || !data || data.length === 0) {
+      await borrarEvidencias([nuevaCaptura]);
+      return { error: error?.message ?? 'Ya no se puede cambiar: pasó el día en que lo registraste o su efectivo ya fue recibido.' };
+    }
+    if (cambiaMetodo && cambios.metodo_cobro === 'efectivo') await borrarEvidencias([delivery.evidencia_cobro_path]);
     await fetchDeliverys();
     return { error: null };
-  }, [fetchDeliverys]);
+  }, [profile, fetchDeliverys]);
 
   /** El administrador cuenta el efectivo que le entregó Fabio y lo registra. */
   const recibirEfectivo = useCallback(async (ids: string[], recibido: number, nota: string, fechaEntrega?: string) => {
@@ -136,5 +161,5 @@ export function useDeliverys(modo: 'mios' | 'sede') {
     return { error: null, resultado: data as { esperado: number; recibido: number; diferencia: number; deliverys: number } };
   }, [sedeId, fetchDeliverys]);
 
-  return { deliverys, liquidaciones, loading, fetchDeliverys, crearDelivery, eliminarDelivery, cambiarFecha, recibirEfectivo };
+  return { deliverys, liquidaciones, loading, fetchDeliverys, crearDelivery, eliminarDelivery, corregirDelivery, recibirEfectivo };
 }
