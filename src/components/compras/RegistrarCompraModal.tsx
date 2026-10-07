@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
+import { useUltimosPreciosProveedor } from '@/hooks/useUltimosPreciosProveedor';
 import { claveProducto } from '@/lib/precios';
 import { repartirTotal } from '@/lib/reparto-total';
 import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, type CamposPrecio } from '@/lib/precio-linea';
@@ -47,6 +48,8 @@ interface Props {
 
 interface EstadoLinea extends CamposPrecio {
   incluir: boolean;
+  /** El precio salió solo de la última compra a este proveedor y Fabio todavía no lo tocó. */
+  sugerido?: boolean;
 }
 
 interface LineaExtra extends CamposPrecio {
@@ -55,8 +58,10 @@ interface LineaExtra extends CamposPrecio {
 }
 
 /** Precio de una línea: por unidad o total; al escribir uno, el otro se calcula solo. */
-function CamposDePrecio({ campos, unidad, nombre, disabled, onChange }: {
+function CamposDePrecio({ campos, unidad, nombre, disabled, permitirSinCosto, onChange }: {
   campos: CamposPrecio;
+  /** Muestra el botón «Sin costo» (cuando el precio está vacío o es solo una sugerencia). */
+  permitirSinCosto?: boolean;
   unidad: string;
   nombre: string;
   disabled?: boolean;
@@ -83,7 +88,7 @@ function CamposDePrecio({ campos, unidad, nombre, disabled, onChange }: {
             onChange={e => onChange(alEscribirTotal(campos, e.target.value, factor))} aria-label={`Precio total de ${nombre}`} />
         </span>
       </label>
-      {!disabled && campos.precio === '' && (
+      {!disabled && (campos.precio === '' || permitirSinCosto) && (
         <Button type="button" size="sm" variant="outline" className="mb-0.5 h-8 text-xs"
           onClick={() => onChange(alEscribirTotal(campos, '0', factor))} title="No pagaste nada por este producto (ya estaba pagado)">
           Sin costo
@@ -127,6 +132,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   // «Solo me dieron el total»: se escribe el total de la compra y el sistema lo reparte entre los productos.
   const [soloTotal, setSoloTotal] = useState(false);
   const [totalTexto, setTotalTexto] = useState('');
+  // Lo que Fabio dice que pagó en total: cuadra contra los precios que salieron solos de la última compra.
+  const [pagadoTexto, setPagadoTexto] = useState('');
+  const sugeridosAplicados = useRef(new Set<string>());
   // Borrador automático: se guarda solo para no perder lo escrito si el celular recarga la página.
   const [borradorListo, setBorradorListo] = useState(false);
   const [fotosListas, setFotosListas] = useState(false);
@@ -151,6 +159,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     setObservacion(borrador?.observacion ?? '');
     setSoloTotal(borrador?.soloTotal ?? false);
     setTotalTexto(borrador?.totalTexto ?? '');
+    setPagadoTexto(borrador?.pagadoTexto ?? '');
+    sugeridosAplicados.current = new Set();
     setFotoComprobante(null);
     setFotoProducto(null);
     setFotoPago(null);
@@ -185,9 +195,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   // Guarda el borrador mientras se escribe (con una pequeña pausa para no escribir en cada tecla).
   useEffect(() => {
     if (!open || !borradorListo) return;
-    const t = setTimeout(() => guardarBorrador(clave, { lineas, extras, entregaId, metodo, comprobante, numero, observacion, soloTotal, totalTexto }), 300);
+    const t = setTimeout(() => guardarBorrador(clave, { lineas, extras, entregaId, metodo, comprobante, numero, observacion, soloTotal, totalTexto, pagadoTexto }), 300);
     return () => clearTimeout(t);
-  }, [open, borradorListo, clave, lineas, extras, entregaId, metodo, comprobante, numero, observacion, soloTotal, totalTexto]);
+  }, [open, borradorListo, clave, lineas, extras, entregaId, metodo, comprobante, numero, observacion, soloTotal, totalTexto, pagadoTexto]);
 
   // Las fotos se guardan apenas se toman (solo después de haber recuperado las anteriores).
   useEffect(() => { if (open && fotosListas) void guardarFoto(clave, 'comprobante', fotoComprobante); }, [open, fotosListas, clave, fotoComprobante]);
@@ -207,9 +217,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   const faltanFotosBase = fotosExigidas({ tipo_comprobante: comprobante, metodo_pago: credito ? null : metodo, condicion_pago: credito ? 'credito' : 'contado' })
     .filter(r => !({ comprobante: fotoComprobante, producto: fotoProducto, pago: fotoPago })[r]);
 
-  const hayContenido = Object.values(lineas).some(l => l.precio !== '' || l.unit !== '')
+  const hayContenido = Object.values(lineas).some(l => (l.precio !== '' || l.unit !== '') && !l.sugerido)
     || extras.some(e => e.nombre.trim() !== '' || e.precio !== '')
-    || !!fotoComprobante || !!fotoProducto || !!fotoPago || numero.trim() !== '' || observacion.trim() !== '' || totalTexto.trim() !== '';
+    || !!fotoComprobante || !!fotoProducto || !!fotoPago || numero.trim() !== '' || observacion.trim() !== '' || totalTexto.trim() !== '' || pagadoTexto.trim() !== '';
   /** La X, Escape y Cancelar piden confirmación si ya había algo escrito, para no perderlo por un toque sin querer. */
   function pedirCerrar() {
     if (hayContenido) setConfirmarDescartar(true);
@@ -232,6 +242,28 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     ...candidatas.map(c => c.producto_id),
     ...extras.map(e => productoDeExtra(e.nombre)?.id).filter((id): id is string => !!id),
   ] : []);
+
+  // Precios ya escritos: lo último que se le pagó a ESTE proveedor por cada producto. Solo se rellena lo que
+  // todavía está vacío, una sola vez por línea; Fabio corrige lo que cambió y cuadra con el total que pagó.
+  const ultimos = useUltimosPreciosProveedor(open ? proveedor.id : null, candidatas.map(c => c.producto_id));
+  useEffect(() => {
+    if (!open || !borradorListo || ultimos.size === 0) return;
+    setLineas(prev => {
+      let cambio = false;
+      const sig = { ...prev };
+      for (const c of candidatas) {
+        const l = prev[c.pedido_item_id];
+        const u = ultimos.get(claveProducto(c.producto_id, c.unidad));
+        if (!l || !u || sugeridosAplicados.current.has(c.pedido_item_id)) continue;
+        sugeridosAplicados.current.add(c.pedido_item_id);
+        if (l.precio !== '' || l.unit !== '') continue;
+        const { factor } = baseDePrecio(c.unidad);
+        sig[c.pedido_item_id] = { ...l, ...alEscribirUnitario(l, String(Math.round(u.unitario * factor * 10000) / 10000), factor), sugerido: true };
+        cambio = true;
+      }
+      return cambio ? sig : prev;
+    });
+  }, [open, borradorListo, ultimos, candidatas]);
 
   // Reparto del total entre los productos (en proporción a su precio habitual; sin precio conocido, partes iguales).
   const repartido = useMemo(() => {
@@ -259,6 +291,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     : lineasIncluidas.every(c => lineas[c.pedido_item_id]!.precio !== '') && extrasConNombre.every(e => e.precio !== ''));
   const faltanFotos = esRecojo ? [] : faltanFotosBase;
 
+  // Cuadre: si quedan precios sugeridos sin tocar, Fabio escribe cuánto pagó en total y debe coincidir con la suma.
+  const requiereCuadre = !soloTotal && !esRecojo && lineasIncluidas.some(c => lineas[c.pedido_item_id]!.sugerido);
+  const pagado = parseFloat(pagadoTexto);
+  const diferencia = Number.isNaN(pagado) ? null : roundTwo(pagado - total);
+  const cuadra = diferencia !== null && Math.abs(diferencia) <= 0.1;
+
   const entrega = entregas.find(e => e.id === entregaId);
   const saldoEntrega = entrega
     ? roundTwo(Number(entrega.monto) - entrega.compras.reduce((s, c) => s + Number(c.total), 0))
@@ -271,6 +309,10 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
 
   async function handleGuardar() {
     if (!profile) return;
+    if (requiereCuadre) {
+      if (diferencia === null) return addToast('Escribe cuánto pagaste en total para comprobar que los precios cuadran.', 'error');
+      if (!cuadra) return addToast(`Los productos suman ${formatMonto(total)} pero dices que pagaste ${formatMonto(pagado)}: algún precio cambió. Corrige el que cambió.`, 'error');
+    }
     setGuardando(true);
 
     // Productos que no estaban en la lista: se crean en el catálogo si hace falta.
@@ -378,9 +420,15 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                   {soloTotal ? (
                     l.incluir && <span className="w-full text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`L:${c.pedido_item_id}`) ?? 0)}</strong></span>
                   ) : (
-                    <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} onChange={n => cambiarLinea(c.pedido_item_id, n)} />
+                    <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} permitirSinCosto={l.sugerido}
+                      onChange={n => cambiarLinea(c.pedido_item_id, { ...n, sugerido: false })} />
                   )}
-                  {!soloTotal && l.incluir && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
+                  {!soloTotal && l.incluir && l.sugerido && (
+                    <p className="w-full text-xs text-blue-700">
+                      Sugerido: el precio de tu última compra a este proveedor ({fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ?? '')}). Cámbialo si hoy costó distinto.
+                    </p>
+                  )}
+                  {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
                 </div>
               );
             })}
@@ -413,6 +461,31 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             </Button>
             <span className="text-sm">Total: <strong className="text-lg text-yayis-dark">{formatMonto(total)}</strong></span>
           </div>
+          {requiereCuadre && (
+            <div className={`mt-3 rounded-md border px-3 py-2 ${cuadra ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+              <p className="text-xs">
+                Los precios marcados <strong>«Sugerido»</strong> salieron de tu última compra a {proveedor.nombre}. Corrige los que hoy costaron distinto y escribe
+                <strong> cuánto pagaste en total</strong> para comprobar que todo cuadra.
+              </p>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="text-xs font-medium" htmlFor="total-pagado">Total que pagaste (S/)</label>
+                  <Input id="total-pagado" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="mt-1 w-36 bg-white"
+                    value={pagadoTexto} onChange={e => setPagadoTexto(e.target.value)} />
+                </div>
+                <p className={`pb-2 text-sm font-medium ${cuadra ? 'text-emerald-700' : diferencia === null ? 'text-amber-800' : 'text-red-700'}`}>
+                  {diferencia === null
+                    ? `Los productos suman ${formatMonto(total)}.`
+                    : cuadra
+                      ? '✓ Cuadra'
+                      : `No cuadra: ${diferencia > 0 ? 'pagaste' : 'faltan'} ${formatMonto(Math.abs(diferencia))} ${diferencia > 0 ? 'más' : 'por justificar'}. Algún precio cambió.`}
+                </p>
+              </div>
+              {diferencia !== null && !cuadra && (
+                <p className="mt-1 text-xs text-muted-foreground">¿No sabes cuál cambió? Marca arriba «Solo me dieron el total de la compra».</p>
+              )}
+            </div>
+          )}
         </section>
 
         {esRecojo && (

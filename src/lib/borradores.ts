@@ -14,7 +14,7 @@ export type RanuraFoto = 'comprobante' | 'producto' | 'pago';
 
 export interface BorradorCompra {
   guardadoEn: number;
-  lineas: Record<string, { incluir: boolean; cantidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null }>;
+  lineas: Record<string, { incluir: boolean; cantidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null; sugerido?: boolean }>;
   extras: { nombre: string; cantidad: string; unidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null }[];
   entregaId: string;
   metodo: 'efectivo' | 'cuentas';
@@ -24,6 +24,8 @@ export interface BorradorCompra {
   /** Fabio solo sabe el total de la compra y el sistema lo reparte. */
   soloTotal?: boolean;
   totalTexto?: string;
+  /** Lo que Fabio dice que pagó en total (para cuadrar contra los precios sugeridos). */
+  pagadoTexto?: string;
 }
 
 export const claveBorrador = (fecha: string, sedeId: string, proveedorId: string) => `${fecha}.${sedeId}.${proveedorId}`;
