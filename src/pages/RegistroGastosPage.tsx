@@ -49,7 +49,6 @@ export function RegistroGastosPage() {
       categoria_id: filterCategoria || undefined,
       metodo_pago: filterMetodoPago || undefined,
       estado: filterEstado === 'todos' ? undefined : (filterEstado || 'pendiente'),
-      incluirMontoSemanal: filterEstado === '',
       busqueda: busqueda || undefined,
       page,
       pageSize,

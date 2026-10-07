@@ -40,8 +40,6 @@ export function useGastos() {
     categoria_id?: string;
     metodo_pago?: string;
     estado?: string;
-    /** Con estado «pendiente»: incluye también los pagados con el monto semanal (para que no desaparezcan de la lista). */
-    incluirMontoSemanal?: boolean;
     busqueda?: string;
     page?: number;
     pageSize?: number;
@@ -67,8 +65,7 @@ export function useGastos() {
     }
     if (filters?.categoria_id) query = query.eq('categoria_id', filters.categoria_id);
     if (filters?.metodo_pago) query = query.eq('metodo_pago', filters.metodo_pago);
-    if (filters?.estado === 'pendiente' && filters.incluirMontoSemanal) query = query.or('estado.eq.pendiente,con_monto_semanal.eq.true');
-    else if (filters?.estado) query = query.eq('estado', filters.estado);
+    if (filters?.estado) query = query.eq('estado', filters.estado);
     if (filters?.busqueda) query = query.ilike('descripcion', `%${filters.busqueda}%`);
 
     query = query.range(from, to);
@@ -133,8 +130,8 @@ export function useGastos() {
       categoria_id: formData.categoria_id,
       metodo_pago: formData.metodo_pago,
       monto: parseFloat(formData.monto),
-      // Pagado con el monto semanal: ya tiene su dinero, no se le repone. (La columna solo se envía si se marca.)
-      estado: formData.con_monto_semanal ? 'pagado' as const : 'pendiente' as const,
+      estado: 'pendiente' as const,
+      // Pagado con el monto semanal: resta del saldo semanal, pero se repone como todo gasto. (La columna solo se envía si se marca.)
       ...(formData.con_monto_semanal ? { con_monto_semanal: true } : {}),
       // Pasó el tope de su categoría: el motivo le llega a Finanzas. (La columna solo se envía si hay motivo.)
       ...(formData.motivo_sobre_tope?.trim() ? { motivo_sobre_tope: formData.motivo_sobre_tope.trim() } : {}),
@@ -168,10 +165,7 @@ export function useGastos() {
     if (formData.metodo_pago !== undefined) updates.metodo_pago = formData.metodo_pago;
     if (formData.monto !== undefined) updates.monto = parseFloat(formData.monto);
     if (formData.estado !== undefined) updates.estado = formData.estado;
-    if (formData.con_monto_semanal !== undefined) {
-      updates.con_monto_semanal = formData.con_monto_semanal;
-      updates.estado = formData.con_monto_semanal ? 'pagado' : 'pendiente';
-    }
+    if (formData.con_monto_semanal !== undefined) updates.con_monto_semanal = formData.con_monto_semanal;
     if (formData.notas !== undefined) updates.notas = formData.notas.trim() || null;
     if (formData.motivo_sobre_tope?.trim()) updates.motivo_sobre_tope = formData.motivo_sobre_tope.trim();
 
