@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { precioMostrado } from '@/lib/precio-linea';
+import { formatCantidad } from '@/lib/compras';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoItem } from '@/types';
@@ -17,6 +18,23 @@ export function PrecioPagadoCelda({ pago }: { pago: PrecioPagado | undefined }) 
       <span className="block text-[11px] text-muted-foreground">
         {pago.repartido ? 'repartido del total' : `${formatMonto(roundTwo(p.valor))} por ${p.etiqueta}`}
       </span>
+    </span>
+  );
+}
+
+/**
+ * Cantidad de una línea del pedido. Si Compras compró una cantidad distinta de la pedida
+ * (por ejemplo había menos stock), se ve lo que realmente llegó y, debajo, lo que se pidió.
+ */
+export function CantidadCelda({ item, pago }: { item: Pick<PedidoItem, 'cantidad' | 'unidad' | 'estado'>; pago: PrecioPagado | undefined }) {
+  const comprada = item.estado === 'comprado' && pago ? pago.cantidad : null;
+  if (comprada === null || Math.abs(comprada - Number(item.cantidad)) < 0.005) {
+    return <span className="whitespace-nowrap">{formatCantidad(item.cantidad)} {item.unidad}</span>;
+  }
+  return (
+    <span className="whitespace-nowrap">
+      <strong className="text-amber-800">{formatCantidad(comprada)} {item.unidad}</strong>
+      <span className="block text-[11px] text-amber-700">se pidieron {formatCantidad(item.cantidad)}</span>
     </span>
   );
 }

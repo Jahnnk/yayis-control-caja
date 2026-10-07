@@ -125,7 +125,7 @@ export function useEntregas(modo: 'sede' | 'mias') {
   const eliminarCompra = useCallback(async (compra: CompraDetalle) => {
     const { error } = await supabase.from('compras').delete().eq('id', compra.id);
     if (error) return { error: error.message };
-    await borrarEvidencias([compra.evidencia_comprobante_path, compra.evidencia_producto_path, compra.evidencia_pago_path]);
+    await borrarEvidencias([compra.evidencia_comprobante_path, compra.evidencia_producto_path, compra.evidencia_pago_path, ...(compra.evidencias_pago_extra ?? [])]);
     await fetchEntregas();
     return { error: null };
   }, [fetchEntregas]);

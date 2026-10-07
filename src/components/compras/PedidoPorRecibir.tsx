@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
-import { ESTADO_PEDIDO, fechaLarga, formatCantidad } from '@/lib/compras';
+import { CantidadCelda, EntregaCelda, PrecioPagadoCelda } from '@/components/compras/EntregaProducto';
+import { ESTADO_PEDIDO, fechaLarga } from '@/lib/compras';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoConItems } from '@/types';
@@ -57,7 +57,7 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado }: {
               {items.map(i => (
                 <tr key={i.id} className="border-b last:border-b-0">
                   <td className="py-2 pr-2 font-medium">{i.productos?.nombre ?? '—'}{i.urgente && <span className="ml-1 text-xs font-bold text-red-700">⚡</span>}</td>
-                  <td className="py-2 pr-2 whitespace-nowrap">{formatCantidad(i.cantidad)} {i.unidad}</td>
+                  <td className="py-2 pr-2"><CantidadCelda item={i} pago={pagos.get(i.id)} /></td>
                   <td className="py-2 pr-2 text-xs">{i.proveedores?.nombre ?? '—'}</td>
                   <td className="py-2 pr-2 text-right text-xs tabular-nums">{i.estado === 'comprado' ? <PrecioPagadoCelda pago={pagos.get(i.id)} /> : ''}</td>
                   <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} /></td>

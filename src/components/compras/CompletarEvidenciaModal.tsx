@@ -6,7 +6,8 @@ import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
 import { borrarEvidencias, subirEvidencia } from '@/lib/evidencias';
-import { NOMBRE_FOTO, fotosExigidas, type RanuraEvidencia } from '@/lib/compras';
+import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fotosExigidas, type RanuraEvidencia } from '@/lib/compras';
+import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { formatMonto } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import type { CompraDetalle } from '@/types';
@@ -16,15 +17,16 @@ const CAMPO: Record<RanuraEvidencia, 'evidencia_comprobante_path' | 'evidencia_p
 };
 
 /** Fotos que todavía le faltan a una compra guardada con evidencia pendiente. */
-export function fotosPendientes(c: CompraDetalle): RanuraEvidencia[] {
-  return fotosExigidas(c).filter(r => !c[CAMPO[r]]);
+export function fotosPendientes(c: CompraDetalle, tope: number = TOPE_SIN_COMPROBANTE_EFECTIVO): RanuraEvidencia[] {
+  return fotosExigidas(c, { total: Number(c.total), tope }).filter(r => !c[CAMPO[r]]);
 }
 
 /** Compras sube la foto que no alcanzó a tomar en el momento. */
 export function CompletarEvidenciaModal({ compra, onClose, onListo }: { compra: CompraDetalle; onClose: () => void; onListo: () => void }) {
   const { profile } = useAuth();
   const { addToast } = useToast();
-  const faltan = fotosPendientes(compra);
+  const { sedes } = useSedeActiva();
+  const faltan = fotosPendientes(compra, Number(sedes.find(s => s.id === compra.sede_id)?.tope_sin_comprobante ?? TOPE_SIN_COMPROBANTE_EFECTIVO));
   const [archivos, setArchivos] = useState<Partial<Record<RanuraEvidencia, File | null>>>({});
   const [guardando, setGuardando] = useState(false);
 

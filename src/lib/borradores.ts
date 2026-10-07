@@ -10,7 +10,9 @@ const MARCA = 'yayis.compra-abierta';
 const BD = 'yayis-borradores';
 const TABLA = 'fotos';
 
-export type RanuraFoto = 'comprobante' | 'producto' | 'pago';
+export type RanuraFoto = 'comprobante' | 'producto' | 'pago' | 'pago2' | 'pago3' | 'pago4' | 'pago5';
+/** Capturas de pago adicionales (la primera es 'pago'). */
+export const RANURAS_PAGO_EXTRA: RanuraFoto[] = ['pago2', 'pago3', 'pago4', 'pago5'];
 
 export interface BorradorCompra {
   guardadoEn: number;
@@ -102,7 +104,7 @@ export async function guardarFoto(clave: string, ranura: RanuraFoto, archivo: Fi
 export async function leerFotos(clave: string): Promise<Partial<Record<RanuraFoto, File>>> {
   const bd = await abrirBD();
   if (!bd) return {};
-  const ranuras: RanuraFoto[] = ['comprobante', 'producto', 'pago'];
+  const ranuras: RanuraFoto[] = ['comprobante', 'producto', 'pago', ...RANURAS_PAGO_EXTRA];
   const resultado: Partial<Record<RanuraFoto, File>> = {};
   await Promise.all(ranuras.map(r => new Promise<void>(resolve => {
     try {

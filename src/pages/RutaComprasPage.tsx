@@ -76,6 +76,13 @@ export function RutaComprasPage() {
     [compras],
   );
 
+  // Lo que Fabio realmente compró de cada línea (puede ser menos de lo pedido si no había más).
+  const cantidadComprada = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of compras) for (const i of c.compra_items) if (i.pedido_item_id) m.set(i.pedido_item_id, (m.get(i.pedido_item_id) ?? 0) + Number(i.cantidad));
+    return m;
+  }, [compras]);
+
   const dia = diaSemanaDe(fecha);
   const sedesDelDia = sedes.filter(s => (s.dias_compra ?? []).includes(dia));
 
@@ -299,7 +306,10 @@ export function RutaComprasPage() {
           const filaLinea = ({ item, pedido }: LineaRuta) => (
             <div key={item.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-sm">
               <span className="font-medium">{item.productos?.nombre ?? 'Producto'}</span>
-              <span className="font-bold text-yayis-green">{formatCantidad(item.cantidad)} {item.unidad}</span>
+              <span className="font-bold text-yayis-green">{formatCantidad(item.estado === 'comprado' ? cantidadComprada.get(item.id) ?? item.cantidad : item.cantidad)} {item.unidad}</span>
+              {item.estado === 'comprado' && cantidadComprada.has(item.id) && Math.abs(cantidadComprada.get(item.id)! - Number(item.cantidad)) >= 0.005 && (
+                <span className="text-[11px] text-amber-700">(se pidieron {formatCantidad(item.cantidad)})</span>
+              )}
               {item.urgente && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
               {etiquetaPedido(pedido)}
               {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}
