@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Modal } from '@/components/ui/modal';
 import { Loading } from '@/components/ui/loading';
 import { FormularioDelivery } from '@/components/deliverys/FormularioDelivery';
 import { ListaDeliverys } from '@/components/deliverys/ListaDeliverys';
@@ -31,12 +32,56 @@ function Cifra({ icono, titulo, valor, detalle, resaltar }: { icono: React.React
   );
 }
 
+/** Ventana para corregir el día de un delivery registrado con la fecha equivocada. */
+function CambiarFecha({ delivery, onCambiar, onCerrar }: {
+  delivery: DeliveryDetalle;
+  onCambiar: (d: DeliveryDetalle, fecha: string) => Promise<{ error: string | null }>;
+  onCerrar: () => void;
+}) {
+  const { addToast } = useToast();
+  const hoy = getTodayLima();
+  const [fecha, setFecha] = useState(delivery.fecha);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    setGuardando(true);
+    const { error } = await onCambiar(delivery, fecha);
+    setGuardando(false);
+    if (error) return addToast(error, 'error');
+    addToast(`Fecha corregida: ${fechaCorta(fecha)}`, 'success');
+    onCerrar();
+  }
+
+  return (
+    <Modal open onClose={onCerrar} title="Cambiar la fecha del delivery">
+      <div className="space-y-4">
+        <p className="text-sm">
+          <strong>{delivery.cliente}</strong> · {formatMonto(Number(delivery.monto_producto))} de producto + {formatMonto(Number(delivery.monto_delivery))} de delivery.
+          Fecha registrada: <strong className="capitalize">{fechaCorta(delivery.fecha)}</strong>.
+        </p>
+        <div>
+          <label className="text-xs font-medium" htmlFor="dl-nueva-fecha">Fecha correcta</label>
+          <Input id="dl-nueva-fecha" type="date" className="mt-1 w-44" value={fecha} max={hoy} onChange={e => setFecha(e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button variant="outline" onClick={onCerrar} disabled={guardando}>Cancelar</Button>
+          <Button onClick={guardar} disabled={guardando || !fecha || fecha === delivery.fecha || fecha > hoy}>
+            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} Guardar fecha
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /** Lista de deliverys del mes en curso y, plegado, el mes anterior. */
-function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar }: {
+function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar, puedeCambiarFecha, onCambiarFecha }: {
   deliverys: DeliveryDetalle[];
   mostrarSede?: boolean;
   puedeBorrar?: (d: DeliveryDetalle) => boolean;
   onBorrar?: (d: DeliveryDetalle) => void;
+  puedeCambiarFecha?: (d: DeliveryDetalle) => boolean;
+  onCambiarFecha?: (d: DeliveryDetalle) => void;
 }) {
   const { addToast } = useToast();
   const mesActual = mesDe(getTodayLima());
@@ -53,7 +98,7 @@ function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar }: {
       <Card>
         <CardHeader className="pb-0"><CardTitle className="text-base">Deliverys de este mes ({delMes.length})</CardTitle></CardHeader>
         <CardContent className="px-0 pb-2">
-          <ListaDeliverys deliverys={delMes} mostrarSede={mostrarSede} puedeBorrar={puedeBorrar} onBorrar={onBorrar} onVerCaptura={verCaptura} />
+          <ListaDeliverys deliverys={delMes} mostrarSede={mostrarSede} puedeBorrar={puedeBorrar} onBorrar={onBorrar} puedeCambiarFecha={puedeCambiarFecha} onCambiarFecha={onCambiarFecha} onVerCaptura={verCaptura} />
         </CardContent>
       </Card>
       {anteriores.length > 0 && (
@@ -63,7 +108,7 @@ function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar }: {
             <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
           </summary>
           <div className="border-t">
-            <ListaDeliverys deliverys={anteriores} mostrarSede={mostrarSede} onVerCaptura={verCaptura} />
+            <ListaDeliverys deliverys={anteriores} mostrarSede={mostrarSede} puedeCambiarFecha={puedeCambiarFecha} onCambiarFecha={onCambiarFecha} onVerCaptura={verCaptura} />
           </div>
         </details>
       )}
@@ -74,9 +119,10 @@ function ListasPorMes({ deliverys, mostrarSede, puedeBorrar, onBorrar }: {
 /* ───────────── Vista de Fabio (Compras) ───────────── */
 
 function VistaCompras() {
-  const { deliverys, loading, crearDelivery, eliminarDelivery } = useDeliverys('mios');
+  const { deliverys, loading, crearDelivery, eliminarDelivery, cambiarFecha } = useDeliverys('mios');
   const { addToast } = useToast();
   const [porBorrar, setPorBorrar] = useState<DeliveryDetalle | null>(null);
+  const [porCambiarFecha, setPorCambiarFecha] = useState<DeliveryDetalle | null>(null);
   const hoy = getTodayLima();
 
   const pendientes = deliverys.filter(esEfectivoPendiente);
@@ -143,7 +189,8 @@ function VistaCompras() {
         <span>Este mes llevas <strong className="text-yayis-dark">{resumenMes.cantidad}</strong> delivery(s) · {formatMonto(resumenMes.totalDelivery)} de delivery.</span>
       </p>
 
-      <ListasPorMes deliverys={deliverys} mostrarSede puedeBorrar={puedeBorrar} onBorrar={setPorBorrar} />
+      <ListasPorMes deliverys={deliverys} mostrarSede puedeBorrar={puedeBorrar} onBorrar={setPorBorrar} puedeCambiarFecha={puedeBorrar} onCambiarFecha={setPorCambiarFecha} />
+      {porCambiarFecha && <CambiarFecha delivery={porCambiarFecha} onCambiar={cambiarFecha} onCerrar={() => setPorCambiarFecha(null)} />}
 
       <ConfirmDialog
         open={porBorrar !== null}
@@ -261,7 +308,11 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
 
 function VistaSede() {
   const { sedeActiva } = useSedeActiva();
-  const { deliverys, liquidaciones, loading, recibirEfectivo } = useDeliverys('sede');
+  const { deliverys, liquidaciones, loading, recibirEfectivo, cambiarFecha } = useDeliverys('sede');
+  const { profile } = useAuth();
+  // Gerencia puede corregir la fecha de un delivery mientras su efectivo no se haya recibido.
+  const [porCambiarFecha, setPorCambiarFecha] = useState<DeliveryDetalle | null>(null);
+  const puedeCambiarFecha = (d: DeliveryDetalle) => profile?.rol === 'owner' && d.liquidacion_id === null;
   const hoy = getTodayLima();
 
   const pendientes = useMemo(() => deliverys.filter(esEfectivoPendiente).sort((a, b) => a.fecha.localeCompare(b.fecha)), [deliverys]);
@@ -294,7 +345,8 @@ function VistaSede() {
         return { error };
       }} />}
 
-      <ListasPorMes deliverys={deliverys} />
+      <ListasPorMes deliverys={deliverys} puedeCambiarFecha={puedeCambiarFecha} onCambiarFecha={setPorCambiarFecha} />
+      {porCambiarFecha && <CambiarFecha delivery={porCambiarFecha} onCambiar={cambiarFecha} onCerrar={() => setPorCambiarFecha(null)} />}
 
       {liquidaciones.length > 0 && (
         <details className="group rounded-lg border bg-white shadow-sm">
