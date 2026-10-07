@@ -36,7 +36,7 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
     <Card className={abierta ? '' : 'border-blue-200 bg-blue-50/30'}>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base">{entrega.sedes?.nombre} · entrega del <span className="capitalize">{fechaCorta(entrega.fecha)}</span></CardTitle>
+          <CardTitle className="text-base">Entrega del <span className="capitalize">{fechaCorta(entrega.fecha)}</span></CardTitle>
           <span className="text-sm">Recibiste <strong>{formatMonto(Number(entrega.monto))}</strong> <span className="text-xs text-muted-foreground">({entrega.metodo_pago === 'efectivo' ? 'efectivo' : 'cuentas'})</span></span>
         </div>
         {entrega.notas && <p className="text-xs text-muted-foreground">Nota: {entrega.notas}</p>}
@@ -137,6 +137,17 @@ export function RendicionPage() {
   const abiertas = tarjetasVisibles('abierta');
   const rendidas = tarjetasVisibles('rendida');
   const cerradasVisibles = cerradas.filter(e => (!sedeFiltro || e.sede_id === sedeFiltro) && (!hayFiltroFecha || enRango(e.fecha)));
+  // Una sección por sede: total entregado (de las entregas abiertas) y, debajo, cada entrega por día.
+  const porFecha = <T extends { entrega: EntregaDetalle }>(a: T, b: T) => a.entrega.fecha.localeCompare(b.entrega.fecha);
+  const gruposSede = Array.from(new Map([...abiertas, ...rendidas].map(t => [t.entrega.sede_id, t.entrega.sedes?.nombre ?? ''])).entries())
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, nombre]) => {
+      const ab = abiertas.filter(t => t.entrega.sede_id === id).sort(porFecha);
+      const re = rendidas.filter(t => t.entrega.sede_id === id).sort(porFecha);
+      const recibido = ab.reduce((t, x) => roundTwo(t + Number(x.entrega.monto)), 0);
+      const gastado = ab.reduce((t, x) => roundTwo(t + gastadoDe(x.entrega)), 0);
+      return { id, nombre, ab, re, recibido, gastado, queda: roundTwo(recibido - gastado) };
+    });
   const comprasMostradas = [...abiertas, ...rendidas].flatMap(t => t.compras);
   const totalMostrado = comprasMostradas.reduce((t, c) => roundTwo(t + Number(c.total)), 0);
   const hayDatos = entregas.length > 0 || cerradas.length > 0;
@@ -150,6 +161,11 @@ export function RendicionPage() {
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Wallet size={15} /> {esCompras ? 'Tienes' : 'Compras tiene'} <strong className="text-yayis-dark">{formatMonto(enMano)}</strong> por gastar o devolver.
         </p>
+        {gruposSede.filter(g => g.ab.length > 0).length > 1 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {gruposSede.filter(g => g.ab.length > 0).map(g => `${g.nombre} ${formatMonto(g.queda)}`).join(' · ')}
+          </p>
+        )}
       </div>
 
       {hayDatos && (
@@ -189,11 +205,31 @@ export function RendicionPage() {
         </p>
       )}
 
-      {abiertas.map(({ entrega: e, compras }) => (
-        <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
-      ))}
-      {rendidas.map(({ entrega: e, compras }) => (
-        <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
+      {gruposSede.map(g => (
+        <section key={g.id} className="space-y-3">
+          <div className="rounded-lg border-2 border-yayis-green/30 bg-white px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-bold text-yayis-dark">{g.nombre}</h2>
+              {g.ab.length > 0 && <span className="text-xs text-muted-foreground">{g.ab.length === 1 ? '1 entrega por rendir' : `${g.ab.length} entregas por rendir`}</span>}
+            </div>
+            {g.ab.length > 0 ? (
+              <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
+                <div><p className="text-xs text-muted-foreground">{g.ab.length > 1 ? 'Recibiste en total' : 'Recibiste'}</p><p className="font-bold">{formatMonto(g.recibido)}</p>
+                  {g.ab.length > 1 && <p className="text-[11px] text-muted-foreground">{g.ab.map(t => formatMonto(Number(t.entrega.monto))).join(' + ')}</p>}</div>
+                <div><p className="text-xs text-muted-foreground">Gastaste</p><p className="font-bold">{formatMonto(g.gastado)}</p></div>
+                <div><p className="text-xs text-muted-foreground">{g.queda >= 0 ? 'Te queda' : 'Pusiste tú'}</p><p className={`font-bold ${g.queda < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{formatMonto(Math.abs(g.queda))}</p></div>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Todo lo de esta sede ya está rendido; falta que el administrador lo confirme.</p>
+            )}
+          </div>
+          {g.ab.map(({ entrega: e, compras }) => (
+            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
+          ))}
+          {g.re.map(({ entrega: e, compras }) => (
+            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
+          ))}
+        </section>
       ))}
 
       {cerradasVisibles.length > 0 && (
