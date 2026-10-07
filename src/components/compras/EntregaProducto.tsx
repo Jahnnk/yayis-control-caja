@@ -3,21 +3,30 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { precioMostrado } from '@/lib/precio-linea';
 import { formatCantidad } from '@/lib/compras';
+import { formatPorcentaje } from '@/lib/precios';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoItem } from '@/types';
 import { Check, Loader2 } from 'lucide-react';
 
 /** Lo que se pagó por la línea y, debajo, el precio por unidad (por kg / litro si se pidió en g / ml). */
-export function PrecioPagadoCelda({ pago }: { pago: PrecioPagado | undefined }) {
+export function PrecioPagadoCelda({ pago, referencia }: { pago: PrecioPagado | undefined; referencia?: number | null }) {
   if (!pago || pago.cantidad <= 0) return <span className="text-muted-foreground">—</span>;
   const p = precioMostrado(pago.total / pago.cantidad, pago.unidad);
+  // Frente al precio de referencia que escribió el administrador (ambos por kg / litro / unidad).
+  const ref = referencia !== null && referencia !== undefined ? Number(referencia) : null;
+  const variacion = ref !== null && ref > 0 && !pago.repartido ? p.valor / ref - 1 : null;
   return (
     <span className="whitespace-nowrap">
       <strong className="text-yayis-dark">{pago.repartido ? '≈ ' : ''}{formatMonto(pago.total)}</strong>
       <span className="block text-[11px] text-muted-foreground">
         {pago.repartido ? 'repartido del total' : `${formatMonto(roundTwo(p.valor))} por ${p.etiqueta}`}
       </span>
+      {variacion !== null && ref !== null && (
+        <span className={`block text-[11px] font-medium ${variacion >= 0.005 ? 'text-red-600' : variacion <= -0.005 ? 'text-emerald-700' : 'text-muted-foreground'}`}>
+          {Math.abs(variacion) < 0.005 ? `igual a la ref. (${formatMonto(ref)})` : `${variacion > 0 ? '▲' : '▼'} ${formatPorcentaje(variacion)} vs ref. ${formatMonto(ref)}`}
+        </span>
+      )}
     </span>
   );
 }

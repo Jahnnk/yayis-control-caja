@@ -16,7 +16,7 @@ import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { useUltimosPreciosProveedor } from '@/hooks/useUltimosPreciosProveedor';
 import { claveProducto } from '@/lib/precios';
 import { repartirTotal } from '@/lib/reparto-total';
-import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, type CamposPrecio } from '@/lib/precio-linea';
+import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, referenciaPorUnidadLinea, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { RANURAS_PAGO_EXTRA } from '@/lib/borradores';
 import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
@@ -35,6 +35,8 @@ export interface LineaCandidata {
   nombre: string;
   cantidad: number;
   unidad: string;
+  /** Precio de referencia que puso el administrador (por kg / litro / unidad). */
+  precio_referencia?: number | null;
 }
 
 interface Props {
@@ -49,8 +51,9 @@ interface Props {
 
 interface EstadoLinea extends CamposPrecio {
   incluir: boolean;
-  /** El precio salió solo de la última compra a este proveedor y Fabio todavía no lo tocó. */
+  /** El precio salió solo (de la referencia de la lista o de la última compra) y Fabio todavía no lo tocó. */
   sugerido?: boolean;
+  origenSugerido?: 'referencia' | 'ultimo';
 }
 
 interface LineaExtra extends CamposPrecio {
@@ -254,18 +257,22 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   // todavía está vacío, una sola vez por línea; Fabio corrige lo que cambió y cuadra con el total que pagó.
   const ultimos = useUltimosPreciosProveedor(open ? proveedor.id : null, candidatas.map(c => c.producto_id));
   useEffect(() => {
-    if (!open || !borradorListo || ultimos.size === 0) return;
+    if (!open || !borradorListo) return;
     setLineas(prev => {
       let cambio = false;
       const sig = { ...prev };
       for (const c of candidatas) {
         const l = prev[c.pedido_item_id];
+        if (!l || sugeridosAplicados.current.has(c.pedido_item_id)) continue;
+        const { factor } = baseDePrecio(c.unidad);
+        // Primero el precio de referencia que puso el administrador en su lista; si no hay, el de la última compra a este proveedor.
+        const ref = c.precio_referencia ?? null;
         const u = ultimos.get(claveProducto(c.producto_id, c.unidad));
-        if (!l || !u || sugeridosAplicados.current.has(c.pedido_item_id)) continue;
+        const unitTexto = ref !== null ? String(ref) : u ? String(Math.round(u.unitario * factor * 10000) / 10000) : null;
+        if (unitTexto === null) continue; // todavía no hay (los últimos precios pueden llegar después)
         sugeridosAplicados.current.add(c.pedido_item_id);
         if (l.precio !== '' || l.unit !== '') continue;
-        const { factor } = baseDePrecio(c.unidad);
-        sig[c.pedido_item_id] = { ...l, ...alEscribirUnitario(l, String(Math.round(u.unitario * factor * 10000) / 10000), factor), sugerido: true };
+        sig[c.pedido_item_id] = { ...l, ...alEscribirUnitario(l, unitTexto, factor), sugerido: true, origenSugerido: ref !== null ? 'referencia' : 'ultimo' };
         cambio = true;
       }
       return cambio ? sig : prev;
@@ -440,10 +447,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                   )}
                   {!soloTotal && l.incluir && l.sugerido && (
                     <p className="w-full text-xs text-blue-700">
-                      Sugerido: el precio de tu última compra a este proveedor ({fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ?? '')}). Cámbialo si hoy costó distinto.
+                      {l.origenSugerido === 'referencia'
+                        ? 'Sugerido: el precio de referencia que puso la sede en su lista. Cámbialo si hoy costó distinto.'
+                        : `Sugerido: el precio de tu última compra a este proveedor (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ?? '')}). Cámbialo si hoy costó distinto.`}
                     </p>
                   )}
-                  {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
+                  {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} referencia={referenciaPorUnidadLinea(c.precio_referencia, c.unidad)} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
                 </div>
               );
             })}
@@ -479,7 +488,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           {requiereCuadre && (
             <div className={`mt-3 rounded-md border px-3 py-2 ${cuadra ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
               <p className="text-xs">
-                Los precios marcados <strong>«Sugerido»</strong> salieron de tu última compra a {proveedor.nombre}. Corrige los que hoy costaron distinto y escribe
+                Los precios marcados <strong>«Sugerido»</strong> salieron de la referencia que puso la sede o de tu última compra a {proveedor.nombre}. Corrige los que hoy costaron distinto y escribe
                 <strong> cuánto pagaste en total</strong> para comprobar que todo cuadra.
               </p>
               <div className="mt-2 flex flex-wrap items-end gap-3">

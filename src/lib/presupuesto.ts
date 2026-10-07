@@ -1,5 +1,6 @@
 import { roundTwo } from '@/lib/utils';
 import { claveProducto, type PrecioHabitual } from '@/lib/precios';
+import { referenciaPorUnidadLinea } from '@/lib/precio-linea';
 
 // Presupuesto por categoría (pedido de Jahnn, 6-oct-2026). El presupuesto del mes se arma y se
 // aprueba en Cash Control; ahí se marca cuánto de cada categoría maneja el administrador de la
@@ -102,14 +103,16 @@ export function ordenarUso(uso: UsoCategoria[]): UsoCategoria[] {
  * unidad). La categoría es la que recuerda el producto.
  */
 export function estimarLineasPedido(
-  items: { producto_id: string; cantidad: number; unidad: string; estado: string }[],
+  items: { producto_id: string; cantidad: number; unidad: string; estado: string; precio_referencia?: number | null }[],
   categoriaDe: (productoId: string) => string | null | undefined,
   habituales: Map<string, PrecioHabitual>,
 ): EstimadoLinea[] {
   return items
     .filter(i => i.estado === 'pendiente')
     .map(i => {
+      // Si el administrador escribió un precio de referencia, la lista se estima con ese; si no, con el precio habitual.
+      const ref = referenciaPorUnidadLinea(i.precio_referencia, i.unidad);
       const h = habituales.get(claveProducto(i.producto_id, i.unidad));
-      return { categoria: categoriaDe(i.producto_id) ?? null, monto: h ? roundTwo(h.unitario * Number(i.cantidad)) : null };
+      return { categoria: categoriaDe(i.producto_id) ?? null, monto: ref !== undefined ? roundTwo(ref * Number(i.cantidad)) : h ? roundTwo(h.unitario * Number(i.cantidad)) : null };
     });
 }

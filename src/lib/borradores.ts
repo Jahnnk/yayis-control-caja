@@ -16,7 +16,7 @@ export const RANURAS_PAGO_EXTRA: RanuraFoto[] = ['pago2', 'pago3', 'pago4', 'pag
 
 export interface BorradorCompra {
   guardadoEn: number;
-  lineas: Record<string, { incluir: boolean; cantidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null; sugerido?: boolean }>;
+  lineas: Record<string, { incluir: boolean; cantidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null; sugerido?: boolean; origenSugerido?: 'referencia' | 'ultimo' }>;
   extras: { nombre: string; cantidad: string; unidad: string; precio: string; unit: string; ultimo: 'unit' | 'total' | null }[];
   entregaId: string;
   metodo: 'efectivo' | 'cuentas';
