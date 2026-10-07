@@ -305,6 +305,8 @@ export interface Compra {
   evidencia_pago_path: string | null;
   /** Capturas de pago adicionales (cuando se pagó a varios puestos por Yape). */
   evidencias_pago_extra?: string[];
+  /** Esta compra se pagó con la misma transferencia que otra compra (cuya captura de pago la incluye). */
+  pago_con_compra_id?: string | null;
   categoria_id: string | null;
   gasto_id: string | null;
   registrado_por: string;

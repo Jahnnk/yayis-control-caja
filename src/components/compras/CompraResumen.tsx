@@ -72,6 +72,11 @@ export function CompraResumen({ compra, onEliminar, onCompletar, children }: Pro
             <Smartphone size={12} className="mr-1" /> {(compra.evidencias_pago_extra ?? []).length > 0 ? 'Pago 1' : 'Pago'}
           </Button>
         )}
+        {compra.pago_con_compra_id && (
+          <span className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs text-blue-800" title="Una sola transferencia pagó esta compra y otra: la captura está en la otra compra.">
+            <Smartphone size={12} /> Pagado junto con otra compra
+          </span>
+        )}
         {(compra.evidencias_pago_extra ?? []).map((p, i) => (
           <Button key={p} variant="outline" size="sm" className="h-7 text-xs" onClick={() => ver(p)}>
             <Smartphone size={12} className="mr-1" /> Pago {i + 2}
