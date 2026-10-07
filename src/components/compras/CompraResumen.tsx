@@ -25,10 +25,11 @@ export function CompraResumen({ compra, onEliminar, onCompletar, children }: Pro
     if (error) addToast(error, 'error');
   }
 
-  const comprobante = compra.tipo_comprobante === 'sin_comprobante'
+  const recojo = Number(compra.total) === 0;
+  const comprobante = recojo ? 'Recojo sin pago' : compra.tipo_comprobante === 'sin_comprobante'
     ? 'Sin comprobante'
     : `${compra.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${compra.numero_comprobante ? ` ${compra.numero_comprobante}` : ''}`;
-  const pago = compra.condicion_pago === 'credito'
+  const pago = recojo ? 'ya estaba pagado' : compra.condicion_pago === 'credito'
     ? `A crédito, vence ${compra.fecha_vencimiento ? fechaCorta(compra.fecha_vencimiento) : '—'}`
     : compra.metodo_pago === 'cuentas' ? 'Yape/transferencia' : 'Efectivo';
 
@@ -46,7 +47,7 @@ export function CompraResumen({ compra, onEliminar, onCompletar, children }: Pro
         )}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {compra.compra_items.map(i => `${i.productos?.nombre} ${formatCantidad(i.cantidad)} ${i.unidad} (${formatMonto(Number(i.precio_total))})`).join(' · ')}
+        {compra.compra_items.map(i => `${i.productos?.nombre} ${formatCantidad(i.cantidad)} ${i.unidad} (${i.precio_repartido ? '≈ ' : ''}${formatMonto(Number(i.precio_total))})`).join(' · ')}
       </p>
       {compra.observacion && <p className="mt-1 text-xs italic text-muted-foreground">"{compra.observacion}"</p>}
       {compra.evidencia_pendiente && (

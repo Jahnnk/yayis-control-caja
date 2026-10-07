@@ -12,6 +12,10 @@ export interface LineaCompra {
   cantidad: number;
   unidad: string;
   precio_total: number;
+  /** Solo para mensajes: nombre del producto. No se guarda. */
+  nombre?: string;
+  /** El precio salió de repartir el total de la compra (no es el precio real del producto). */
+  precio_repartido?: boolean;
 }
 
 export interface NuevaCompra {
@@ -48,8 +52,10 @@ export function fotosQueFaltan(c: NuevaCompra): RanuraEvidencia[] {
 export function validarCompra(c: NuevaCompra): string | null {
   if (c.lineas.length === 0) return 'Incluye al menos un producto.';
   if (c.lineas.some(l => !(l.cantidad > 0))) return 'Cada producto debe tener una cantidad mayor a 0.';
-  if (c.lineas.some(l => !(l.precio_total >= 0))) return 'Pon el precio de cada producto.';
-  if (roundTwo(c.lineas.reduce((s, l) => s + l.precio_total, 0)) <= 0) return 'El total de la compra debe ser mayor a 0.';
+  const sinPrecio = c.lineas.find(l => !(l.precio_total >= 0));
+  if (sinPrecio) return `Falta el precio de ${sinPrecio.nombre ?? 'un producto'}. Si no pagaste nada por él, pulsa «Sin costo».`;
+  // Recojo sin pago (total S/ 0): productos que ya estaban pagados. No sale dinero: no pide entrega, forma de pago, boleta ni fotos.
+  if (roundTwo(c.lineas.reduce((s, l) => s + l.precio_total, 0)) === 0) return null;
   if (c.condicion_pago === 'contado') {
     if (!c.entrega_id) return 'Elige de qué dinero entregado sale esta compra.';
     if (!c.metodo_pago) return 'Indica si pagaste en efectivo o por Yape/transferencia.';
@@ -101,20 +107,21 @@ export function useCompras() {
     }
 
     // 2. Compra
-    const credito = c.condicion_pago === 'credito';
     const total = roundTwo(c.lineas.reduce((s, l) => s + l.precio_total, 0));
+    const recojo = total === 0;
+    const credito = !recojo && c.condicion_pago === 'credito';
     const { data: compra, error: errCompra } = await supabase
       .from('compras')
       .insert({
         sede_id: c.sede_id,
         proveedor_id: c.proveedor_id,
         pedido_id: c.pedido_id,
-        entrega_id: credito ? null : c.entrega_id,
+        entrega_id: credito || recojo ? null : c.entrega_id,
         fecha: c.fecha,
         total,
-        condicion_pago: c.condicion_pago,
-        metodo_pago: credito ? null : c.metodo_pago,
-        tipo_comprobante: c.tipo_comprobante,
+        condicion_pago: recojo ? 'contado' : c.condicion_pago,
+        metodo_pago: credito || recojo ? null : c.metodo_pago,
+        tipo_comprobante: recojo ? 'sin_comprobante' : c.tipo_comprobante,
         numero_comprobante: c.numero_comprobante?.trim() || null,
         fecha_vencimiento: credito ? sumarDias(c.fecha, c.dias_credito) : null,
         estado_pago: credito ? 'por_pagar' : 'pagado',
@@ -123,7 +130,7 @@ export function useCompras() {
         evidencia_pago_path: pagoPath,
         registrado_por: profile.id,
         observacion: c.observacion?.trim() || null,
-        evidencia_pendiente: fotosQueFaltan(c).length > 0,
+        evidencia_pendiente: !recojo && fotosQueFaltan(c).length > 0,
       })
       .select('id')
       .single();
@@ -135,7 +142,16 @@ export function useCompras() {
     // 3. Detalle con precios
     const { error: errItems } = await supabase
       .from('compra_items')
-      .insert(c.lineas.map(l => ({ ...l, compra_id: compra.id })));
+      .insert(c.lineas.map(l => ({
+        pedido_item_id: l.pedido_item_id,
+        producto_id: l.producto_id,
+        cantidad: l.cantidad,
+        unidad: l.unidad,
+        precio_total: l.precio_total,
+        // La columna solo se envía cuando el precio salió de repartir un total.
+        ...(l.precio_repartido ? { precio_repartido: true } : {}),
+        compra_id: compra.id,
+      })));
     if (errItems) {
       await supabase.from('compras').delete().eq('id', compra.id);
       await borrarEvidencias(subidas);

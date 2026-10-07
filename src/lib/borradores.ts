@@ -21,6 +21,9 @@ export interface BorradorCompra {
   comprobante: 'boleta' | 'factura' | 'sin_comprobante';
   numero: string;
   observacion: string;
+  /** Fabio solo sabe el total de la compra y el sistema lo reparte. */
+  soloTotal?: boolean;
+  totalTexto?: string;
 }
 
 export const claveBorrador = (fecha: string, sedeId: string, proveedorId: string) => `${fecha}.${sedeId}.${proveedorId}`;

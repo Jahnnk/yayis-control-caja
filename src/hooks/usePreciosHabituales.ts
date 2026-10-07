@@ -26,6 +26,8 @@ export function usePreciosHabituales(productoIds: string[]) {
       .from('compra_items')
       .select('producto_id, cantidad, unidad, precio_total, compras(fecha, proveedores(nombre))')
       .in('producto_id', clave.split(','))
+      .eq('precio_repartido', false) // un total repartido no es un precio real
+      .gt('precio_total', 0)         // un recojo sin pago tampoco
       .order('created_at', { ascending: false })
       .limit(300)
       .then(({ data, error }) => {
