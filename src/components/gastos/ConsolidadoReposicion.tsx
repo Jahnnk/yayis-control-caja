@@ -27,7 +27,7 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Columna titulo={`Pagado por ${responsable}`} icono={<UserRound size={14} />} t={datos.administrador} />
+          <Columna titulo="Pagado por el administrador" icono={<UserRound size={14} />} t={datos.administrador} />
           <Columna titulo="Compras (a proveedores)" icono={<ShoppingBasket size={14} />} t={datos.compras} />
           <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={datos.total} destacado />
         </div>

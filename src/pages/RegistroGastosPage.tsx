@@ -156,7 +156,7 @@ export function RegistroGastosPage() {
       <div className="flex flex-wrap gap-1" role="group" aria-label="Origen de los gastos">
         {([
           ['', 'Todos'],
-          ['administrador', `Pagados por ${responsable ?? 'el administrador'}`],
+          ['administrador', 'Pagados por el administrador'],
           ['compras', 'Compras'],
         ] as const).map(([valor, etiqueta]) => (
           <Button key={valor} type="button" size="sm" variant={filterOrigen === valor ? 'default' : 'outline'} aria-pressed={filterOrigen === valor}
@@ -169,9 +169,10 @@ export function RegistroGastosPage() {
       {filterOrigen === 'compras' && (sinRendir.cantidad > 0 || sinRendir.cerradas.length > 0) && (
         <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
           <div>
-            <p className="text-sm font-bold text-amber-900">Recorrido de las compras de Compras</p>
+            <p className="text-sm font-bold text-amber-900">Compras que Compras ya registró en el sistema</p>
             <p className="text-xs text-amber-900">
-              Una compra pasa por tres pasos: <strong>por rendir</strong> (Compras aún no rinde cuentas), <strong>rendida</strong> (Compras ya rindió; falta que tú cierres la rendición en «Entregas y recepción») y <strong>cerrada</strong> (ya es gasto y aparece en la lista de abajo).
+              Esto es lo que Compras <strong>ya registró</strong>, según el paso en que va: <strong>registradas</strong> (Compras todavía no rinde cuentas), <strong>rendidas</strong> (Compras ya rindió; falta que tú cierres la rendición en «Entregas y recepción») y <strong>cerradas</strong> (ya son gasto y aparecen en la lista de abajo).
+              Lo que Compras gastó y <strong>todavía no registró</strong> no aparece aquí: se ve como «falta justificar» en el recorrido del dinero, arriba.
             </p>
           </div>
           {(['abierta', 'rendida'] as const).map(estado => {
@@ -180,7 +181,7 @@ export function RegistroGastosPage() {
             return (
               <div key={estado}>
                 <p className="mb-1 text-xs font-bold text-amber-900">
-                  {estado === 'abierta' ? 'Por rendir' : 'Rendidas: falta cerrar la rendición'} ({lista.length} · {formatMonto(lista.reduce((t, c) => roundTwo(t + c.total), 0))})
+                  {estado === 'abierta' ? 'Registradas, Compras aún no rinde cuentas' : 'Rendidas por Compras: falta cerrar la rendición'} ({lista.length} · {formatMonto(lista.reduce((t, c) => roundTwo(t + c.total), 0))})
                 </p>
                 <FilasCompras compras={lista} />
               </div>
@@ -189,7 +190,7 @@ export function RegistroGastosPage() {
           {sinRendir.cerradas.length > 0 && (
             <details className="rounded-md border bg-white">
               <summary className="cursor-pointer list-none px-3 py-2 text-xs font-bold text-yayis-dark">
-                Cerradas este mes: ya son gasto ({sinRendir.cerradas.length} · {formatMonto(sinRendir.cerradas.reduce((t, c) => roundTwo(t + c.total), 0))})
+                Cerradas este mes, ya son gasto ({sinRendir.cerradas.length} · {formatMonto(sinRendir.cerradas.reduce((t, c) => roundTwo(t + c.total), 0))})
               </summary>
               <div className="border-t"><FilasCompras compras={sinRendir.cerradas} /></div>
             </details>
