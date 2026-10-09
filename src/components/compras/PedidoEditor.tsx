@@ -59,9 +59,11 @@ interface Props {
   onVolverAPedir: (itemId: string) => Promise<{ error: string | null }>;
   onEnviar: (pedidoId: string, motivoSobreTope?: string) => Promise<{ error: string | null }>;
   onCancelar: (pedido: PedidoConItems) => Promise<{ error: string | null }>;
+  /** Seguimiento de la lista (Enviada → Comprando → En camino → Recibido). */
+  seguimiento?: React.ReactNode;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onProblema, onVolverAPedir, onEnviar, onCancelar }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onProblema, onVolverAPedir, onEnviar, onCancelar, seguimiento }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -275,14 +277,17 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                 <AlertTriangle size={12} /> Urgente
               </span>
             )}
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>
-              {ESTADO_PEDIDO[pedido.estado].label}
-            </span>
+            {!seguimiento && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>
+                {ESTADO_PEDIDO[pedido.estado].label}
+              </span>
+            )}
           </div>
         </div>
         {pedido.urgente && pedido.motivo_urgente && (
           <p className="text-xs text-amber-800">Motivo: {pedido.motivo_urgente}</p>
         )}
+        {seguimiento && <div className="pt-2">{seguimiento}</div>}
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Agregar producto */}

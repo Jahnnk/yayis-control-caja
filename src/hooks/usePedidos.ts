@@ -29,6 +29,8 @@ export function usePedidos() {
   const { sedeId } = useSedeActiva();
   const [pedidos, setPedidos] = useState<PedidoConItems[]>([]);
   const [loading, setLoading] = useState(false);
+  /** Última vez que se leyeron las listas (para el aviso «se actualiza solo»). */
+  const [actualizadoAt, setActualizadoAt] = useState<Date | null>(null);
   const ultimaSede = useRef<string | null>(null);
 
   const fetchPedidos = useCallback(async () => {
@@ -44,11 +46,27 @@ export function usePedidos() {
       .limit(30);
     if (ultimaSede.current !== sedeId) return;
     if (error) console.error('Error cargando pedidos:', error);
-    else setPedidos((data ?? []) as PedidoConItems[]);
+    else {
+      const nuevos = (data ?? []) as PedidoConItems[];
+      // Si nada cambió se conserva la misma lista (no se redibuja lo que el administrador está editando).
+      setPedidos(prev => (JSON.stringify(prev) === JSON.stringify(nuevos) ? prev : nuevos));
+      setActualizadoAt(new Date());
+    }
     setLoading(false);
   }, [sedeId]);
 
   useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
+
+  // Seguimiento en vivo: mientras haya una lista enviada o en camino, se vuelve a leer cada minuto
+  // (y al volver a la pestaña), para ver avanzar a Compras sin recargar la página.
+  const hayEnCurso = pedidos.some(p => p.estado === 'enviado' || p.estado === 'comprado');
+  useEffect(() => {
+    if (!hayEnCurso) return;
+    const refrescar = () => { if (document.visibilityState === 'visible') fetchPedidos(); };
+    const intervalo = window.setInterval(refrescar, 60_000);
+    document.addEventListener('visibilitychange', refrescar);
+    return () => { window.clearInterval(intervalo); document.removeEventListener('visibilitychange', refrescar); };
+  }, [hayEnCurso, fetchPedidos]);
 
   const crearPedido = useCallback(async (fechaCompra: string, urgente = false, motivoUrgente: string | null = null) => {
     if (!profile || !sedeId) return { pedido: null, error: 'Sin sede' };
@@ -174,5 +192,5 @@ export function usePedidos() {
     return { error: null };
   }, [fetchPedidos]);
 
-  return { pedidos, loading, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido };
+  return { pedidos, loading, actualizadoAt, fetchPedidos, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido };
 }

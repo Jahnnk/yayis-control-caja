@@ -12,6 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { PedidoEditor } from '@/components/compras/PedidoEditor';
+import { SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
+import { EnVivo } from '@/components/compras/EnVivo';
+import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
+import { useAuth } from '@/contexts/AuthContext';
+import type { PedidoConItems } from '@/types';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
 import { formatMonto, roundTwo } from '@/lib/utils';
@@ -22,7 +27,7 @@ import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from
 
 export function PedidosPage() {
   const { sedeActiva } = useSedeActiva();
-  const { pedidos, loading, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido } = usePedidos();
+  const { pedidos, loading, actualizadoAt, crearPedido, agregarItem, actualizarItem, eliminarItem, enviarPedido, cancelarPedido, marcarEntregado, registrarRecepcion, marcarTodoConforme, marcarRepedido } = usePedidos();
   const { productos, obtenerOCrear, recordarProveedor, recordarUnidad, recordarCategoria } = useProductos();
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
@@ -60,6 +65,15 @@ export function PedidosPage() {
     pedidos.filter(p => p.estado !== 'borrador').map(p => p.id),
     pedidos.map(p => `${p.id}:${p.estado}:${p.pedido_items.filter(i => i.estado === 'comprado').length}`).join('|'),
   );
+
+  // Seguimiento de cada lista (Enviada → Comprando → En camino → Recibido). Gerencia la ve con el nombre de la sede.
+  const { profile } = useAuth();
+  const mirada = profile?.rol === 'owner' ? 'gerencia' as const : 'sede' as const;
+  function seguimiento(p: PedidoConItems) {
+    const horas = p.pedido_items.map(i => pagos.get(i.id)?.registradaAt).filter((h): h is string => !!h).sort();
+    return <SeguimientoPedido seguimiento={seguimientoDePedido(p, { hoy, mirada, sede: sedeActiva?.nombre, primeraCompra: horas[0] ?? null })} />;
+  }
+  const hayEnCurso = pedidos.some(p => p.estado === 'enviado' || p.estado === 'comprado');
 
   // Fechas de compra disponibles para una lista nueva: las proximas del calendario
   // que todavia no tienen su lista regular.
@@ -129,7 +143,10 @@ export function PedidosPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-yayis-dark">Pedidos y recepción{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-bold text-yayis-dark">Pedidos y recepción{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
+          {hayEnCurso && <EnVivo actualizadoAt={actualizadoAt} />}
+        </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <CalendarDays size={15} />
           {nombresDias.length > 0
@@ -160,11 +177,12 @@ export function PedidosPage() {
           onVolverAPedir={volverAPedir}
           onEnviar={enviarPedido}
           onCancelar={cancelarPedido}
+          seguimiento={seguimiento(p)}
         />
       ))}
 
       {/* Compradas: el administrador confirma lo que fue llegando a su sede */}
-      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme} onVolverAPedir={volverAPedir} />)}
+      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme} onVolverAPedir={volverAPedir} seguimiento={seguimiento(p)} />)}
 
       {/* Nueva lista / pedido urgente */}
       <Card>
