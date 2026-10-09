@@ -9,19 +9,19 @@ import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { GastoForm } from '@/components/gastos/GastoForm';
 import { GastosTable } from '@/components/gastos/GastosTable';
-import { ResumenDiario } from '@/components/gastos/ResumenDiario';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select-native';
 import { getTodayLima, calcularSemana, getMesLabel, getSemanasDelMes } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
-import { Search } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
+import { Dato } from '@/components/ui/dato';
 import type { GastoConCategoria, GastoFormData } from '@/types';
 
 export function RegistroGastosPage() {
   const { profile } = useAuth();
-  const { gastos, total, loading, fetchGastos, deleteGasto, getConstanciaUrl } = useGastos();
+  const { gastos, total, loading, fetchGastos, deleteGasto, getConstanciaUrl, fetchResumenDiario } = useGastos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
 
@@ -38,6 +38,12 @@ export function RegistroGastosPage() {
   // Quién originó los gastos que se ven: todos, los del administrador o las compras de Fabio.
   const [filterOrigen, setFilterOrigen] = useState<'' | 'administrador' | 'compras'>('');
   const [page, setPage] = useState(0);
+  // Lo gastado hoy (efectivo y cuentas).
+  const [hoyResumen, setHoyResumen] = useState({ efectivo: 0, cuentas: 0, total: 0 });
+  const cargarHoy = useCallback(() => { fetchResumenDiario(getTodayLima()).then(setHoyResumen); }, [fetchResumenDiario]);
+  useEffect(() => { cargarHoy(); }, [cargarHoy]);
+  // Filtros plegados: solo la búsqueda y el origen quedan a la vista.
+  const [verFiltros, setVerFiltros] = useState(false);
   const pageSize = 20;
 
   // Filters
@@ -115,25 +121,28 @@ export function RegistroGastosPage() {
   }
 
   const isViewer = profile?.rol === 'viewer';
+  // Las categorías que más aparecen en los gastos que se ven (para los botones del formulario).
+  const categoriasFrecuentes = Object.entries(gastos.filter(g => g.origen !== 'compras').reduce<Record<string, number>>((m, g) => { m[g.categoria_id] = (m[g.categoria_id] ?? 0) + 1; return m; }, {}))
+    .sort((a, b) => b[1] - a[1]).map(([id]) => id).slice(0, 4);
+  const filtrosActivos = [filterEstado, filterSemana, filterCategoria, filterMetodoPago].filter(Boolean).length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-yayis-dark">Registro de Gastos</h1>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border bg-white px-4 py-3 text-sm">
-        <span>Pendiente de reposición: <strong className="text-yayis-dark">{formatMonto(consolidado.total.total)}</strong>
-          <span className="text-xs text-muted-foreground"> (tuyo {formatMonto(consolidado.administrador.total)} · Compras {formatMonto(consolidado.compras.total)})</span></span>
-        <span>Te queda del monto semanal: <strong className={saldoSemanal.queda < 0 ? 'text-red-600' : 'text-yayis-dark'}>{formatMonto(saldoSemanal.queda)}</strong></span>
-        <Link to="/recepcion" className="ml-auto text-xs font-medium text-yayis-green underline">Ver el recorrido del dinero →</Link>
-      </div>
-
-      <ResumenDiario />
+      {/* Cómo vas: lo de hoy, lo que se repone y lo que queda del monto semanal */}
+      <section aria-label="Cómo vas" className="grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
+        <Dato etiqueta="Gastado hoy" valor={formatMonto(hoyResumen.total)} nota={`efectivo ${formatMonto(hoyResumen.efectivo)} · cuentas ${formatMonto(hoyResumen.cuentas)}`} />
+        <Dato etiqueta="Gerencia te debe reponer" valor={formatMonto(consolidado.total.total)} nota={`tuyo ${formatMonto(consolidado.administrador.total)} · Compras ${formatMonto(consolidado.compras.total)}`} />
+        <Dato etiqueta="Te queda del monto semanal" valor={formatMonto(saldoSemanal.queda)} nota="detalle en Dinero de la semana" alerta={saldoSemanal.queda < 0} />
+      </section>
 
       {!isViewer && (
         <GastoForm
-          onSaved={() => { loadGastos(); setVersionSaldo(v => v + 1); }}
+          onSaved={() => { loadGastos(); setVersionSaldo(v => v + 1); cargarHoy(); }}
           editData={editGasto ?? undefined}
           onCancelEdit={() => setEditGasto(null)}
+          categoriasFrecuentes={categoriasFrecuentes}
         />
       )}
 
@@ -141,8 +150,8 @@ export function RegistroGastosPage() {
       <div className="flex flex-wrap gap-1" role="group" aria-label="Origen de los gastos">
         {([
           ['', 'Todos'],
-          ['administrador', 'Pagados por el administrador'],
-          ['compras', 'Compras'],
+          ['administrador', 'Del administrador'],
+          ['compras', 'De Compras'],
         ] as const).map(([valor, etiqueta]) => (
           <Button key={valor} type="button" size="sm" variant={filterOrigen === valor ? 'default' : 'outline'} aria-pressed={filterOrigen === valor}
             onClick={() => { setFilterOrigen(valor); setPage(0); }}>
@@ -157,39 +166,46 @@ export function RegistroGastosPage() {
         </p>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por descripcion..."
-            value={busqueda}
-            onChange={e => { setBusqueda(e.target.value); setPage(0); }}
-            className="pl-9"
-          />
+      {/* Búsqueda y filtros (plegados) */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Buscar un gasto…" value={busqueda} onChange={e => { setBusqueda(e.target.value); setPage(0); }} className="pl-9" />
+          </div>
+          <Button type="button" variant={filtrosActivos > 0 ? 'default' : 'outline'} onClick={() => setVerFiltros(v => !v)} aria-expanded={verFiltros}>
+            <SlidersHorizontal size={15} className="mr-1" /> Filtros{filtrosActivos > 0 ? ` (${filtrosActivos})` : ''}
+          </Button>
         </div>
-        <Select value={filterSemana} onChange={e => { setFilterSemana(e.target.value); setPage(0); }} className="w-40">
-          <option value="">Todas las semanas</option>
-          {semanas.map(s => (
-            <option key={s.semana} value={s.semana}>Semana {s.semana}</option>
-          ))}
-        </Select>
-        <Select value={filterCategoria} onChange={e => { setFilterCategoria(e.target.value); setPage(0); }} className="w-40">
-          <option value="">Todas las categorias</option>
-          {categorias.map(c => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
-          ))}
-        </Select>
-        <Select value={filterMetodoPago} onChange={e => { setFilterMetodoPago(e.target.value); setPage(0); }} className="w-36">
-          <option value="">Todo pago</option>
-          <option value="efectivo">Efectivo</option>
-          <option value="cuentas">Cuentas</option>
-        </Select>
-        <Select value={filterEstado} onChange={e => { setFilterEstado(e.target.value); setPage(0); }} className="w-40">
-          <option value="">Pendientes</option>
-          <option value="todos">Todos los estados</option>
-          <option value="pagado">Solo pagados</option>
-        </Select>
+        <p className="text-xs text-muted-foreground">
+          Mostrando: <strong>{filterEstado === 'todos' ? 'todos' : filterEstado === 'pagado' ? 'solo los repuestos' : 'los que falta reponer'}</strong>
+          {filterSemana ? ` · semana ${filterSemana}` : ''}{filterCategoria ? ` · ${categorias.find(c => c.id === filterCategoria)?.nombre ?? ''}` : ''}{filterMetodoPago ? ` · ${filterMetodoPago === 'efectivo' ? 'efectivo' : 'cuentas'}` : ''} · {total} gasto(s)
+        </p>
+        {verFiltros && (
+          <div className="flex flex-wrap gap-2 rounded-md bg-gray-50 p-3">
+            <Select value={filterEstado} onChange={e => { setFilterEstado(e.target.value); setPage(0); }} className="w-44 bg-white">
+              <option value="">Falta reponer</option>
+              <option value="todos">Todos</option>
+              <option value="pagado">Solo repuestos</option>
+            </Select>
+            <Select value={filterSemana} onChange={e => { setFilterSemana(e.target.value); setPage(0); }} className="w-40 bg-white">
+              <option value="">Todas las semanas</option>
+              {semanas.map(s => <option key={s.semana} value={s.semana}>Semana {s.semana}</option>)}
+            </Select>
+            <Select value={filterCategoria} onChange={e => { setFilterCategoria(e.target.value); setPage(0); }} className="w-44 bg-white">
+              <option value="">Todas las categorías</option>
+              {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </Select>
+            <Select value={filterMetodoPago} onChange={e => { setFilterMetodoPago(e.target.value); setPage(0); }} className="w-36 bg-white">
+              <option value="">Todo pago</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="cuentas">Cuentas</option>
+            </Select>
+            {filtrosActivos > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setFilterEstado(''); setFilterSemana(''); setFilterCategoria(''); setFilterMetodoPago(''); setPage(0); }}>Quitar filtros</Button>
+            )}
+          </div>
+        )}
       </div>
 
       <GastosTable
