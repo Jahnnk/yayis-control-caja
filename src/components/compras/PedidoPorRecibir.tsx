@@ -13,7 +13,7 @@ import { AlertTriangle, Check, ChevronDown, PackageCheck } from 'lucide-react';
  * Lista ya comprada por Compras: el administrador confirma producto por producto lo que llegó
  * a su sede. Cuando todo lo comprado está entregado, la lista pasa sola a «Recibido».
  */
-export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTodoConforme, onVolverAPedir, children }: {
+export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTodoConforme, onVolverAPedir, children, seguimiento }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
@@ -23,6 +23,8 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
   onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
   /** Contenido extra al final (por ejemplo, los comprobantes de las compras). */
   children?: React.ReactNode;
+  /** Seguimiento de la lista (Enviada → Comprando → En camino → Recibido). */
+  seguimiento?: React.ReactNode;
 }) {
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const comprados = items.filter(i => i.estado === 'comprado');
@@ -53,14 +55,14 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
             {pedido.urgente && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800"><AlertTriangle size={12} /> Urgente</span>
             )}
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>{ESTADO_PEDIDO[pedido.estado].label}</span>
+            {!seguimiento && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>{ESTADO_PEDIDO[pedido.estado].label}</span>}
           </div>
         </div>
-        <p className="text-sm">
+        {seguimiento ? <div className="pt-2">{seguimiento}</div> : <p className="text-sm">
           <strong className="text-yayis-dark">{revisados} de {comprados.length}</strong> productos revisados al recibirlos
           {conDiferencias > 0 && <span className="font-medium text-amber-700"> · {conDiferencias} con diferencias</span>}
           {noHabia > 0 && <span className="text-red-600"> · {noHabia} no había</span>}
-        </p>
+        </p>}
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="overflow-x-auto">

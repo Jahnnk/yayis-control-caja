@@ -16,6 +16,9 @@ import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { ArrowRight, BellRing, Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
+import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
+import type { PedidoVista } from '@/hooks/useVistaGeneral';
 
 /** Sección plegada: el resumen siempre a la vista, el detalle al abrirla. */
 function Desplegable({ icono, titulo, resumen, children }: { icono: ReactNode; titulo: string; resumen: ReactNode; children: ReactNode }) {
@@ -84,6 +87,22 @@ export function VistaGeneralPage() {
   const pendientes = v.sinComprar.length - noHabia;
   const maxCategoria = v.porCategoria[0]?.monto ?? 0;
   const listasActivas = v.listas.filter(p => p.estado !== 'cancelado');
+  // Seguimiento de cada lista: la primera compra registrada para sus productos marca cuándo empezó «Comprando».
+  const primeraCompraDe = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of datos.compras) {
+      for (const it of c.compra_items ?? []) {
+        if (!it.pedido_item_id) continue;
+        const antes = m.get(it.pedido_item_id);
+        if (!antes || c.created_at < antes) m.set(it.pedido_item_id, c.created_at);
+      }
+    }
+    return m;
+  }, [datos.compras]);
+  function seguimiento(p: PedidoVista) {
+    const horas = p.pedido_items.map(i => primeraCompraDe.get(i.id)).filter((h): h is string => !!h).sort();
+    return seguimientoDePedido(p, { hoy, mirada: 'gerencia', sede: p.sedes?.nombre, primeraCompra: horas[0] ?? null });
+  }
 
   async function descargarExcel() {
     setExportando(true);
@@ -296,7 +315,7 @@ export function VistaGeneralPage() {
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
                     <Sede nombre={p.sedes?.nombre} />
                     <span className="capitalize">{fechaCorta(p.fecha_compra)}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[p.estado].clase}`}>{ESTADO_PEDIDO[p.estado].label}</span>
+                    <SeguimientoMini seguimiento={seguimiento(p)} />
                     {p.urgente && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">Urgente</span>}
                     {p.estado === 'enviado' && p.fecha_compra < hoy && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">Atrasada</span>}
                     <span className="ml-auto text-xs text-muted-foreground">
@@ -305,6 +324,7 @@ export function VistaGeneralPage() {
                       {pend > 0 && <> · {pend} pendiente(s)</>}
                     </span>
                   </summary>
+                  <div className="mt-2"><SeguimientoPedido seguimiento={seguimiento(p)} /></div>
                   <div className="mt-2 space-y-1 pl-2 text-sm">
                     {p.pedido_items.map(i => (
                       <div key={i.id} className="flex flex-wrap items-center gap-2">

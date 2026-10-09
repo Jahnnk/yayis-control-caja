@@ -9,6 +9,8 @@ export interface PrecioPagado {
   unidad: string;
   /** El precio salió de repartir el total de la compra (no es el precio real del producto). */
   repartido: boolean;
+  /** Cuándo se registró la primera compra de esta línea (para el seguimiento de la lista). */
+  registradaAt: string | null;
 }
 
 /**
@@ -24,13 +26,13 @@ export function usePreciosPagados(pedidoIds: string[], clave: string): Map<strin
     let vigente = true;
     supabase
       .from('compras')
-      .select('compra_items(pedido_item_id, cantidad, unidad, precio_total, precio_repartido)')
+      .select('created_at, compra_items(pedido_item_id, cantidad, unidad, precio_total, precio_repartido)')
       .in('pedido_id', ids.split(','))
       .then(({ data, error }) => {
         if (!vigente) return;
         if (error) { console.error('Error cargando precios pagados:', error); return; }
         const mapa = new Map<string, PrecioPagado>();
-        for (const c of (data ?? []) as unknown as { compra_items: { pedido_item_id: string | null; cantidad: number; unidad: string; precio_total: number; precio_repartido: boolean }[] }[]) {
+        for (const c of (data ?? []) as unknown as { created_at: string; compra_items: { pedido_item_id: string | null; cantidad: number; unidad: string; precio_total: number; precio_repartido: boolean }[] }[]) {
           for (const i of c.compra_items) {
             if (!i.pedido_item_id) continue;
             const antes = mapa.get(i.pedido_item_id);
@@ -39,6 +41,7 @@ export function usePreciosPagados(pedidoIds: string[], clave: string): Map<strin
               cantidad: roundTwo((antes?.cantidad ?? 0) + Number(i.cantidad)),
               unidad: i.unidad,
               repartido: (antes?.repartido ?? false) || i.precio_repartido,
+              registradaAt: antes?.registradaAt && antes.registradaAt < c.created_at ? antes.registradaAt : c.created_at,
             });
           }
         }

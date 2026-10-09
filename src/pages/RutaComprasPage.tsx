@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SeguimientoMini } from '@/components/compras/SeguimientoPedido';
+import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import { Link } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { RegistrarCompraModal, type LineaCandidata } from '@/components/compras/RegistrarCompraModal';
@@ -248,10 +250,14 @@ export function RutaComprasPage() {
           ) : (
             sedesDelDia.map(s => {
               const e = estadoSede(s.id);
+              // Con la lista ya enviada se muestra su seguimiento (Enviada → Comprando → En camino → Recibido).
+              const regular = pedidos.find(p => p.sede_id === s.id && !p.urgente && p.fecha_compra === fecha);
               return (
-                <div key={s.id} className="flex items-center justify-between gap-3 text-sm">
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
                   <span className="font-medium">{s.nombre}</span>
-                  <span className={`flex items-center gap-1 ${e.clase}`}><e.icono size={14} /> {e.texto}</span>
+                  {regular
+                    ? <SeguimientoMini seguimiento={seguimientoDePedido(regular, { hoy, mirada: 'compras', sede: s.nombre })} />
+                    : <span className={`flex items-center gap-1 ${e.clase}`}><e.icono size={14} /> {e.texto}</span>}
                 </div>
               );
             })
