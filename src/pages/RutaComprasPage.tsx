@@ -19,7 +19,7 @@ import { Loading } from '@/components/ui/loading';
 import { getTodayLima } from '@/lib/dates';
 import { diaSemanaDe, fechaCorta, fechaLarga, formatCantidad, sumarDias } from '@/lib/compras';
 import type { EstadoItemPedido, Proveedor } from '@/types';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock, Eye, MapPin, PackageCheck, Phone, Receipt, Store, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Eye, MapPin, PackageCheck, Phone, Receipt, Store, X } from 'lucide-react';
 
 interface LineaRuta {
   item: ItemRuta;
@@ -188,6 +188,18 @@ export function RutaComprasPage() {
     return Array.from(porSede.entries());
   }
 
+  // Proveedores terminados (todo resuelto y todo registrado) se pliegan al final: arriba queda solo lo que falta.
+  const terminado = (g: GrupoProveedor) => g.clave !== 'sin-proveedor' && g.resueltos === g.total && pendientesPorSede(g).length === 0;
+  const gruposEnCurso = grupos.filter(g => !terminado(g));
+  const gruposListos = grupos.filter(terminado);
+  // «Siguiente»: el próximo proveedor al que todavía le falta algo (comprar o registrar), debajo de lo que se ve;
+  // al llegar al último, vuelve al primero.
+  function irAlSiguiente() {
+    const tarjetas = gruposEnCurso.map(g => document.getElementById(`prov-${g.clave}`)).filter((e): e is HTMLElement => !!e);
+    const destino = tarjetas.find(e => e.getBoundingClientRect().top > 90) ?? tarjetas[0];
+    destino?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // Si el celular recargó la página con una compra a medio llenar (salió a otra app o a la cámara),
   // se vuelve a abrir esa misma compra; el formulario recupera solo lo que ya había escrito.
   const reaperturaIntentada = useRef(false);
@@ -228,23 +240,23 @@ export function RutaComprasPage() {
   const proveedoresActivos = proveedores.filter(p => p.activo);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-5xl space-y-4 pb-24 sm:space-y-6 sm:pb-0">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-yayis-dark">Ruta de compras</h1>
-          <p className="text-sm capitalize text-muted-foreground">{fechaLarga(fecha)}{fecha === hoy ? ' (hoy)' : ''}</p>
+          <p className="text-sm text-muted-foreground">{fecha === hoy ? 'Hoy, ' : ''}{fechaLarga(fecha)}</p>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" onClick={() => setFecha(sumarDias(fecha, -1))} aria-label="Día anterior"><ChevronLeft size={16} /></Button>
-          <Input type="date" value={fecha} onChange={e => e.target.value && setFecha(e.target.value)} className="w-40" aria-label="Fecha de la ruta" />
-          <Button variant="outline" size="icon" onClick={() => setFecha(sumarDias(fecha, 1))} aria-label="Día siguiente"><ChevronRight size={16} /></Button>
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setFecha(sumarDias(fecha, -1))} aria-label="Día anterior"><ChevronLeft size={16} /></Button>
+          <Input type="date" value={fecha} onChange={e => e.target.value && setFecha(e.target.value)} className="h-9 w-[8.5rem] px-2 text-sm" aria-label="Fecha de la ruta" />
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setFecha(sumarDias(fecha, 1))} aria-label="Día siguiente"><ChevronRight size={16} /></Button>
           {fecha !== hoy && <Button variant="ghost" size="sm" onClick={() => setFecha(hoy)}>Hoy</Button>}
         </div>
       </div>
 
       {/* Sedes que compran este día */}
       <Card>
-        <CardContent className="space-y-2 p-4">
+        <CardContent className="space-y-2 p-3 sm:p-4">
           {sedesDelDia.length === 0 ? (
             <p className="text-sm text-muted-foreground">Ninguna sede tiene programada compra este día.</p>
           ) : (
@@ -263,7 +275,7 @@ export function RutaComprasPage() {
             })
           )}
           {totalLineas > 0 && (
-            <div className="border-t pt-2">
+            <div className={`border-t pt-2 ${vista === 'proveedor' ? 'hidden sm:block' : ''}`}>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Avance de la ruta</span>
                 <span><strong className="text-yayis-dark">{totalResueltas}</strong> de {totalLineas} productos</span>
@@ -288,12 +300,12 @@ export function RutaComprasPage() {
       )}
 
       {urgentesPendientes.length > 0 && vista === 'proveedor' && (
-        <Card className="border-red-300 bg-red-50/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base text-red-800">⚡ Urgente: cómpralo primero ({urgentesPendientes.length})</CardTitle>
-            <p className="text-xs text-red-800">Lo marcó el administrador de cada sede. Está también dentro de cada proveedor, con su etiqueta roja.</p>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
+        <details open className="group rounded-lg border border-red-300 bg-red-50/60">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-red-800">
+            <span>⚡ Urgente: cómpralo primero ({urgentesPendientes.length})</span>
+            <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-1.5 px-4 pb-3 text-sm">
             {urgentesPendientes.map(u => (
               <div key={u.item.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-yayis-dark">{u.pedido.sedes?.nombre}</span>
@@ -302,8 +314,9 @@ export function RutaComprasPage() {
                 <span className="text-xs text-muted-foreground">→ {u.proveedor ?? 'sin proveedor asignado'}</span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+            <p className="pt-1 text-xs text-red-800">También están dentro de cada proveedor, con su etiqueta roja.</p>
+          </div>
+        </details>
       )}
 
       {loading && pedidos.length === 0 ? (
@@ -357,10 +370,11 @@ export function RutaComprasPage() {
           );
         })
       ) : (
-        grupos.map(g => {
+        <>
+        {gruposEnCurso.map(g => {
           const sinProveedor = g.clave === 'sin-proveedor';
           return (
-            <Card key={g.clave} className={sinProveedor ? 'border-amber-300 bg-amber-50/40' : ''}>
+            <Card key={g.clave} id={`prov-${g.clave}`} className={`scroll-mt-16 ${sinProveedor ? 'border-amber-300 bg-amber-50/40' : ''}`}>
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -382,7 +396,10 @@ export function RutaComprasPage() {
                       </div>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground">{g.resueltos}/{g.total} listos</span>
+                  <span className="text-xs text-muted-foreground">
+                    {g.resueltos}/{g.total} listos
+                    {!sinProveedor && <span className="block text-right sm:hidden"><Check size={11} className="inline text-emerald-700" /> comprado · <X size={11} className="inline text-red-600" /> no había</span>}
+                  </span>
                 </div>
                 {sinProveedor && (
                   <label className="flex items-center gap-2 text-xs text-amber-900">
@@ -403,22 +420,24 @@ export function RutaComprasPage() {
                         const { item, pedido } = linea;
                         const trabajando = ocupado === item.id;
                         return (
-                          <div key={item.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                            <span className="min-w-[4.5rem] rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{pedido.sedes?.nombre}</span>
-                            <span className="font-medium">{formatCantidad(item.cantidad)} {item.unidad}</span>
-                            {item.precio_referencia !== null && item.precio_referencia !== undefined && (
-                              <span className="text-xs text-blue-700" title="Precio de referencia que puso la sede">Ref. {formatMonto(Number(item.precio_referencia))} por {baseDePrecio(item.unidad).etiqueta}</span>
-                            )}
-                            {item.urgente && item.estado === 'pendiente' && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
-                            {etiquetaPedido(pedido)}
-                            {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}
-                            <div className="ml-auto flex items-center gap-1">
+                          <div key={item.id} className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${item.estado === 'comprado' ? 'bg-emerald-50/70' : item.estado === 'no_habia' ? 'bg-red-50/60' : ''}`}>
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{pedido.sedes?.nombre}</span>
+                              <span className={`font-semibold ${item.estado === 'no_habia' ? 'text-red-700 line-through' : ''}`}>{formatCantidad(item.cantidad)} {item.unidad}</span>
+                              {item.precio_referencia !== null && item.precio_referencia !== undefined && (
+                                <span className="text-xs text-blue-700" title="Precio de referencia que puso la sede">Ref. {formatMonto(Number(item.precio_referencia))} por {baseDePrecio(item.unidad).etiqueta}</span>
+                              )}
+                              {item.urgente && item.estado === 'pendiente' && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
+                              {etiquetaPedido(pedido)}
+                              {item.nota && <span className="w-full text-xs italic text-muted-foreground sm:w-auto">"{item.nota}"</span>}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
                               {sinProveedor ? (
                                 <Select
                                   value=""
                                   onChange={e => handleAsignar(linea, e.target.value)}
                                   disabled={trabajando}
-                                  className="h-8 w-48 text-xs"
+                                  className="h-9 w-40 text-xs sm:w-48"
                                   aria-label={`Proveedor para ${prod.nombre}`}
                                 >
                                   <option value="">Elegir proveedor...</option>
@@ -432,9 +451,10 @@ export function RutaComprasPage() {
                                     disabled={trabajando}
                                     onClick={() => handleMarcar(linea, 'comprado')}
                                     aria-pressed={item.estado === 'comprado'}
-                                    className={item.estado === 'comprado' ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600 hover:text-white' : 'text-emerald-700'}
+                                    aria-label={`Comprado: ${prod.nombre} para ${pedido.sedes?.nombre}`}
+                                    className={`h-10 min-w-10 px-2.5 sm:h-9 ${item.estado === 'comprado' ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600 hover:text-white' : 'text-emerald-700'}`}
                                   >
-                                    <Check size={14} className="mr-1" /> Comprado
+                                    <Check size={16} className="sm:mr-1" /><span className="hidden sm:inline">Comprado</span>
                                   </Button>
                                   <Button
                                     size="sm"
@@ -442,9 +462,10 @@ export function RutaComprasPage() {
                                     disabled={trabajando}
                                     onClick={() => handleMarcar(linea, 'no_habia')}
                                     aria-pressed={item.estado === 'no_habia'}
-                                    className={item.estado === 'no_habia' ? 'border-red-500 bg-red-500 text-white hover:bg-red-600 hover:text-white' : 'text-red-600'}
+                                    aria-label={`No había: ${prod.nombre} para ${pedido.sedes?.nombre}`}
+                                    className={`h-10 min-w-10 px-2.5 sm:h-9 ${item.estado === 'no_habia' ? 'border-red-500 bg-red-500 text-white hover:bg-red-600 hover:text-white' : 'text-red-600'}`}
                                   >
-                                    <X size={14} className="mr-1" /> No había
+                                    <X size={16} className="sm:mr-1" /><span className="hidden sm:inline">No había</span>
                                   </Button>
                                 </>
                               )}
@@ -480,7 +501,7 @@ export function RutaComprasPage() {
                         {faltan.map(([sedeId, info]) => (
                           <Button
                             key={sedeId}
-                            size="sm"
+                            className="h-11 w-full sm:h-9 sm:w-auto"
                             onClick={() => setRegistrando({ sedeId, sedeNombre: info.sedeNombre, proveedor, candidatas: info.candidatas })}
                           >
                             <Receipt size={14} className="mr-1" /> Registrar compra · {info.sedeNombre}
@@ -496,7 +517,50 @@ export function RutaComprasPage() {
               </CardContent>
             </Card>
           );
-        })
+        })}
+
+        {gruposListos.length > 0 && (
+          <details className="group rounded-lg border bg-white shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-emerald-800">
+              <span className="flex items-center gap-2"><CheckCircle2 size={16} /> Terminados ({gruposListos.length})</span>
+              <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="divide-y border-t text-sm">
+              {gruposListos.map(g => {
+                const registradasProv = compras.filter(c => c.proveedor_id === g.proveedor?.id);
+                return (
+                  <div key={g.clave} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+                    <span className="font-medium">{g.proveedor?.nombre}</span>
+                    <span className="text-xs text-muted-foreground">{g.total} producto(s) · {registradasProv.length} compra(s) registrada(s)</span>
+                    <span className="ml-auto font-semibold text-emerald-800">{formatMonto(registradasProv.reduce((t, c) => t + Number(c.total), 0))}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        )}
+        </>
+      )}
+
+      {/* Celular: barra fija abajo con el avance y un toque para ir a lo que sigue */}
+      {totalLineas > 0 && vista === 'proveedor' && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/95 px-4 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur sm:hidden">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground"><strong className="text-yayis-dark">{totalResueltas} de {totalLineas}</strong> productos{gruposEnCurso.length === 0 ? ' · ruta terminada' : ` · faltan ${gruposEnCurso.length} proveedor(es)`}</p>
+              <div className="mt-1 h-1.5 w-full rounded-full bg-gray-100">
+                <div className="h-1.5 rounded-full bg-yayis-green transition-all duration-500" style={{ width: `${(totalResueltas / totalLineas) * 100}%` }} />
+              </div>
+            </div>
+            {gruposEnCurso.length > 0 ? (
+              <Button className="h-10 shrink-0" onClick={irAlSiguiente}>
+                <ArrowDown size={15} className="mr-1" /> Siguiente
+              </Button>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-emerald-700"><CheckCircle2 size={16} /> Listo</span>
+            )}
+          </div>
+        </div>
       )}
 
       {registrando && (
