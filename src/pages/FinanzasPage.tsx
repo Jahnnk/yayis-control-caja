@@ -1,3 +1,4 @@
+import { conMayuscula } from '@/lib/compras';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
@@ -43,7 +44,7 @@ function PagarFactura({ compra, onClose, onPagar }: {
       <div className="space-y-4">
         <p className="text-sm">
           Factura de <strong>{compra.sedes?.nombre}</strong> del {fechaCorta(compra.fecha)} por <strong className="text-lg">{formatMonto(Number(compra.total))}</strong>
-          {compra.fecha_vencimiento && <> · vence el <strong className="capitalize">{fechaCorta(compra.fecha_vencimiento)}</strong></>}
+          {compra.fecha_vencimiento && <> · vence el <strong>{fechaCorta(compra.fecha_vencimiento)}</strong></>}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -251,7 +252,7 @@ export function FinanzasPage() {
             return (
               <div key={dia}>
                 <div className={`mb-1 flex items-center justify-between text-sm font-bold ${vencidas ? 'text-red-700' : pronto ? 'text-amber-700' : 'text-yayis-dark'}`}>
-                  <span className="capitalize">{vencidas ? 'Vencidas' : dia === 'sin-fecha' ? 'Sin fecha' : `${fechaLarga(dia)}${dia === hoy ? ' (hoy)' : ''}`}</span>
+                  <span>{vencidas ? 'Vencidas' : dia === 'sin-fecha' ? 'Sin fecha' : `${conMayuscula(fechaLarga(dia))}${dia === hoy ? ' (hoy)' : ''}`}</span>
                   <span>{formatMonto(totalDia)}</span>
                 </div>
                 <div className="divide-y rounded-md border">

@@ -1,3 +1,4 @@
+import { conMayuscula } from '@/lib/compras';
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
@@ -66,7 +67,7 @@ function CorregirDelivery({ delivery, onCorregir, onCerrar }: {
       <div className="space-y-4">
         <p className="text-sm">
           <strong>{delivery.cliente}</strong> · {formatMonto(Number(delivery.monto_producto))} de producto + {formatMonto(Number(delivery.monto_delivery))} de delivery.
-          Registrado: <strong className="capitalize">{fechaCorta(delivery.fecha)}</strong>
+          Registrado: <strong>{fechaCorta(delivery.fecha)}</strong>
           {delivery.metodo_cobro && <> · cobrado en <strong>{delivery.metodo_cobro === 'efectivo' ? 'efectivo' : 'Yape o transferencia'}</strong></>}.
           Los montos no se pueden cambiar aquí.
         </p>
@@ -185,7 +186,7 @@ function VistaCompras() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-yayis-dark">Mis deliverys</h1>
-        <p className="mt-1 text-sm capitalize text-muted-foreground">{fechaLarga(hoy)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{conMayuscula(fechaLarga(hoy))}</p>
       </div>
 
       <Card className={pendientes.length > 0 ? 'border-amber-300 bg-amber-50/40' : ''}>
@@ -201,7 +202,7 @@ function VistaCompras() {
               {porSede.map(s => (
                 <p key={s.nombre} className="text-sm">
                   Entrégaselo al administrador de <strong>{s.nombre}</strong>: <strong>{formatMonto(s.total)}</strong>
-                  <span className="text-xs text-muted-foreground"> · {s.cantidad} delivery(s), desde el <span className="capitalize">{fechaCorta(s.desde)}</span></span>
+                  <span className="text-xs text-muted-foreground"> · {s.cantidad} delivery(s), desde el <span>{fechaCorta(s.desde)}</span></span>
                 </p>
               ))}
               <p className="text-xs text-muted-foreground">Lo ideal es entregarlo máximo en {DIAS_PARA_ENTREGAR_EFECTIVO} días. El administrador lo cuenta y lo registra en su pantalla.</p>
@@ -284,7 +285,7 @@ function RecibirEfectivo({ pendientes, onRecibir }: {
           {pendientes.map(d => (
             <label key={d.id} className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-gray-50">
               <input type="checkbox" checked={!excluidos.has(d.id)} onChange={() => alternar(d.id)} />
-              <span className="w-20 capitalize text-muted-foreground">{fechaCorta(d.fecha)}</span>
+              <span className="w-20 text-muted-foreground">{fechaCorta(d.fecha)}</span>
               <span className="min-w-[8rem] flex-1 font-medium">{d.cliente}</span>
               <span className="font-bold">{formatMonto(Number(d.cobrado))}</span>
             </label>
@@ -387,7 +388,7 @@ function VistaSede() {
               const dif = roundTwo(Number(l.esperado) - Number(l.recibido));
               return (
                 <div key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="capitalize text-muted-foreground" title="Día en que Compras entregó el efectivo">{fechaCorta(l.fecha_entrega ?? new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
+                  <span className="text-muted-foreground" title="Día en que Compras entregó el efectivo">{fechaCorta(l.fecha_entrega ?? new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))}</span>
                   {l.fecha_entrega && l.fecha_entrega !== new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) && (
                     <span className="text-[11px] text-muted-foreground">(confirmado el {fechaCorta(new Date(l.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }))})</span>
                   )}

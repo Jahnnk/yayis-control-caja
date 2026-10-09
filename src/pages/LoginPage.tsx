@@ -55,7 +55,7 @@ export function LoginPage() {
 
           <div>
             <label className="text-sm font-medium text-yayis-dark" htmlFor="password">
-              Contrasena
+              Contraseña
             </label>
             <Input
               id="password"
@@ -74,7 +74,7 @@ export function LoginPage() {
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Iniciar Sesion
+            Iniciar sesión
           </Button>
         </form>
       </div>

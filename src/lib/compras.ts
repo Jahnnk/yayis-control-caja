@@ -89,6 +89,11 @@ export function diaSemanaDe(fecha: string): number {
   return aFecha(fecha).getDay();
 }
 
+/** Primera letra en mayúscula (para una fecha que empieza la frase: "Jueves 2 de octubre"). */
+export function conMayuscula(texto: string): string {
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto;
+}
+
 /** "jueves 2 de octubre" */
 export function fechaLarga(fecha: string): string {
   const f = aFecha(fecha);

@@ -1,3 +1,4 @@
+import { conMayuscula } from '@/lib/compras';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SeguimientoMini } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
@@ -244,7 +245,7 @@ export function RutaComprasPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-yayis-dark">Ruta de compras</h1>
-          <p className="text-sm text-muted-foreground">{fecha === hoy ? 'Hoy, ' : ''}{fechaLarga(fecha)}</p>
+          <p className="text-sm text-muted-foreground">{fecha === hoy ? `Hoy, ${fechaLarga(fecha)}` : conMayuscula(fechaLarga(fecha))}</p>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setFecha(sumarDias(fecha, -1))} aria-label="Día anterior"><ChevronLeft size={16} /></Button>

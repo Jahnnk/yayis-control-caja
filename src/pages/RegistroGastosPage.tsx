@@ -221,8 +221,8 @@ export function RegistroGastosPage() {
 
       <ConfirmDialog
         open={!!deleteId}
-        title="Eliminar gasto"
-        message="Esta seguro que desea eliminar este gasto? Esta accion no se puede deshacer."
+        title="¿Eliminar este gasto?"
+        message="Se borrará el gasto y su constancia. No se puede deshacer."
         confirmLabel="Eliminar"
         variant="destructive"
         onConfirm={handleDelete}

@@ -61,7 +61,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
   return (
     <Card className="border-blue-300">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Rendición de la entrega del <span className="capitalize">{fechaCorta(entrega.fecha)}</span></CardTitle>
+        <CardTitle className="text-base">Rendición de la entrega del <span>{fechaCorta(entrega.fecha)}</span></CardTitle>
         <p className="text-xs text-muted-foreground">Revisa cada compra y sus fotos, elige su categoría de gasto y confirma el vuelto que te devolvieron.</p>
         {seguimiento && <div className="pt-2">{seguimiento}</div>}
       </CardHeader>
@@ -408,7 +408,7 @@ export function RecepcionPage() {
               const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="capitalize">{fechaCorta(e.fecha)}</span>
+                  <span>{fechaCorta(e.fecha)}</span>
                   <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Compras ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
