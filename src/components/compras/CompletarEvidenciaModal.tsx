@@ -11,6 +11,7 @@ import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { formatMonto } from '@/lib/utils';
 import { fechaCorta } from '@/lib/compras';
 import { Select } from '@/components/ui/select-native';
+import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 import type { CompraDetalle } from '@/types';
 
@@ -29,7 +30,14 @@ export function CompletarEvidenciaModal({ compra, onClose, onListo }: { compra: 
   const { profile } = useAuth();
   const { addToast } = useToast();
   const { sedes } = useSedeActiva();
-  const faltan = fotosPendientes(compra, Number(sedes.find(s => s.id === compra.sede_id)?.tope_sin_comprobante ?? TOPE_SIN_COMPROBANTE_EFECTIVO));
+  const tope = Number(sedes.find(s => s.id === compra.sede_id)?.tope_sin_comprobante ?? TOPE_SIN_COMPROBANTE_EFECTIVO);
+  const faltan = fotosPendientes(compra, tope);
+  // «Se perdió la boleta»: la compra pasa a «sin boleta» (las mismas reglas que comprar sin boleta: en efectivo hasta el tope
+  // de la sede, por Yape con su captura) y queda escrito qué pasó. Así se puede rendir y reponer.
+  const faltaBoleta = faltan.includes('comprobante');
+  const puedeSinBoleta = faltaBoleta && (compra.metodo_pago === 'cuentas' || Number(compra.total) <= tope) && compra.condicion_pago !== 'credito';
+  const [boletaPerdida, setBoletaPerdida] = useState(false);
+  const [motivoPerdida, setMotivoPerdida] = useState('');
   const [archivos, setArchivos] = useState<Partial<Record<RanuraEvidencia, File | null>>>({});
   const [guardando, setGuardando] = useState(false);
 
@@ -49,8 +57,40 @@ export function CompletarEvidenciaModal({ compra, onClose, onListo }: { compra: 
       });
   }, [falta_pago, compra.id, compra.sede_id, compra.registrado_por]);
 
+  async function guardarBoletaPerdida() {
+    if (!motivoPerdida.trim()) return addToast('Escribe qué compraste, dónde y qué pasó con la boleta.', 'error');
+    setGuardando(true);
+    // Si es por Yape, la captura sigue siendo necesaria (se sube aquí mismo o queda pendiente).
+    const necesitaPago = compra.metodo_pago === 'cuentas' && !compra.evidencia_pago_path && !compra.pago_con_compra_id;
+    const subidas: string[] = [];
+    const cambios: Record<string, string | boolean | null> = {
+      tipo_comprobante: 'sin_comprobante',
+      numero_comprobante: null,
+      observacion: [compra.observacion?.trim(), `Boleta perdida: ${motivoPerdida.trim()}`].filter(Boolean).join(' · '),
+    };
+    if (necesitaPago && juntoConOtra && otraId) {
+      cambios.pago_con_compra_id = otraId;
+    } else if (necesitaPago && archivos.pago && profile) {
+      const { path, error } = await subirEvidencia(archivos.pago, compra.sede_id, profile.id, 'pago');
+      if (error || !path) { setGuardando(false); return addToast(error ?? 'No se pudo subir la captura', 'error'); }
+      subidas.push(path);
+      cambios.evidencia_pago_path = path;
+    }
+    cambios.evidencia_pendiente = necesitaPago && !cambios.evidencia_pago_path && !cambios.pago_con_compra_id;
+    const { error } = await supabase.from('compras').update(cambios).eq('id', compra.id);
+    setGuardando(false);
+    if (error) {
+      await borrarEvidencias(subidas);
+      return addToast(`Error: ${error.message}`, 'error');
+    }
+    addToast(cambios.evidencia_pendiente ? 'Quedó como compra sin boleta. Falta la captura del Yape.' : 'Listo: quedó como compra sin boleta, con tu explicación.', 'success');
+    onListo();
+    onClose();
+  }
+
   async function guardar() {
     if (!profile) return;
+    if (boletaPerdida) return guardarBoletaPerdida();
     if (juntoConOtra && !otraId) return addToast('Elige con qué compra se pagó junto.', 'error');
     setGuardando(true);
     const subidas: string[] = [];
@@ -89,6 +129,24 @@ export function CompletarEvidenciaModal({ compra, onClose, onListo }: { compra: 
         <p className="text-sm">
           Compra a <strong>{compra.proveedores?.nombre}</strong> por <strong>{formatMonto(Number(compra.total))}</strong>. Falta: {faltan.map(r => NOMBRE_FOTO[r]).join(' y ')}.
         </p>
+        {puedeSinBoleta && (
+          <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-0.5" checked={boletaPerdida} onChange={e => setBoletaPerdida(e.target.checked)} />
+              <span><strong>Se perdió la boleta</strong> (o no me la dieron). Queda como compra sin boleta{compra.metodo_pago === 'efectivo' ? `, permitida en efectivo hasta ${formatMonto(tope)}` : ''}.</span>
+            </label>
+            {boletaPerdida && (
+              <div>
+                <label className="text-xs font-medium" htmlFor="motivo-perdida">¿Qué compraste, dónde y qué pasó con la boleta?</label>
+                <Input id="motivo-perdida" className="mt-1 bg-white" placeholder="Ej: globos en el mercado central, puesto 12; se me perdió la boleta" value={motivoPerdida} onChange={e => setMotivoPerdida(e.target.value)} />
+                <p className="mt-1 text-xs text-amber-800">El administrador verá esta explicación al cerrar la rendición.</p>
+              </div>
+            )}
+          </div>
+        )}
+        {faltaBoleta && !puedeSinBoleta && compra.metodo_pago === 'efectivo' && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">Sin boleta en efectivo solo se permite hasta {formatMonto(tope)}. Esta compra pasa ese monto: consigue una copia de la boleta o habla con Gerencia.</p>
+        )}
         {falta_pago && (
           <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/50 p-3">
             <label className="flex cursor-pointer items-start gap-2 text-sm">
@@ -110,14 +168,14 @@ export function CompletarEvidenciaModal({ compra, onClose, onListo }: { compra: 
             )}
           </div>
         )}
-        {faltan.filter(r => !(r === 'pago' && juntoConOtra)).map(r => (
+        {faltan.filter(r => !(r === 'pago' && juntoConOtra) && !(r === 'comprobante' && boletaPerdida)).map(r => (
           <EvidenciaInput key={r} id={`pendiente-${r}`} label={NOMBRE_FOTO[r].charAt(0).toUpperCase() + NOMBRE_FOTO[r].slice(1)}
             archivo={archivos[r] ?? null} onChange={f => setArchivos(prev => ({ ...prev, [r]: f }))} requerido />
         ))}
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button variant="outline" onClick={onClose} disabled={guardando}>Cancelar</Button>
           <Button onClick={guardar} disabled={guardando}>
-            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} Guardar foto
+            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} {boletaPerdida ? 'Guardar sin boleta' : 'Guardar foto'}
           </Button>
         </div>
       </div>
