@@ -25,7 +25,7 @@ import {
   borrarBorrador, claveBorrador, guardarBorrador, guardarFoto, leerBorrador, leerFotos, limpiarBorradoresViejos, limpiarCompraAbierta,
   marcarCompraAbierta,
 } from '@/lib/borradores';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, Loader2, Plus, Trash2 } from 'lucide-react';
 import type { MetodoPago, Proveedor, TipoComprobante } from '@/types';
 
 export interface LineaCandidata {
@@ -333,33 +333,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     setLineas(prev => ({ ...prev, [id]: { ...prev[id]!, ...cambios } }));
   }
 
-  async function handleGuardar() {
-    if (!profile) return;
-    if (requiereCuadre) {
-      if (diferencia === null) return addToast('Escribe cuánto pagaste en total para comprobar que los precios cuadran.', 'error');
-      if (!cuadra) return addToast(`Los productos suman ${formatMonto(total)} pero dices que pagaste ${formatMonto(pagado)}: algún precio cambió. Corrige el que cambió.`, 'error');
-    }
-    setGuardando(true);
-
-    // Productos que no estaban en la lista: se crean en el catálogo si hace falta.
-    const lineasExtra = [];
-    for (const [i, e] of extras.entries()) {
-      if (!e.nombre.trim()) continue;
-      const unidadExtra = normalizarUnidad(e.unidad) || 'unidad';
-      const { producto, error } = await obtenerOCrear(e.nombre, unidadExtra);
-      if (error || !producto) {
-        setGuardando(false);
-        return addToast(`Error con "${e.nombre}": ${error ?? 'no se pudo guardar'}`, 'error');
-      }
-      lineasExtra.push({
-        pedido_item_id: null, producto_id: producto.id, cantidad: parseFloat(e.cantidad) || 0, unidad: unidadExtra, nombre: e.nombre,
-        precio_total: soloTotal ? (repartido.get(`E:${i}`) ?? NaN) : parseFloat(e.precio),
-        precio_repartido: soloTotal && !esRecojo,
-      });
-    }
-
+  /**
+   * Arma la compra con lo que hay en pantalla. `lineasExtra` son los productos que no estaban en la lista,
+   * ya con su producto del catálogo (al guardar) o con un id provisional (para revisar qué falta antes de guardar).
+   */
+  function construirCompra(lineasExtra: NuevaCompra['lineas']): NuevaCompra {
     const incluidas = candidatas.filter(c => lineas[c.pedido_item_id]?.incluir);
-    const compra: NuevaCompra = {
+    return {
       sede_id: sedeId,
       proveedor_id: proveedor.id,
       pedido_id: incluidas[0]?.pedido_id ?? null,
@@ -396,7 +376,54 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       evidenciaPendiente: faltanFotos.length > 0,
       topeSinComprobante: topeSinBoleta,
     };
+  }
 
+  /** Línea de un producto agregado (no estaba en la lista). */
+  function lineaExtra(e: LineaExtra, i: number, productoId: string) {
+    return {
+      pedido_item_id: null, producto_id: productoId, cantidad: parseFloat(e.cantidad) || 0, unidad: normalizarUnidad(e.unidad) || 'unidad', nombre: e.nombre,
+      precio_total: soloTotal ? (repartido.get(`E:${i}`) ?? NaN) : parseFloat(e.precio),
+      precio_repartido: soloTotal && !esRecojo,
+    };
+  }
+
+  // Qué impide guardar ahora mismo (las mismas reglas que se revisan al guardar), para decirlo antes de pulsar.
+  const bloqueo: string | null = (() => {
+    if (!hayLineas) return 'Marca al menos un producto.';
+    if (soloTotal && totalTexto.trim() === '') return 'Escribe el total de la compra.';
+    if (requiereCuadre && diferencia === null) return 'Escribe cuánto pagaste en total para comprobar los precios.';
+    if (requiereCuadre && !cuadra) return 'Los precios no cuadran con lo que pagaste: corrige el que cambió.';
+    if (!credito && !esRecojo && entregas.length === 0) return `No tienes dinero entregado por ${sedeNombre}.`;
+    return validarCompra(construirCompra(extras.map((e, i) => ({ e, i })).filter(x => x.e.nombre.trim()).map(({ e, i }) => lineaExtra(e, i, 'nuevo'))));
+  })();
+
+  // Estado de cada paso, para marcarlo con ✓ cuando está completo.
+  const productosListos = hayLineas && (soloTotal ? totalTexto.trim() !== '' : lineasIncluidas.every(c => lineas[c.pedido_item_id]!.precio !== '') && extrasConNombre.every(e => e.precio !== ''))
+    && (!requiereCuadre || cuadra);
+  const pagoListo = credito || esRecojo || (!!entregaId && !!metodo);
+  const comprobanteListo = esRecojo || (faltanFotos.length === 0 && (!sinBoleta || observacion.trim() !== ''));
+
+  async function handleGuardar() {
+    if (!profile) return;
+    if (requiereCuadre) {
+      if (diferencia === null) return addToast('Escribe cuánto pagaste en total para comprobar que los precios cuadran.', 'error');
+      if (!cuadra) return addToast(`Los productos suman ${formatMonto(total)} pero dices que pagaste ${formatMonto(pagado)}: algún precio cambió. Corrige el que cambió.`, 'error');
+    }
+    setGuardando(true);
+
+    // Productos que no estaban en la lista: se crean en el catálogo si hace falta.
+    const lineasExtra = [];
+    for (const [i, e] of extras.entries()) {
+      if (!e.nombre.trim()) continue;
+      const { producto, error } = await obtenerOCrear(e.nombre, normalizarUnidad(e.unidad) || 'unidad');
+      if (error || !producto) {
+        setGuardando(false);
+        return addToast(`Error con "${e.nombre}": ${error ?? 'no se pudo guardar'}`, 'error');
+      }
+      lineasExtra.push(lineaExtra(e, i, producto.id));
+    }
+
+    const compra = construirCompra(lineasExtra);
     const invalida = validarCompra(compra);
     if (invalida) {
       setGuardando(false);
@@ -411,83 +438,128 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     cerrarYDescartar();
   }
 
+  const unaEntrega = entregas.length === 1 ? entregas[0]! : null;
+
   return (
     <>
-    <Modal open={open} onClose={pedirCerrar} title={`Compra a ${proveedor.nombre} — ${sedeNombre}`}>
-      <div className="space-y-5">
-        {/* Productos y precios */}
-        <section>
-          <p className="mb-2 text-sm font-bold text-yayis-dark">¿Qué compraste y cuánto pagaste por cada cosa?</p>
-          <p className="-mt-1 mb-2 text-xs text-muted-foreground">Escribe el <strong>precio de cada unidad</strong> o el <strong>total</strong> de la línea: el otro se calcula solo. Debajo de cada producto verás su precio habitual: en rojo si pagas bastante más, en verde si consigues un mejor precio. Si no pagaste nada por un producto (ya estaba pagado), pulsa <strong>Sin costo</strong>.</p>
-          <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-md bg-yayis-cream px-3 py-2 text-sm">
-            <input type="checkbox" className="mt-0.5" checked={soloTotal} onChange={e => setSoloTotal(e.target.checked)} />
-            <span><strong>Solo me dieron el total de la compra</strong> y no sé el precio de cada producto. Yo escribo el total y el sistema lo reparte.</span>
-          </label>
-          {soloTotal && (
-            <div className="mb-2 rounded-md border border-yayis-green/40 bg-white px-3 py-2">
+    <Modal
+      open={open}
+      onClose={pedirCerrar}
+      title={`Compra a ${proveedor.nombre} — ${sedeNombre}`}
+      pantallaCompletaEnCelular
+      footer={
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm">Total <strong className="text-lg tabular-nums text-yayis-dark">{formatMonto(total)}</strong>{esRecojo && <span className="ml-1 text-xs text-blue-700">· recojo sin pago</span>}</p>
+            <p className={`line-clamp-2 text-xs leading-snug ${bloqueo ? 'text-amber-800' : faltanFotos.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`} title={bloqueo ?? undefined}>
+              {bloqueo ?? (faltanFotos.length > 0 ? `Falta la ${faltanFotos.map(r => NOMBRE_FOTO[r]).join(' y la ')}: puedes subirla después` : '✓ Todo listo para guardar')}
+            </p>
+          </div>
+          <Button variant="ghost" onClick={pedirCerrar} disabled={guardando} className="hidden sm:inline-flex">Cancelar</Button>
+          <Button onClick={handleGuardar} disabled={guardando || (!credito && !esRecojo && entregas.length === 0)} className="h-11 shrink-0 sm:h-10">
+            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
+            {esRecojo ? 'Guardar recojo' : faltanFotos.length > 0 ? 'Guardar sin la foto' : 'Guardar compra'}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* 1. Productos y precios */}
+        <section className="space-y-3">
+          <PasoTitulo numero={1} titulo="¿Qué compraste?" listo={productosListos} />
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1" role="group" aria-label="Cómo te dieron los precios">
+            <button type="button" aria-pressed={!soloTotal} onClick={() => setSoloTotal(false)}
+              className={`rounded-md px-2 py-2 text-sm font-medium transition ${!soloTotal ? 'bg-white text-yayis-dark shadow-sm' : 'text-muted-foreground'}`}>
+              Sé el precio de cada producto
+            </button>
+            <button type="button" aria-pressed={soloTotal} onClick={() => setSoloTotal(true)}
+              className={`rounded-md px-2 py-2 text-sm font-medium transition ${soloTotal ? 'bg-white text-yayis-dark shadow-sm' : 'text-muted-foreground'}`}>
+              Solo me dieron el total
+            </button>
+          </div>
+          {soloTotal ? (
+            <div className="rounded-md border border-yayis-green/40 bg-white px-3 py-2">
               <label className="text-xs font-medium" htmlFor="total-compra">Total de la compra (S/)</label>
-              <Input id="total-compra" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="mt-1 w-40"
+              <Input id="total-compra" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="mt-1 h-11 w-44 text-lg"
                 value={totalTexto} onChange={e => setTotalTexto(e.target.value)} />
-              <p className="mt-1 text-xs text-muted-foreground">
-                El reparto es una estimación (según el precio habitual de cada producto) y queda marcado como «repartido»: no se usa para el seguimiento de precios.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">El sistema lo reparte entre los productos (es una estimación y no cuenta para el seguimiento de precios).</p>
             </div>
+          ) : (
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none font-medium text-yayis-green">¿Cómo lleno los precios?</summary>
+              <p className="mt-1">Escribe el <strong>precio de cada unidad</strong> o el <strong>total</strong> de la línea: el otro se calcula solo. Debajo verás el precio habitual: en rojo si pagas bastante más, en verde si consigues mejor precio. Si no pagaste nada por un producto (ya estaba pagado), pulsa <strong>Sin costo</strong>.</p>
+            </details>
           )}
           <div className="divide-y rounded-md border">
             {candidatas.map(c => {
               const l = lineas[c.pedido_item_id];
               if (!l) return null;
               return (
-                <div key={c.pedido_item_id} className={`flex flex-wrap items-center gap-2 px-3 py-2 text-sm ${l.incluir ? '' : 'opacity-50'}`}>
-                  <label className="flex min-w-[10rem] flex-1 items-center gap-2">
-                    <input type="checkbox" checked={l.incluir} onChange={e => cambiarLinea(c.pedido_item_id, { incluir: e.target.checked })} />
-                    <span className="font-medium">{c.nombre}</span>
-                    <span className="text-xs text-muted-foreground">(pedido: {formatCantidad(c.cantidad)} {c.unidad})</span>
+                <div key={c.pedido_item_id} className={`space-y-2 px-3 py-3 text-sm ${l.incluir ? '' : 'bg-gray-50 opacity-60'}`}>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" className="h-5 w-5 accent-[#098B5F]" checked={l.incluir} onChange={e => cambiarLinea(c.pedido_item_id, { incluir: e.target.checked })} />
+                    <span className="font-semibold text-yayis-dark">{c.nombre}</span>
+                    <span className="text-xs text-muted-foreground">pedido: {formatCantidad(c.cantidad)} {c.unidad}</span>
                   </label>
-                  <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-8 w-20" value={l.cantidad} disabled={!l.incluir}
-                    onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value, baseDePrecio(c.unidad).factor))} aria-label={`Cantidad comprada de ${c.nombre}`} />
-                  <span className="w-12 text-xs text-muted-foreground">{c.unidad}</span>
-                  {soloTotal ? (
-                    l.incluir && <span className="w-full text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`L:${c.pedido_item_id}`) ?? 0)}</strong></span>
-                  ) : (
-                    <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} disabled={!l.incluir} permitirSinCosto={l.sugerido}
-                      onChange={n => cambiarLinea(c.pedido_item_id, { ...n, sugerido: false })} />
+                  {l.incluir && (
+                    <div className="flex flex-wrap items-end gap-2 pl-7">
+                      <label className="text-[11px] text-muted-foreground">
+                        Compraste
+                        <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
+                          <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-9 w-20" value={l.cantidad}
+                            onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value, baseDePrecio(c.unidad).factor))} aria-label={`Cantidad comprada de ${c.nombre}`} />
+                          <span className="text-xs text-muted-foreground">{c.unidad}</span>
+                        </span>
+                      </label>
+                      {soloTotal ? (
+                        <span className="pb-2 text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`L:${c.pedido_item_id}`) ?? 0)}</strong></span>
+                      ) : (
+                        <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} permitirSinCosto={l.sugerido}
+                          onChange={n => cambiarLinea(c.pedido_item_id, { ...n, sugerido: false })} />
+                      )}
+                    </div>
                   )}
                   {l.incluir && parseFloat(l.cantidad) > 0 && parseFloat(l.cantidad) < c.cantidad - 0.005 && (
-                    <div className="flex w-full flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                    <div className="ml-7 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
                       <span>Compraste menos de lo pedido: faltan <strong>{formatCantidad(roundTwo(c.cantidad - parseFloat(l.cantidad)))} {c.unidad}</strong>.</span>
-                      <Select className="h-7 w-52 text-xs" value={l.resto ?? 'pendiente'} onChange={e => cambiarLinea(c.pedido_item_id, { resto: e.target.value as 'pendiente' | 'no_habia' })} aria-label={`Qué pasa con lo que falta de ${c.nombre}`}>
+                      <Select className="h-8 w-52 text-xs" value={l.resto ?? 'pendiente'} onChange={e => cambiarLinea(c.pedido_item_id, { resto: e.target.value as 'pendiente' | 'no_habia' })} aria-label={`Qué pasa con lo que falta de ${c.nombre}`}>
                         <option value="pendiente">Lo compro otro día</option>
                         <option value="no_habia">Ya no se compra (no había)</option>
                       </Select>
                     </div>
                   )}
                   {!soloTotal && l.incluir && l.sugerido && (
-                    <p className="w-full text-xs text-blue-700">
+                    <p className="pl-7 text-xs text-blue-700">
                       {l.origenSugerido === 'referencia'
-                        ? 'Sugerido: el precio de referencia que puso la sede en su lista. Cámbialo si hoy costó distinto.'
-                        : `Sugerido: el precio de tu última compra a este proveedor${ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ? ` (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))!.fecha)})` : ''}. Cámbialo si hoy costó distinto.`}
+                        ? 'Sugerido: el precio de referencia de la sede. Cámbialo si hoy costó distinto.'
+                        : `Sugerido: tu última compra a este proveedor${ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ? ` (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))!.fecha)})` : ''}. Cámbialo si hoy costó distinto.`}
                     </p>
                   )}
-                  {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && <AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} referencia={referenciaPorUnidadLinea(c.precio_referencia, c.unidad)} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} />}
+                  {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && (
+                    <div className="pl-7"><AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} referencia={referenciaPorUnidadLinea(c.precio_referencia, c.unidad)} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} /></div>
+                  )}
                 </div>
               );
             })}
             {extras.map((e, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2 bg-yayis-cream/40 px-3 py-2 text-sm">
-                <Input list="catalogo-compra" placeholder="Producto que no estaba en la lista" className="h-8 min-w-[10rem] flex-1" value={e.nombre}
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value.toLocaleUpperCase('es-PE') } : x))} aria-label="Producto adicional" />
-                <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-8 w-20" value={e.cantidad}
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value, baseDePrecio(x.unidad).factor) } : x))} aria-label="Cantidad" />
-                <Input list="unidades-compra" className="h-8 w-24 text-xs" value={e.unidad} autoComplete="off" placeholder="unidad"
-                  onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(ev.target.value).factor), unidad: ev.target.value } : x))} aria-label="Unidad" />
-                <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="text-red-500"><Trash2 size={14} /></button>
-                {soloTotal ? (
-                  e.nombre.trim() && <span className="w-full text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`E:${i}`) ?? 0)}</strong></span>
-                ) : (
-                  <CamposDePrecio campos={e} unidad={e.unidad} nombre={e.nombre || 'el producto'}
-                    onChange={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...n } : x))} />
-                )}
+              <div key={i} className="space-y-2 bg-yayis-cream/40 px-3 py-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Input list="catalogo-compra" placeholder="Producto que no estaba en la lista" className="h-9 min-w-0 flex-1" value={e.nombre}
+                    onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value.toLocaleUpperCase('es-PE') } : x))} aria-label="Producto adicional" />
+                  <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="p-2 text-red-500"><Trash2 size={16} /></button>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-9 w-20" value={e.cantidad}
+                    onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value, baseDePrecio(x.unidad).factor) } : x))} aria-label="Cantidad" />
+                  <Input list="unidades-compra" className="h-9 w-24 text-xs" value={e.unidad} autoComplete="off" placeholder="unidad"
+                    onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(ev.target.value).factor), unidad: ev.target.value } : x))} aria-label="Unidad" />
+                  {soloTotal ? (
+                    e.nombre.trim() && <span className="pb-2 text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`E:${i}`) ?? 0)}</strong></span>
+                  ) : (
+                    <CamposDePrecio campos={e} unidad={e.unidad} nombre={e.nombre || 'el producto'}
+                      onChange={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...n } : x))} />
+                  )}
+                </div>
                 {!soloTotal && parseFloat(e.precio) !== 0 && productoDeExtra(e.nombre) && (
                   <AvisoPrecio habitual={habituales.get(claveProducto(productoDeExtra(e.nombre)!.id, e.unidad))} cantidad={e.cantidad} precio={e.precio} unidad={e.unidad} />
                 )}
@@ -496,22 +568,18 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           </div>
           <datalist id="catalogo-compra">{productos.map(p => <option key={p.id} value={p.nombre} />)}</datalist>
           <datalist id="unidades-compra">{unidadesSugeridas(productos).map(x => <option key={x} value={x} />)}</datalist>
-          <div className="mt-2 flex items-center justify-between">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '', unit: '', ultimo: null }])}>
-              <Plus size={14} className="mr-1" /> Agregar algo que no estaba en la lista
-            </Button>
-            <span className="text-sm">Total: <strong className="text-lg text-yayis-dark">{formatMonto(total)}</strong></span>
-          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '', unit: '', ultimo: null }])}>
+            <Plus size={14} className="mr-1" /> Agregar algo que no estaba en la lista
+          </Button>
           {requiereCuadre && (
-            <div className={`mt-3 rounded-md border px-3 py-2 ${cuadra ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+            <div className={`rounded-md border px-3 py-2 ${cuadra ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
               <p className="text-xs">
-                Los precios marcados <strong>«Sugerido»</strong> salieron de la referencia que puso la sede o de tu última compra a {proveedor.nombre}. Corrige los que hoy costaron distinto y escribe
-                <strong> cuánto pagaste en total</strong> para comprobar que todo cuadra.
+                Hay precios <strong>«Sugerido»</strong>. Corrige los que hoy costaron distinto y escribe <strong>cuánto pagaste en total</strong> para comprobar que todo cuadra.
               </p>
               <div className="mt-2 flex flex-wrap items-end gap-3">
                 <div>
                   <label className="text-xs font-medium" htmlFor="total-pagado">Total que pagaste (S/)</label>
-                  <Input id="total-pagado" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="mt-1 w-36 bg-white"
+                  <Input id="total-pagado" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="mt-1 h-10 w-36 bg-white"
                     value={pagadoTexto} onChange={e => setPagadoTexto(e.target.value)} />
                 </div>
                 <p className={`pb-2 text-sm font-medium ${cuadra ? 'text-emerald-700' : diferencia === null ? 'text-amber-800' : 'text-red-700'}`}>
@@ -523,7 +591,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 </p>
               </div>
               {diferencia !== null && !cuadra && (
-                <p className="mt-1 text-xs text-muted-foreground">¿No sabes cuál cambió? Marca arriba «Solo me dieron el total de la compra».</p>
+                <p className="mt-1 text-xs text-muted-foreground">¿No sabes cuál cambió? Elige arriba «Solo me dieron el total».</p>
               )}
             </div>
           )}
@@ -539,74 +607,72 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           </section>
         )}
 
-        {/* Pago */}
-        {!esRecojo && <section className="space-y-3 rounded-md border p-3">
+        {/* 2. Pago */}
+        {!esRecojo && <section className="space-y-3">
+          <PasoTitulo numero={2} titulo="¿Cómo pagaste?" listo={pagoListo} />
           {credito ? (
-            <p className="text-sm">
+            <p className="rounded-md bg-blue-50 px-3 py-2 text-sm">
               <strong className="text-blue-700">Compra a crédito</strong> ({proveedor.dias_credito} días): no sale de tu dinero.
-              Vence el <strong className="capitalize">{fechaCorta(sumarDias(hoy, proveedor.dias_credito))}</strong> y la paga Gerencia.
+              Vence el <strong>{fechaCorta(sumarDias(hoy, proveedor.dias_credito))}</strong> y la paga Gerencia.
             </p>
           ) : (
             <>
-              <div>
-                <label className="text-xs font-medium" htmlFor="entrega">¿De qué dinero sale?</label>
-                {entregas.length === 0 ? (
-                  <p className="mt-1 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                    No tienes dinero entregado por {sedeNombre}. Pídele al administrador que registre la entrega antes de guardar esta compra.
-                  </p>
-                ) : (
-                  <Select id="entrega" value={entregaId} onChange={e => setEntregaId(e.target.value)} className="mt-1">
+              {entregas.length === 0 ? (
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                  No tienes dinero entregado por {sedeNombre}. Pídele al administrador que registre la entrega y vuelve a abrir esta compra.
+                </p>
+              ) : unaEntrega ? (
+                <p className="text-sm">Sale del dinero que te dio {sedeNombre} el <strong>{fechaCorta(unaEntrega.fecha)}</strong> ({formatMonto(Number(unaEntrega.monto))}).</p>
+              ) : (
+                <div>
+                  <label className="text-xs font-medium" htmlFor="entrega">¿De qué dinero sale?</label>
+                  <Select id="entrega" value={entregaId} onChange={e => setEntregaId(e.target.value)} className="mt-1 h-10">
                     {entregas.map(e => {
                       const saldo = roundTwo(Number(e.monto) - e.compras.reduce((s, c) => s + Number(c.total), 0));
                       return <option key={e.id} value={e.id}>Entrega del {fechaCorta(e.fecha)} · {formatMonto(Number(e.monto))} · te quedan {formatMonto(saldo)}</option>;
                     })}
                   </Select>
-                )}
-                {entrega && (
-                  <p className={`mt-1 text-xs ${saldoDespues < 0 ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
-                    {saldoDespues < 0
-                      ? `Esta compra supera el dinero que te queda en ${formatMonto(-saldoDespues)}: se registrará como dinero que pusiste tú y la sede te lo devolverá.`
-                      : `Después de esta compra te quedarán ${formatMonto(saldoDespues)}.`}
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-medium">¿Cómo pagaste?</p>
-                <div className="mt-1 flex gap-2">
-                  {(['efectivo', 'cuentas'] as const).map(m => (
-                    <Button key={m} type="button" size="sm" variant={metodo === m ? 'default' : 'outline'} aria-pressed={metodo === m}
-                      onClick={() => setMetodo(m)}>
-                      {m === 'efectivo' ? 'Efectivo' : 'Yape / transferencia'}
-                    </Button>
-                  ))}
                 </div>
-              </div>
+              )}
+              {entrega && (
+                <p className={`-mt-1 text-xs ${saldoDespues < 0 ? 'font-medium text-red-600' : 'text-muted-foreground'}`}>
+                  {saldoDespues < 0
+                    ? `Esta compra supera lo que te queda en ${formatMonto(-saldoDespues)}: queda como dinero que pusiste tú y la sede te lo devuelve.`
+                    : `Te quedan ${formatMonto(saldoEntrega)}; después de esta compra, ${formatMonto(saldoDespues)}.`}
+                </p>
+              )}
+              <Segmentado
+                etiqueta="Forma de pago"
+                opciones={[{ valor: 'efectivo', texto: 'Efectivo' }, { valor: 'cuentas', texto: 'Yape / transferencia' }]}
+                valor={metodo}
+                onCambiar={v => setMetodo(v as MetodoPago)}
+              />
             </>
           )}
         </section>}
 
-        {/* Comprobante y fotos */}
+        {/* 3. Comprobante y fotos */}
         {!esRecojo && <section className="space-y-3">
-          <div>
-            <p className="text-xs font-medium">¿Qué comprobante te dieron?</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {(['boleta', 'factura', 'sin_comprobante'] as const).map(t => (
-                <Button key={t} type="button" size="sm" variant={comprobante === t ? 'default' : 'outline'} aria-pressed={comprobante === t}
-                  disabled={t === 'sin_comprobante' && credito} onClick={() => setComprobante(t)}>
-                  {t === 'boleta' ? 'Boleta' : t === 'factura' ? 'Factura' : 'No me dieron'}
-                </Button>
-              ))}
-            </div>
-            {comprobante === 'sin_comprobante' && (
-              <p className="mt-1 text-xs text-amber-800">
-                {metodo === 'efectivo'
-                  ? `Sin boleta en efectivo: hasta ${formatMonto(topeSinBoleta)} por compra. Escribe abajo, en Observación, dónde y a quién le compraste (obligatorio).`
-                  : `Sin boleta por Yape/transferencia: captura del Yape (una por cada pago) y, en Observación, dónde y a quién le compraste (obligatorio). La foto del producto es opcional hasta ${formatMonto(topeSinBoleta)}; desde ahí es obligatoria.`}
-              </p>
-            )}
-          </div>
+          <PasoTitulo numero={3} titulo="Comprobante y fotos" listo={comprobanteListo} />
+          <Segmentado
+            etiqueta="Comprobante"
+            opciones={[
+              { valor: 'boleta', texto: 'Boleta' },
+              { valor: 'factura', texto: 'Factura' },
+              { valor: 'sin_comprobante', texto: 'No me dieron', deshabilitado: credito },
+            ]}
+            valor={comprobante}
+            onCambiar={v => setComprobante(v as TipoComprobante)}
+          />
+          {comprobante === 'sin_comprobante' && (
+            <p className="text-xs text-amber-800">
+              {metodo === 'efectivo'
+                ? `Sin boleta en efectivo: hasta ${formatMonto(topeSinBoleta)} por compra, y escribe abajo dónde y a quién le compraste.`
+                : `Sin boleta por Yape: la captura del pago y, abajo, dónde y a quién le compraste. La foto del producto es opcional hasta ${formatMonto(topeSinBoleta)}.`}
+            </p>
+          )}
           {comprobante !== 'sin_comprobante' && (
-            <Input placeholder="N° de boleta o factura (opcional)" value={numero} onChange={e => setNumero(e.target.value)} aria-label="Número de comprobante" />
+            <Input placeholder="N° de boleta o factura (opcional)" className="h-10" value={numero} onChange={e => setNumero(e.target.value)} aria-label="Número de comprobante" />
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {comprobante !== 'sin_comprobante' && (
@@ -625,35 +691,20 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
           </div>
           {!credito && metodo === 'cuentas' && pagosExtra.length < RANURAS_PAGO_EXTRA.length && (
             <Button type="button" variant="ghost" size="sm" className="-mt-1" onClick={() => setPagosExtra(prev => [...prev, null])}>
-              <Plus size={14} className="mr-1" /> Agregar otra captura de Yape (pagaste a varios puestos)
+              <Plus size={14} className="mr-1" /> Otra captura de Yape (pagaste a varios puestos)
             </Button>
           )}
           <Input
-            placeholder={sinBoleta ? 'Observación (obligatoria): dónde y a quién compraste' : 'Observación (opcional)'}
-            className={sinBoleta && !observacion.trim() ? 'border-amber-400' : ''}
+            placeholder={sinBoleta ? 'Dónde y a quién compraste (obligatorio)' : 'Observación (opcional)'}
+            className={`h-10 ${sinBoleta && !observacion.trim() ? 'border-amber-400' : ''}`}
             value={observacion} onChange={e => setObservacion(e.target.value)} aria-label="Observación"
           />
+          {faltanFotos.length > 0 && (
+            <p className="text-xs text-amber-800">
+              ¿No alcanzaste a tomar la foto? Guarda igual: queda con <strong>evidencia pendiente</strong> y la subes después en «Mi dinero y rendición» (no podrás rendir hasta completarla).
+            </p>
+          )}
         </section>}
-
-        {faltanFotos.length > 0 && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Falta: {faltanFotos.map(r => NOMBRE_FOTO[r]).join(' y ')}. Si no alcanzaste a tomarla, guarda la compra igual: queda con <strong>evidencia pendiente</strong> y la subes después desde «Mi dinero y rendición». No podrás rendir cuentas hasta completarla.
-          </p>
-        )}
-
-        {!credito && !esRecojo && entregas.length === 0 && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-            No puedes guardar todavía: no tienes dinero entregado por {sedeNombre}. Pídele al administrador que registre la entrega y vuelve a abrir esta compra.
-          </p>
-        )}
-
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <Button variant="outline" onClick={pedirCerrar} disabled={guardando}>Cancelar</Button>
-          <Button onClick={handleGuardar} disabled={guardando || (!credito && !esRecojo && entregas.length === 0)}>
-            {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
-            {esRecojo ? 'Guardar recojo sin pago' : faltanFotos.length > 0 ? 'Guardar y subir la foto después' : 'Guardar compra'}
-          </Button>
-        </div>
       </div>
     </Modal>
     <ConfirmDialog
@@ -666,5 +717,36 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       onCancel={() => setConfirmarDescartar(false)}
     />
     </>
+  );
+}
+
+/** Título de cada paso del formulario, con ✓ cuando ya está completo. */
+function PasoTitulo({ numero, titulo, listo }: { numero: number; titulo: string; listo: boolean }) {
+  return (
+    <h4 className="flex items-center gap-2 text-sm font-bold text-yayis-dark">
+      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs transition-colors ${listo ? 'bg-yayis-green text-white' : 'bg-gray-200 text-gray-600'}`}>
+        {listo ? <Check size={13} strokeWidth={3} /> : numero}
+      </span>
+      {titulo}
+    </h4>
+  );
+}
+
+/** Botones de opción grandes, del mismo ancho, para elegir con el pulgar. */
+function Segmentado({ etiqueta, opciones, valor, onCambiar }: {
+  etiqueta: string;
+  opciones: { valor: string; texto: string; deshabilitado?: boolean }[];
+  valor: string;
+  onCambiar: (v: string) => void;
+}) {
+  return (
+    <div className="flex gap-2" role="group" aria-label={etiqueta}>
+      {opciones.map(o => (
+        <Button key={o.valor} type="button" variant={valor === o.valor ? 'default' : 'outline'} aria-pressed={valor === o.valor}
+          disabled={o.deshabilitado} onClick={() => onCambiar(o.valor)} className="h-10 flex-1 px-2 text-sm">
+          {o.texto}
+        </Button>
+      ))}
+    </div>
   );
 }
