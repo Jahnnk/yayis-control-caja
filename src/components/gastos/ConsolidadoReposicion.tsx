@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { formatMonto } from '@/lib/utils';
+import { formatMonto, roundTwo } from '@/lib/utils';
 import type { ConsolidadoReposicion as Datos, SinRendir, TotalOrigen } from '@/hooks/useConsolidadoReposicion';
 import { Landmark, ShoppingBasket, UserRound } from 'lucide-react';
 
@@ -31,12 +31,26 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
           <Columna titulo="Compras (a proveedores)" icono={<ShoppingBasket size={14} />} t={datos.compras} />
           <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={datos.total} destacado />
         </div>
-        {sinRendir && sinRendir.cantidad > 0 && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Además hay <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) hechas por Compras con la <strong>rendición todavía sin cerrar</strong>.
-            No suman al total de arriba: entran cuando Compras rinda cuentas y el administrador cierre la rendición. El detalle está en «Compras que Compras registró», en Dinero de la semana.
-          </p>
-        )}
+        {sinRendir && sinRendir.cantidad > 0 && (() => {
+          const rendidas = sinRendir.compras.filter(c => c.estado === 'rendida').reduce((t, c) => roundTwo(t + Number(c.total)), 0);
+          const porRendir = roundTwo(sinRendir.total - rendidas);
+          const totalConCompras = roundTwo(datos.total.total + sinRendir.total);
+          return (
+            <div className="space-y-2 rounded-md border-2 border-amber-300 bg-amber-50 p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-bold text-amber-900">Total con lo de Compras</p>
+                <p className="text-2xl font-bold tabular-nums text-amber-900">{formatMonto(totalConCompras)}</p>
+              </div>
+              <p className="text-xs text-amber-900">
+                {formatMonto(datos.total.total)} que ya se puede reponer + <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) de Compras con la rendición sin cerrar
+                {rendidas > 0 && porRendir > 0 ? ` (${formatMonto(rendidas)} ya rendidas, falta que ${responsable} las cierre; ${formatMonto(porRendir)} Compras aún no rinde)` : rendidas > 0 ? ` (ya rendidas: falta que ${responsable} las cierre)` : ' (Compras aún no rinde)'}.
+              </p>
+              <p className="text-xs text-amber-800">
+                Para reponer todo de una vez, primero Compras rinde y {responsable} cierra las rendiciones en Dinero de la semana: así esas compras pasan a «por reponer» y la reposición las marca como repuestas. Si se repone antes, esa parte queda sin marcar.
+              </p>
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );
