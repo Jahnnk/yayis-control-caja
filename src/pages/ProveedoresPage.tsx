@@ -14,7 +14,7 @@ import { getTodayLima } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
 import { precioMostrado } from '@/lib/precio-linea';
 import { claveProducto, formatPorcentaje, ofertasPorProveedor, precioHabitual, DIAS_MEJOR_PROVEEDOR } from '@/lib/precios';
-import { Check, ChevronDown, Loader2, Package, Pencil, Plus, Store, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Package, Pencil, Plus, Search, Store, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import type { CondicionPago, Proveedor } from '@/types';
 
 interface FormProveedor {
@@ -50,6 +50,9 @@ export function ProveedoresPage() {
 
   const [form, setForm] = useState<FormProveedor>(VACIO);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  // «Nuevo proveedor» plegado: lo común es buscar uno (su teléfono o dónde queda), no registrar.
+  const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
   const [edicion, setEdicion] = useState<FormProveedor>(VACIO);
   const [guardando, setGuardando] = useState(false);
   const [filtroProducto, setFiltroProducto] = useState('');
@@ -73,6 +76,7 @@ export function ProveedoresPage() {
     if (error) return addToast(`Error: ${error}`, 'error');
     addToast('Proveedor registrado', 'success');
     setForm(VACIO);
+    setNuevoAbierto(false);
   }
 
   async function handleGuardarEdicion(id: string) {
@@ -98,15 +102,26 @@ export function ProveedoresPage() {
   const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(filtroProducto.trim().toLowerCase()));
   const nombreProveedor = (id: string | null) => proveedores.find(p => p.id === id)?.nombre;
 
+  const texto = busqueda.trim().toLowerCase();
+  const visibles = texto
+    ? proveedores.filter(p => [p.nombre, p.telefono, p.direccion].some(x => (x ?? '').toLowerCase().includes(texto)))
+    : proveedores;
+
   if (loading && proveedores.length === 0) return <Loading text="Cargando proveedores..." />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-2xl font-bold text-yayis-dark">Proveedores</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-yayis-dark">Proveedores</h1>
+        <Button onClick={() => setNuevoAbierto(v => !v)} variant={nuevoAbierto ? 'outline' : 'default'}>
+          {nuevoAbierto ? <X size={15} className="mr-1" /> : <Plus size={15} className="mr-1" />} {nuevoAbierto ? 'Cerrar' : 'Nuevo proveedor'}
+        </Button>
+      </div>
 
-      <Card>
+      {nuevoAbierto && (
+      <Card id="nuevo-proveedor">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><Plus size={18} /> Registrar proveedor</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base"><Plus size={18} /> Nuevo proveedor</CardTitle>
           {!esGerencia && <p className="text-xs text-muted-foreground">Se registra al contado. Si trabaja a crédito, avisa a Gerencia para que lo configure.</p>}
         </CardHeader>
         <CardContent>
@@ -132,10 +147,17 @@ export function ProveedoresPage() {
           </Button>
         </CardContent>
       </Card>
+      )}
+
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input placeholder="Buscar proveedor, teléfono o lugar…" value={busqueda} onChange={e => setBusqueda(e.target.value)} className="pl-9" aria-label="Buscar proveedor" />
+      </div>
+
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><Store size={18} /> Lista de proveedores ({proveedores.length})</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base"><Store size={18} /> Lista de proveedores ({visibles.length === proveedores.length ? proveedores.length : `${visibles.length} de ${proveedores.length}`})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {proveedores.length === 0 ? (
@@ -147,13 +169,13 @@ export function ProveedoresPage() {
                   <tr className="border-b bg-gray-50 text-left">
                     <th className="px-4 py-2 font-medium">Proveedor</th>
                     <th className="px-4 py-2 font-medium">Teléfono</th>
-                    <th className="px-4 py-2 font-medium">Dónde queda</th>
-                    <th className="px-4 py-2 font-medium">Pago</th>
+                    <th className="hidden px-4 py-2 font-medium sm:table-cell">Dónde queda</th>
+                    <th className="hidden px-4 py-2 font-medium sm:table-cell">Pago</th>
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {proveedores.map(p => editandoId === p.id ? (
+                  {visibles.map(p => editandoId === p.id ? (
                     <tr key={p.id} className="border-b bg-yayis-cream/40">
                       <td className="px-4 py-2"><Input className="h-8" value={edicion.nombre} onChange={e => setEdicion({ ...edicion, nombre: e.target.value })} aria-label="Nombre" /></td>
                       <td className="px-4 py-2"><Input className="h-8" value={edicion.telefono} onChange={e => setEdicion({ ...edicion, telefono: e.target.value })} aria-label="Teléfono" /></td>
@@ -178,10 +200,13 @@ export function ProveedoresPage() {
                     </tr>
                   ) : (
                     <tr key={p.id} className={`border-b ${!p.activo ? 'text-muted-foreground' : ''}`}>
-                      <td className={`px-4 py-2 font-medium ${!p.activo ? 'line-through' : ''}`}>{p.nombre}</td>
-                      <td className="px-4 py-2">{p.telefono ? <a href={`tel:${p.telefono}`} className="hover:text-yayis-green">{p.telefono}</a> : '—'}</td>
-                      <td className="px-4 py-2 text-xs">{p.direccion ?? '—'}</td>
                       <td className="px-4 py-2">
+                        <p className={`font-medium ${!p.activo ? 'line-through' : ''}`}>{p.nombre}</p>
+                        <p className="text-xs text-muted-foreground sm:hidden">{[p.direccion, p.condicion_pago === 'credito' ? `crédito ${p.dias_credito} días` : null].filter(Boolean).join(' · ')}</p>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2">{p.telefono ? <a href={`tel:${p.telefono}`} className="text-yayis-green underline-offset-2 hover:underline">{p.telefono}</a> : '—'}</td>
+                      <td className="hidden px-4 py-2 text-xs sm:table-cell">{p.direccion ?? '—'}</td>
+                      <td className="hidden px-4 py-2 sm:table-cell">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${p.condicion_pago === 'credito' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
                           {p.condicion_pago === 'credito' ? `Crédito ${p.dias_credito} días` : 'Contado'}
                         </span>
