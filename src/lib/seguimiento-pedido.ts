@@ -16,7 +16,8 @@ export type Tono = 'normal' | 'alerta' | 'listo' | 'cancelado';
 export type Mirada = 'sede' | 'gerencia' | 'compras';
 
 export interface PasoSeguimiento {
-  clave: 'enviada' | 'comprando' | 'en_camino' | 'recibido';
+  /** Identifica el paso (y su icono): enviada, comprando, en_camino, recibido; en el dinero: entregado, compras, rendido, cerrado, repuesto. */
+  clave: string;
   titulo: string;
   estado: EstadoPaso;
   /** Hora en que se cumplió (o empezó) el paso. */
@@ -32,7 +33,7 @@ export interface Seguimiento {
   tono: Tono;
   /** Avance de 0 a 1 para la barra (incluye la fracción del paso actual). */
   avance: number;
-  /** Paso actual (0 a 3); 4 si todo terminó. */
+  /** Paso actual (desde 0); igual a la cantidad de pasos si todo terminó; -1 si se canceló. */
   indiceActual: number;
 }
 
@@ -50,7 +51,7 @@ export function horaCorta(iso: string | null | undefined, hoy: string): string |
   return dia === hoy ? hora : `${fechaCorta(dia)} · ${hora}`;
 }
 
-const TITULOS: [PasoSeguimiento['clave'], string][] = [
+const TITULOS: [string, string][] = [
   ['enviada', 'Enviada'],
   ['comprando', 'Comprando'],
   ['en_camino', 'En camino'],
@@ -102,7 +103,22 @@ export function seguimientoDePedido(p: PedidoSeguible, opciones: {
     };
   }
 
-  if (p.estado === 'borrador') {
+  if (p.estado === 'borrador' && atrasada) {
+    // Lista que nunca se envió y ya pasó su día: Compras no la vio y no la verá si nadie la envía.
+    indiceActual = 0;
+    tono = 'alerta';
+    detalles[0] = `Era el ${fechaCorta(p.fecha_compra)}`;
+    const Sede = laSede.charAt(0).toUpperCase() + laSede.slice(1);
+    if (total === 0) {
+      mensaje = mirada === 'sede'
+        ? `Esta lista era para el ${fechaCorta(p.fecha_compra)} y quedó vacía: descártala (botón «Descartar lista», abajo).`
+        : `${Sede} dejó vacía su lista del ${fechaCorta(p.fecha_compra)}: no hay nada que comprar.`;
+    } else {
+      mensaje = mirada === 'sede'
+        ? `Esta lista era para el ${fechaCorta(p.fecha_compra)} y nunca se envió: Compras no la vio. Envíala ahora (le llegará como atrasada) o descártala.`
+        : `${Sede} no envió su lista del ${fechaCorta(p.fecha_compra)}: Compras no la vio.`;
+    }
+  } else if (p.estado === 'borrador') {
     indiceActual = 0;
     mensaje = mirada === 'sede'
       ? `Lista en preparación (${total} producto${total === 1 ? '' : 's'}). Compras no la ve hasta que pulses «Enviar a Compras».`

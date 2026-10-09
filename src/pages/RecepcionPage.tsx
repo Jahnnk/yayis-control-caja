@@ -19,6 +19,9 @@ import { Select } from '@/components/ui/select-native';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
+import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
+import { seguimientoDeEntrega } from '@/lib/seguimiento-dinero';
+import { useReposicionEntregas } from '@/hooks/useReposicionEntregas';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
@@ -27,8 +30,10 @@ import { ESTADO_ITEM, diaSemanaDe, diferenciaDeCierre, fechaCorta, formatCantida
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
 
-function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
+function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seguimiento }: {
   entrega: EntregaDetalle;
+  /** Seguimiento del dinero de esta entrega. */
+  seguimiento?: React.ReactNode;
   categoriasSede: { id: string; nombre: string }[];
   onDevolver: (e: EntregaDetalle) => void;
   onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua: number) => void;
@@ -56,6 +61,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar }: {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Rendición de la entrega del <span className="capitalize">{fechaCorta(entrega.fecha)}</span></CardTitle>
         <p className="text-xs text-muted-foreground">Revisa cada compra y sus fotos, elige su categoría de gasto y confirma el vuelto que te devolvieron.</p>
+        {seguimiento && <div className="pt-2">{seguimiento}</div>}
       </CardHeader>
       <CardContent className="space-y-3">
         {entrega.compras.length === 0 && <p className="text-sm text-muted-foreground">No registró compras con este dinero.</p>}
@@ -164,6 +170,10 @@ export function RecepcionPage() {
   const { consolidado, sinRendir } = useConsolidadoReposicion(versionSaldo);
   const { profile } = useAuth();
   const esGerencia = profile?.rol === 'owner';
+  // Seguimiento del dinero de cada entrega: Entregado → Compras → Rendido → Cerrado → Repuesto.
+  const miradaDinero = esGerencia ? 'gerencia' as const : 'sede' as const;
+  const reposicion = useReposicionEntregas(cerradas, true);
+  const seguir = (e: EntregaDetalle) => seguimientoDeEntrega(e, { hoy: getTodayLima(), mirada: miradaDinero, sede: sedeActiva?.nombre, reposicion: reposicion.get(e.id) ?? null });
   // Gerencia puede ver el dinero en manos de Compras de todas las sedes (antes era «Dinero en Compras»).
   const [verTodas, setVerTodas] = useState(false);
   const porEntregar = Math.max(saldoSemanal.queda, 0);
@@ -317,6 +327,7 @@ export function RecepcionPage() {
                       <Button variant="ghost" size="sm" className="ml-auto text-red-600" onClick={() => handleAnular(e)}>Anular</Button>
                     )}
                   </div>
+                  <SeguimientoPedido seguimiento={seguir(e)} />
                   {e.compras.map(c => <CompraResumen key={c.id} compra={c} />)}
                 </div>
               );
@@ -330,6 +341,7 @@ export function RecepcionPage() {
         <RendicionPorCerrar
           key={e.id}
           entrega={e}
+          seguimiento={<SeguimientoPedido seguimiento={seguir(e)} />}
           categoriasSede={categoriasSede}
           onDevolver={handleDevolver}
           onCerrar={(ent, vuelto, cats, saldoContinua) => {
@@ -366,6 +378,7 @@ export function RecepcionPage() {
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
                   </span>
+                  <SeguimientoMini seguimiento={seguir(e)} />
                 </div>
               );
             })}

@@ -10,13 +10,17 @@ import { Select } from '@/components/ui/select-native';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
+import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
+import { seguimientoDeEntrega } from '@/lib/seguimiento-dinero';
+import type { Seguimiento } from '@/lib/seguimiento-pedido';
+import { useReposicionEntregas } from '@/hooks/useReposicionEntregas';
 import { CompletarEvidenciaModal } from '@/components/compras/CompletarEvidenciaModal';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { diferenciaDeCierre, fechaCorta } from '@/lib/compras';
 import { ChevronDown, Clock, Wallet } from 'lucide-react';
 
-function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEliminarCompra, onCompletar }: {
+function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEliminarCompra, onCompletar, seguimiento }: {
   entrega: EntregaDetalle;
   /** Compras que se muestran (según el filtro de fechas). Los totales de abajo siguen siendo los de toda la entrega. */
   comprasVisibles: CompraDetalle[];
@@ -24,6 +28,8 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
   onRendir: (entrega: EntregaDetalle, vuelto: number) => void;
   onEliminarCompra: (entrega: EntregaDetalle, compraId: string) => void;
   onCompletar: (compra: CompraDetalle) => void;
+  /** Seguimiento del dinero: Entregado → Compras → Rendido → Cerrado (→ Repuesto para Gerencia). */
+  seguimiento: Seguimiento;
 }) {
   const gastado = gastadoDe(entrega);
   const saldo = roundTwo(Number(entrega.monto) - gastado);
@@ -40,6 +46,7 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
           <span className="text-sm">Recibiste <strong>{formatMonto(Number(entrega.monto))}</strong> <span className="text-xs text-muted-foreground">({entrega.metodo_pago === 'efectivo' ? 'efectivo' : 'cuentas'})</span></span>
         </div>
         {entrega.notas && <p className="text-xs text-muted-foreground">Nota: {entrega.notas}</p>}
+        <div className="pt-2"><SeguimientoPedido seguimiento={seguimiento} /></div>
       </CardHeader>
       <CardContent className="space-y-3">
         {entrega.compras.length === 0 ? (
@@ -96,6 +103,11 @@ export function RendicionPage() {
   const [sedeFiltro, setSedeFiltro] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
+  // Seguimiento del dinero de cada entrega. Compras termina en «Cerrado»; Gerencia ve también «Repuesto».
+  const reposicion = useReposicionEntregas(cerradas, !esCompras);
+  const seguir = (e: EntregaDetalle) => seguimientoDeEntrega(e, {
+    hoy: getTodayLima(), mirada: esCompras ? 'compras' : 'gerencia', sede: e.sedes?.nombre, reposicion: reposicion.get(e.id) ?? null,
+  });
 
   function pedirRendir(entrega: EntregaDetalle, vuelto: number) {
     if (!(vuelto >= 0)) return addToast('Escribe el vuelto (0 si no sobró nada)', 'error');
@@ -224,10 +236,10 @@ export function RendicionPage() {
             )}
           </div>
           {g.ab.map(({ entrega: e, compras }) => (
-            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} />
+            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={esCompras} onRendir={pedirRendir} onEliminarCompra={(ent, compraId) => setPorEliminar({ entrega: ent, compraId })} onCompletar={setCompletando} seguimiento={seguir(e)} />
           ))}
           {g.re.map(({ entrega: e, compras }) => (
-            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} />
+            <TarjetaEntrega key={e.id} entrega={e} comprasVisibles={compras} puedeRendir={false} onRendir={pedirRendir} onEliminarCompra={() => {}} onCompletar={setCompletando} seguimiento={seguir(e)} />
           ))}
         </section>
       ))}
@@ -249,6 +261,7 @@ export function RendicionPage() {
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Sobraron ${formatMonto(-diferencia)}`}
                   </span>
+                  {!esCompras && <SeguimientoMini seguimiento={seguir(e)} />}
                 </div>
               );
             })}
