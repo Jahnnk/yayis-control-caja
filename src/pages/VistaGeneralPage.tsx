@@ -16,24 +16,12 @@ import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
 import { ArrowRight, BellRing, Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
+import { Desplegable } from '@/components/ui/desplegable';
 import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import type { PedidoVista } from '@/hooks/useVistaGeneral';
 
 /** Sección plegada: el resumen siempre a la vista, el detalle al abrirla. */
-function Desplegable({ icono, titulo, resumen, children }: { icono: ReactNode; titulo: string; resumen: ReactNode; children: ReactNode }) {
-  return (
-    <details className="group rounded-lg border bg-white shadow-sm">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 p-4">
-        <span className="flex items-center gap-2 text-sm font-bold text-yayis-dark">{icono} {titulo}</span>
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{resumen}</span>
-        <ChevronDown size={16} className="ml-auto transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="border-t p-4">{children}</div>
-    </details>
-  );
-}
-
 function Cifra({ titulo, valor, detalle, alerta }: { titulo: string; valor: string; detalle: ReactNode; alerta?: boolean }) {
   return (
     <Card className={alerta ? 'border-amber-300 bg-amber-50/50' : ''}>
