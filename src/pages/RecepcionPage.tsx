@@ -342,6 +342,10 @@ export function RecepcionPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base"><Wallet size={18} /> Dinero en manos de Compras</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Todavía no hay nada que cerrar aquí: primero Compras pulsa <strong>«Rendir cuentas»</strong> en su pantalla «Mi dinero y rendición».
+              Cuando lo haga, la entrega aparece arriba para que revises y la cierres.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {abiertas.length > 1 && (
