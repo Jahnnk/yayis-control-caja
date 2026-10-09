@@ -40,15 +40,15 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
   onDevolver: (e: EntregaDetalle) => void;
   onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua: number) => void;
 }) {
-  const porDefecto = categoriasSede.find(c => c.nombre.trim().toLowerCase() === 'insumos')?.id ?? categoriasSede[0]?.id ?? '';
   const [categorias, setCategorias] = useState<Record<string, string>>({});
   const [vueltoRecibido, setVueltoRecibido] = useState(String(Number(entrega.vuelto ?? 0)));
   // Lo que Fabio no devolvió puede seguir con él para la semana siguiente (no es un faltante).
   const [sigueConFabio, setSigueConFabio] = useState(false);
 
+  // Sin categoría por defecto: el administrador la elige en cada compra (o todas de una vez). Antes salía «Insumos» y se cerraba sin mirar.
   useEffect(() => {
-    setCategorias(Object.fromEntries(entrega.compras.map(c => [c.id, c.categoria_id ?? porDefecto])));
-  }, [entrega.compras, porDefecto]);
+    setCategorias(Object.fromEntries(entrega.compras.map(c => [c.id, c.categoria_id ?? ''])));
+  }, [entrega.compras]);
 
   const gastado = gastadoDe(entrega);
   const fotosPendientes = entrega.compras.filter(c => c.evidencia_pendiente).length;
@@ -67,14 +67,24 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
       </CardHeader>
       <CardContent className="space-y-3">
         {entrega.compras.length === 0 && <p className="text-sm text-muted-foreground">No registró compras con este dinero.</p>}
+        {entrega.compras.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md bg-yayis-cream/60 px-3 py-2 text-xs">
+            <span>Categoría de cada compra: elígela abajo o pon todas en</span>
+            <Select className="h-8 w-44 bg-white text-xs" value="" onChange={e => e.target.value && setCategorias(Object.fromEntries(entrega.compras.map(c => [c.id, e.target.value])))} aria-label="Poner todas las compras en una categoría">
+              <option value="">Elegir…</option>
+              {categoriasSede.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+            </Select>
+          </div>
+        )}
         {entrega.compras.map(c => (
           <CompraResumen key={c.id} compra={c}>
             <Select
-              className="h-7 w-40 text-xs"
+              className={`h-8 w-44 text-xs ${categorias[c.id] ? '' : 'border-amber-400 bg-amber-50'}`}
               value={categorias[c.id] ?? ''}
               onChange={e => setCategorias(prev => ({ ...prev, [c.id]: e.target.value }))}
               aria-label={`Categoría de gasto de la compra a ${c.proveedores?.nombre}`}
             >
+              <option value="">Elegir categoría…</option>
               {categoriasSede.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
             </Select>
           </CompraResumen>
@@ -132,7 +142,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
 
 export function RecepcionPage() {
   const { sedeActiva, responsable } = useSedeActiva();
-  const { entregas, cerradas, loading, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
+  const { entregas, cerradas, loading, fetchEntregas, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
   const { pedidos } = usePedidos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
@@ -210,6 +220,19 @@ export function RecepcionPage() {
     const { error } = await devolverACompras(e.id);
     if (error) addToast(`Error: ${error}`, 'error');
     else addToast('Devuelta a Compras para que corrija', 'success');
+  }
+
+  /** Gerencia corrige la categoría de una compra ya cerrada: cambia la compra y el gasto que nació de ella. */
+  async function cambiarCategoriaCerrada(compra: CompraDetalle, categoriaId: string) {
+    if (!categoriaId || categoriaId === compra.categoria_id) return;
+    if (compra.gasto_id) {
+      const { error } = await supabase.from('gastos').update({ categoria_id: categoriaId }).eq('id', compra.gasto_id);
+      if (error) return addToast(`No se pudo cambiar el gasto: ${error.message}`, 'error');
+    }
+    const { error } = await supabase.from('compras').update({ categoria_id: categoriaId }).eq('id', compra.id);
+    if (error) return addToast(`No se pudo cambiar la compra: ${error.message}`, 'error');
+    addToast(`Compra a ${compra.proveedores?.nombre ?? 'proveedor'}: ${categoriasSede.find(c => c.id === categoriaId)?.nombre ?? 'categoría'} ✓`, 'success');
+    fetchEntregas();
   }
 
   async function confirmarCierre() {
@@ -411,13 +434,40 @@ export function RecepcionPage() {
             {cerradas.map(e => {
               const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
               return (
-                <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
+                <div key={e.id} className="space-y-2 px-4 py-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <span>{fechaCorta(e.fecha)}</span>
                   <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Compras ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
                   </span>
                   <SeguimientoMini seguimiento={seguir(e)} />
+                </div>
+                {e.compras.length > 0 && (
+                  <details className="group/c">
+                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-yayis-green">
+                      {esGerencia ? 'Ver y corregir la categoría de cada compra' : 'Ver la categoría de cada compra'}
+                      <ChevronDown size={12} className="transition-transform group-open/c:rotate-180" />
+                    </summary>
+                    <div className="mt-2 divide-y rounded-md border">
+                      {e.compras.map(c => (
+                        <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs">
+                          <span className="font-medium text-yayis-dark">{c.proveedores?.nombre ?? 'Proveedor'}</span>
+                          <span className="font-semibold tabular-nums">{formatMonto(Number(c.total))}</span>
+                          <span className="min-w-0 flex-1 text-muted-foreground">{c.compra_items.map(i => i.productos?.nombre).filter(Boolean).join(', ')}</span>
+                          {esGerencia ? (
+                            <Select className="h-8 w-44 text-xs" value={c.categoria_id ?? ''} onChange={ev => cambiarCategoriaCerrada(c, ev.target.value)} aria-label={`Categoría de la compra a ${c.proveedores?.nombre}`}>
+                              {!c.categoria_id && <option value="">Sin categoría</option>}
+                              {categoriasSede.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+                            </Select>
+                          ) : (
+                            <span className="rounded bg-gray-100 px-2 py-0.5">{categoriasSede.find(cat => cat.id === c.categoria_id)?.nombre ?? 'Sin categoría'}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
                 </div>
               );
             })}
