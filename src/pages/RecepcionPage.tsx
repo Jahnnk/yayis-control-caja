@@ -19,6 +19,8 @@ import { Select } from '@/components/ui/select-native';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loading } from '@/components/ui/loading';
 import { CompraResumen } from '@/components/compras/CompraResumen';
+import { Desplegable } from '@/components/ui/desplegable';
+import { Dato } from '@/components/ui/dato';
 import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDeEntrega } from '@/lib/seguimiento-dinero';
 import { useReposicionEntregas } from '@/hooks/useReposicionEntregas';
@@ -147,6 +149,8 @@ export function RecepcionPage() {
   const [metodo, setMetodo] = useState<MetodoPago>('cuentas');
   const [nota, setNota] = useState('');
   const [guardando, setGuardando] = useState(false);
+  // «A quién, fecha, forma y nota» de la entrega: plegado; por defecto Compras, hoy y Yape/Plin.
+  const [opcionesEntrega, setOpcionesEntrega] = useState(false);
 
   useEffect(() => {
     fetchUsuariosCompras().then(lista => {
@@ -231,7 +235,7 @@ export function RecepcionPage() {
   if (loading && entregas.length === 0) return <Loading text="Cargando..." />;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-yayis-dark">Dinero de la semana{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</h1>
         {esGerencia && (
@@ -242,57 +246,93 @@ export function RecepcionPage() {
         )}
       </div>
 
-      <RecorridoDinero saldo={saldoSemanal} />
-      <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />
-      <ComprasRegistradas sinRendir={sinRendir} />
+      {/* Cómo va el dinero: tres cifras */}
+      <section aria-label="Cómo va el dinero" className="grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
+        <Dato etiqueta="Te queda del monto semanal" valor={formatMonto(saldoSemanal.queda)} nota={saldoSemanal.montoSemanal > 0 ? `de ${formatMonto(saldoSemanal.montoSemanal)}` : 'Sin monto semanal configurado'} alerta={saldoSemanal.queda < 0} />
+        <Dato etiqueta="Compras tiene sin gastar" valor={formatMonto(enManosDeCompras)} nota={abiertas.length === 1 ? '1 entrega abierta' : `${abiertas.length} entregas abiertas`} alerta={enManosDeCompras < 0} />
+        <Dato etiqueta="Gerencia te debe reponer" valor={formatMonto(consolidado.total.total)} nota={sinRendir.cantidad > 0 ? `+ ${formatMonto(sinRendir.total)} de Compras sin cerrar` : `${consolidado.total.cantidad} gasto(s) pendiente(s)`} />
+      </section>
 
-      {/* 1. Entregar dinero */}
+      {/* Por hacer: rendiciones que Compras ya rindió */}
+      {rendidas.map(e => (
+        <RendicionPorCerrar
+          key={e.id}
+          entrega={e}
+          seguimiento={<SeguimientoPedido seguimiento={seguir(e)} />}
+          categoriasSede={categoriasSede}
+          onDevolver={handleDevolver}
+          onCerrar={(ent, vuelto, cats, saldoContinua) => {
+            if (!(vuelto >= 0)) return addToast('Escribe el vuelto que recibiste (0 si no hubo)', 'error');
+            if (ent.compras.some(c => !cats[c.id])) return addToast('Elige la categoría de cada compra', 'error');
+            setPorCerrar({ entrega: ent, vuelto, categorias: cats, saldoContinua });
+          }}
+        />
+      ))}
+
+      {/* La mercadería se recibe en «Pedidos y recepción» */}
+      {porRecibir.length > 0 && (
+        <Link to="/pedidos" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+          <PackageCheck size={16} />
+          <span>Tienes <strong>{porRecibir.length}</strong> lista(s) de mercadería por recibir: se revisa producto por producto en <strong>Pedidos y recepción</strong>.</span>
+          <span className="ml-auto text-xs font-medium underline">Ir a recibir →</span>
+        </Link>
+      )}
+
+      {/* Entregar dinero: monto y listo; a quién, fecha, forma y nota, plegados */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base"><HandCoins size={18} /> Entregar dinero a Compras</CardTitle>
           <p className="text-xs text-muted-foreground">Sale de la caja de {encargado}. Compras lo rendirá con boletas y vuelto.</p>
-          {saldoSemanal.montoSemanal > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-yayis-cream px-3 py-2 text-sm">
-              <span>Te queda del monto semanal: <strong className={saldoSemanal.queda < 0 ? 'text-red-600' : 'text-yayis-dark'}>{formatMonto(saldoSemanal.queda)}</strong></span>
-              <span className="text-xs text-muted-foreground">Compras tiene sin gastar: {formatMonto(enManosDeCompras)}</span>
-              {porEntregar > 0 && (
-                <Button type="button" size="sm" variant="outline" onClick={() => setMonto(String(porEntregar))}>Entregar todo lo que queda ({formatMonto(porEntregar)})</Button>
-              )}
-            </div>
-          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           {receptores.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay un usuario con rol Compras. Gerencia lo crea en Usuarios.</p>
           ) : (
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <label className="text-xs font-medium" htmlFor="receptor">A quién</label>
-                <Select id="receptor" value={receptorId} onChange={e => setReceptorId(e.target.value)} className="mt-1 w-40">
-                  {receptores.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                </Select>
+            <>
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <label className="text-xs font-medium" htmlFor="monto-entrega">Monto (S/)</label>
+                  <Input id="monto-entrega" type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 h-11 w-36 text-lg" value={monto}
+                    onChange={e => setMonto(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEntregar()} />
+                </div>
+                {porEntregar > 0 && (
+                  <Button type="button" variant="outline" className="h-11" onClick={() => setMonto(String(porEntregar))}>Todo lo que queda ({formatMonto(porEntregar)})</Button>
+                )}
+                <Button onClick={handleEntregar} disabled={guardando} className="h-11">
+                  {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
+                  Registrar entrega
+                </Button>
               </div>
-              <div>
-                <label className="text-xs font-medium" htmlFor="monto-entrega">Monto (S/)</label>
-                <Input id="monto-entrega" type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-32" value={monto} onChange={e => setMonto(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium" htmlFor="fecha-entrega">Fecha de la entrega</label>
-                <Input id="fecha-entrega" type="date" className="mt-1 w-40" value={fechaEntrega} max={hoy} onChange={e => setFechaEntrega(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium" htmlFor="metodo-entrega">Sale de</label>
-                <Select id="metodo-entrega" value={metodo} onChange={e => setMetodo(e.target.value as MetodoPago)} className="mt-1 w-36">
-                  <option value="cuentas">Cuentas (Yape / Plin)</option>
-                  <option value="efectivo">Efectivo</option>
-                </Select>
-              </div>
-              <Input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} className="w-48" aria-label="Nota" />
-              <Button onClick={handleEntregar} disabled={guardando}>
-                {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
-                Registrar entrega
-              </Button>
-            </div>
+              <button type="button" onClick={() => setOpcionesEntrega(v => !v)} aria-expanded={opcionesEntrega}
+                className="inline-flex flex-wrap items-center gap-1 text-left text-xs text-muted-foreground">
+                <span>A <strong className="text-yayis-dark">{receptores.find(r => r.id === receptorId)?.nombre ?? 'Compras'}</strong> · {fechaEntrega === hoy ? 'hoy' : fechaCorta(fechaEntrega)} · {metodo === 'efectivo' ? 'en efectivo' : 'por Yape/Plin'}{nota.trim() ? ` · "${nota.trim()}"` : ''}</span>
+                <span className="inline-flex items-center gap-0.5 font-medium text-yayis-green">cambiar <ChevronDown size={12} className={`transition-transform ${opcionesEntrega ? 'rotate-180' : ''}`} /></span>
+              </button>
+              {opcionesEntrega && (
+                <div className="flex flex-wrap items-end gap-3 rounded-md bg-yayis-cream/60 p-3">
+                  {receptores.length > 1 && (
+                    <div>
+                      <label className="text-xs font-medium" htmlFor="receptor">A quién</label>
+                      <Select id="receptor" value={receptorId} onChange={e => setReceptorId(e.target.value)} className="mt-1 w-40 bg-white">
+                        {receptores.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                      </Select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs font-medium" htmlFor="fecha-entrega">Fecha de la entrega</label>
+                    <Input id="fecha-entrega" type="date" className="mt-1 w-40 bg-white" value={fechaEntrega} max={hoy} onChange={e => setFechaEntrega(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium" htmlFor="metodo-entrega">Sale de</label>
+                    <Select id="metodo-entrega" value={metodo} onChange={e => setMetodo(e.target.value as MetodoPago)} className="mt-1 w-40 bg-white">
+                      <option value="cuentas">Cuentas (Yape / Plin)</option>
+                      <option value="efectivo">Efectivo</option>
+                    </Select>
+                  </div>
+                  <Input placeholder="Nota (opcional)" value={nota} onChange={e => setNota(e.target.value)} className="w-48 bg-white" aria-label="Nota" />
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -328,7 +368,14 @@ export function RecepcionPage() {
                     )}
                   </div>
                   <SeguimientoPedido seguimiento={seguir(e)} />
-                  {e.compras.map(c => <CompraResumen key={c.id} compra={c} />)}
+                  {e.compras.length > 0 && (
+                    <details className="group">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-yayis-green">
+                        Ver {e.compras.length === 1 ? 'la compra' : `las ${e.compras.length} compras`} <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="mt-2 space-y-2">{e.compras.map(c => <CompraResumen key={c.id} compra={c} />)}</div>
+                    </details>
+                  )}
                 </div>
               );
             })}
@@ -336,29 +383,17 @@ export function RecepcionPage() {
         </Card>
       )}
 
-      {/* 3. Rendiciones por confirmar */}
-      {rendidas.map(e => (
-        <RendicionPorCerrar
-          key={e.id}
-          entrega={e}
-          seguimiento={<SeguimientoPedido seguimiento={seguir(e)} />}
-          categoriasSede={categoriasSede}
-          onDevolver={handleDevolver}
-          onCerrar={(ent, vuelto, cats, saldoContinua) => {
-            if (!(vuelto >= 0)) return addToast('Escribe el vuelto que recibiste (0 si no hubo)', 'error');
-            if (ent.compras.some(c => !cats[c.id])) return addToast('Elige la categoría de cada compra', 'error');
-            setPorCerrar({ entrega: ent, vuelto, categorias: cats, saldoContinua });
-          }}
-        />
-      ))}
-
-      {/* La mercadería se recibe en «Pedidos y recepción» */}
-      {porRecibir.length > 0 && (
-        <Link to="/pedidos" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
-          <PackageCheck size={16} />
-          <span>Tienes <strong>{porRecibir.length}</strong> lista(s) de mercadería por recibir: se revisa producto por producto en <strong>Pedidos y recepción</strong>.</span>
-          <span className="ml-auto text-xs font-medium underline">Ir a recibir →</span>
-        </Link>
+      {/* Detalle, plegado: el recorrido, lo que se repone y lo que Compras registró */}
+      <Desplegable titulo="Recorrido del dinero de la semana" resumen={<span>Te queda <strong className="text-yayis-dark">{formatMonto(saldoSemanal.queda)}</strong> · entregado a Compras {formatMonto(saldoSemanal.entregado)}</span>}>
+        <div className="[&>*]:border-0 [&>*]:shadow-none [&>*>*]:p-0"><RecorridoDinero saldo={saldoSemanal} /></div>
+      </Desplegable>
+      <Desplegable titulo="Para reposición" resumen={<span>Pendiente <strong className="text-yayis-dark">{formatMonto(consolidado.total.total)}</strong> · tuyo {formatMonto(consolidado.administrador.total)} · Compras {formatMonto(consolidado.compras.total)}</span>}>
+        <div className="[&>*]:border-0 [&>*]:shadow-none [&>*>*]:p-0"><ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} /></div>
+      </Desplegable>
+      {(sinRendir.cantidad > 0 || sinRendir.cerradas.length > 0) && (
+        <Desplegable titulo="Compras que Compras registró" resumen={<span>{sinRendir.cantidad} sin cerrar · {formatMonto(sinRendir.total)}</span>}>
+          <ComprasRegistradas sinRendir={sinRendir} />
+        </Desplegable>
       )}
 
       {/* Historial plegado */}

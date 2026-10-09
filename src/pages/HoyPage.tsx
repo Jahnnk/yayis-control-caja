@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Dato } from '@/components/ui/dato';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { usePedidos } from '@/hooks/usePedidos';
 import { useEntregas, gastadoDe } from '@/hooks/useEntregas';
@@ -78,16 +79,6 @@ function TarjetaTarea({ tarea, onIr }: { tarea: Tarea; onIr: (t: Tarea) => void 
       </span>
       <ChevronRight size={20} className="shrink-0 text-gray-400 sm:hidden" />
     </button>
-  );
-}
-
-function Dato({ etiqueta, valor, nota, alerta }: { etiqueta: string; valor: string; nota?: string; alerta?: boolean }) {
-  return (
-    <div className="rounded-xl border bg-white p-3 shadow-sm">
-      <p className="text-xs text-muted-foreground">{etiqueta}</p>
-      <p className={`mt-0.5 text-lg font-bold tabular-nums ${alerta ? 'text-red-600' : 'text-yayis-dark'}`}>{valor}</p>
-      {nota && <p className="text-[11px] leading-tight text-muted-foreground">{nota}</p>}
-    </div>
   );
 }
 

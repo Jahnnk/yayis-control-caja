@@ -34,7 +34,7 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
         {sinRendir && sinRendir.cantidad > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             Además hay <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) hechas por Compras con la <strong>rendición todavía sin cerrar</strong>.
-            No suman al total de arriba: entran cuando Compras rinda cuentas y el administrador cierre la rendición. Detalle: Registro de Gastos → «Compras».
+            No suman al total de arriba: entran cuando Compras rinda cuentas y el administrador cierre la rendición. El detalle está en «Compras que Compras registró», en Dinero de la semana.
           </p>
         )}
       </CardContent>
