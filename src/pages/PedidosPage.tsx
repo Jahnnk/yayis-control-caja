@@ -149,9 +149,9 @@ export function PedidosPage() {
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <CalendarDays size={15} />
-          {nombresDias.length > 0
+          <span>{nombresDias.length > 0
             ? <>Compras sale a comprar para esta sede los <strong className="text-yayis-dark">{nombresDias.join(' y ')}</strong>.</>
-            : 'Esta sede aún no tiene días de compra configurados (Gerencia los marca en Configuración).'}
+            : 'Esta sede aún no tiene días de compra configurados (Gerencia los marca en Configuración).'}</span>
         </p>
       </div>
 
