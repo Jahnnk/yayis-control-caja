@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ROL_LABEL } from '@/lib/roles';
 
 // Pantallas que muestran las 3 sedes juntas (tienen su propio filtro de sede): el selector de arriba no aplica.
-const PANTALLAS_DE_TODAS_LAS_SEDES = ['/vista-general', '/finanzas', '/ruta', '/rendicion'];
+const PANTALLAS_DE_TODAS_LAS_SEDES = ['/hoy', '/vista-general', '/finanzas', '/ruta', '/rendicion'];
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -16,7 +16,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const { profile, signOut } = useAuth();
   const { sedeId, sedeActiva, sedes, puedeCambiarSede, cambiarSede } = useSedeActiva();
   const { pathname } = useLocation();
-  const todasLasSedes = PANTALLAS_DE_TODAS_LAS_SEDES.includes(pathname);
+  // «Hoy» es de todas las sedes solo para Gerencia; el administrador ve la suya.
+  const todasLasSedes = PANTALLAS_DE_TODAS_LAS_SEDES.includes(pathname) && (pathname !== '/hoy' || profile?.rol === 'owner');
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-white border-b shadow-sm">

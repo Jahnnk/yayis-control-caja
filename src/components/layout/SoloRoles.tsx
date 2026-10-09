@@ -15,6 +15,7 @@ export function SoloRoles({ roles, children }: { roles: Rol[]; children: ReactNo
 export function InicioSegunRol() {
   const { profile } = useAuth();
   if (!profile) return null;
-  const destino = profile.rol === 'owner' ? '/vista-general' : profile.rol === 'compras' ? '/ruta' : '/gastos';
+  // Gerencia, administradores y Compras entran a «Hoy» (lo que les toca hacer); solo lectura, al registro de gastos.
+  const destino = profile.rol === 'viewer' ? '/gastos' : '/hoy';
   return <Navigate to={destino} replace />;
 }

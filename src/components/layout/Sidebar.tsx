@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard, Bike, Eye, Gauge } from 'lucide-react';
+import { Sun, ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard, Bike, Eye, Gauge } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
@@ -7,9 +7,10 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-type Grupo = 'ver' | 'compras' | 'dinero' | 'admin';
+type Grupo = 'inicio' | 'ver' | 'compras' | 'dinero' | 'admin';
 
 const TITULO_GRUPO: Record<Grupo, string> = {
+  inicio: '',
   ver: 'Para ver cómo vamos',
   compras: 'Compras',
   dinero: 'Dinero',
@@ -18,13 +19,14 @@ const TITULO_GRUPO: Record<Grupo, string> = {
 
 // Orden de los grupos según quién entra: Gerencia mira primero; los demás, primero su trabajo del día.
 const ORDEN_GRUPOS: Record<string, Grupo[]> = {
-  owner: ['ver', 'compras', 'dinero', 'admin'],
-  admin: ['compras', 'dinero', 'ver'],
-  compras: ['compras', 'dinero'],
+  owner: ['inicio', 'ver', 'compras', 'dinero', 'admin'],
+  admin: ['inicio', 'compras', 'dinero', 'ver'],
+  compras: ['inicio', 'compras', 'dinero'],
   viewer: ['dinero', 'ver'],
 };
 
 const navItems = [
+  { to: '/hoy', label: 'Hoy', icon: Sun, grupo: 'inicio', roles: ['owner', 'admin', 'compras'] },
   { to: '/vista-general', label: 'Vista general', icon: Eye, grupo: 'ver', roles: ['owner'] },
   { to: '/finanzas', label: 'Panel de Finanzas', icon: LayoutDashboard, grupo: 'ver', roles: ['owner'] },
   { to: '/resumen', label: 'Resumen', icon: BarChart3, grupo: 'ver', roles: ['owner', 'admin', 'viewer'] },
@@ -74,7 +76,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <nav className="mt-2 px-3">
           {grupos.map(({ g, items }) => (
             <div key={g} className="mt-3 space-y-1">
-              <p className="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/45">{TITULO_GRUPO[g]}</p>
+              {TITULO_GRUPO[g] && <p className="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/45">{TITULO_GRUPO[g]}</p>}
               {items.map(item => (
                 <NavLink
                   key={item.to}
