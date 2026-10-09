@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { HoyPage } from '@/pages/HoyPage';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SedeActivaProvider } from '@/contexts/SedeActivaContext';
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
               <Route path="/inicio" element={<InicioSegunRol />} />
+              <Route path="/hoy" element={<SoloRoles roles={['owner', 'admin', 'compras']}><HoyPage /></SoloRoles>} />
               <Route path="/vista-general" element={<SoloRoles roles={['owner']}><VistaGeneralPage /></SoloRoles>} />
               <Route path="/finanzas" element={<SoloRoles roles={['owner']}><FinanzasPage /></SoloRoles>} />
               <Route path="/gastos" element={<SoloRoles roles={['owner', 'admin', 'viewer']}><RegistroGastosPage /></SoloRoles>} />
