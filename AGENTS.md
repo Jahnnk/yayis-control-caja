@@ -266,6 +266,7 @@ El presupuesto del mes se arma y se aprueba en **Cash Control** (Grupo → Presu
 - 2 vulnerabilidades moderadas en dependencias de `exceljs` (sin fix no-breaking).
 
 ### Lecciones para no repetir errores
+- **En SQL, el rol es un enum (`rol_usuario`): siempre `COALESCE(get_user_rol()::TEXT, '')`, nunca `COALESCE(get_user_rol(), '')`.** Sin el `::TEXT`, Postgres intenta convertir '' en rol y falla con «invalid input value for enum rol_usuario». Pasó el 8-oct-2026 en `proteger_entrega_item` (nadie pudo registrar la recepción por producto un día; arreglo en `supabase/arreglo_recepcion_rol.sql`). Antes de entregar un SQL con disparadores, probarlo mentalmente con un usuario logueado, no solo desde el SQL Editor (ahí `auth.uid()` es nulo y la regla ni se evalúa).
 - El pago progresivo no parte gastos → reponer montos que no calcen con gastos completos deja sobrantes. **Recomendación operativa a Jahnn:** reponer el monto exacto que muestra "Reponer Cuentas".
 - No confiar en el "dinero neto" del sistema para la deuda real: usar el conteo físico de Luis.
 - Cambios de datos masivos: no se pueden hacer con la anon key; se hacen con la sesión de Jahnn (un botón en la app) o con SQL que Jahnn ejecuta en Supabase.
