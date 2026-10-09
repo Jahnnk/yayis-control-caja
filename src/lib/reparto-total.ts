@@ -4,6 +4,8 @@ export interface LineaParaRepartir {
   clave: string;
   /** Lo que costaría la línea con su precio habitual (null si no se conoce). Solo sirve para repartir proporcionalmente. */
   estimado: number | null;
+  /** Monto que ya se sabe exacto (productos en unidad «sol»: 2 sol = S/ 2). No se reparte: se le asigna tal cual. */
+  fijo?: number | null;
 }
 
 /**
@@ -14,6 +16,18 @@ export interface LineaParaRepartir {
 export function repartirTotal(total: number, lineas: LineaParaRepartir[]): Map<string, number> {
   const resultado = new Map<string, number>();
   if (lineas.length === 0 || !(total > 0)) return resultado;
+
+  // Lo que se compra «por monto» (unidad sol) vale exactamente su cantidad: se aparta primero
+  // y solo el resto se reparte entre los demás. Si no alcanza o no queda nadie a quien repartir, cuenta como un peso más.
+  const conFijo = lineas.filter(l => l.fijo != null && l.fijo > 0);
+  const sinFijo = lineas.filter(l => !(l.fijo != null && l.fijo > 0));
+  const sumaFijos = roundTwo(conFijo.reduce((s, l) => s + (l.fijo as number), 0));
+  if (conFijo.length > 0 && sinFijo.length > 0 && sumaFijos < total) {
+    for (const l of conFijo) resultado.set(l.clave, roundTwo(l.fijo as number));
+    for (const [clave, monto] of repartirTotal(roundTwo(total - sumaFijos), sinFijo)) resultado.set(clave, monto);
+    return resultado;
+  }
+  if (conFijo.length > 0) lineas = lineas.map(l => (l.fijo != null && l.fijo > 0 ? { ...l, estimado: l.fijo } : l));
 
   const conocidos = lineas.filter(l => l.estimado !== null && l.estimado > 0).map(l => l.estimado as number);
   const promedio = conocidos.length > 0 ? conocidos.reduce((s, x) => s + x, 0) / conocidos.length : 1;
