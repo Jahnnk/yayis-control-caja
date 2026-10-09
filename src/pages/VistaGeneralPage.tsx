@@ -1,9 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useVistaGeneral } from '@/hooks/useVistaGeneral';
-import { useFinanzas } from '@/hooks/useFinanzas';
-import { calcularAlertas } from '@/lib/alertas';
 import { calcularVistaGeneral, PERIODOS, periodoDe, type ClavePeriodo, type Periodo } from '@/lib/vista-general';
 import { ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad } from '@/lib/compras';
 import { MODALIDAD_LABEL, esEfectivoPendiente } from '@/lib/deliverys';
@@ -14,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
-import { ArrowRight, BellRing, Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
+import { Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, PackageX, Receipt, ShoppingCart, Wallet } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Desplegable } from '@/components/ui/desplegable';
+import { CabeceraGerencia } from '@/components/layout/CabeceraGerencia';
 import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import type { PedidoVista } from '@/hooks/useVistaGeneral';
@@ -47,15 +45,11 @@ export function VistaGeneralPage() {
   const [exportando, setExportando] = useState(false);
   const { addToast } = useToast();
   const datos = useVistaGeneral(periodo.desde, periodo.hasta);
-  const finanzas = useFinanzas();
 
   const v = useMemo(
     () => calcularVistaGeneral(datos, periodo, sedes, sedeFiltro, hoy),
     [datos, periodo, sedes, sedeFiltro, hoy],
   );
-  // Las alertas son de "ahora", no del periodo elegido.
-  const alertas = useMemo(() => calcularAlertas(finanzas, hoy).filter(a => !sedeFiltro || a.sedeId === sedeFiltro), [finanzas, hoy, sedeFiltro]);
-  const alertasAltas = alertas.filter(a => a.nivel === 'alta').length;
 
   function elegir(c: Exclude<ClavePeriodo, 'otro'>) { setClave(c); setPeriodo(periodoDe(c, hoy)); }
   function cambiarFecha(campo: 'desde' | 'hasta', valor: string) {
@@ -114,16 +108,16 @@ export function VistaGeneralPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-yayis-dark">Vista general</h1>
-          <p className="text-sm text-muted-foreground">{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)} · {sedeFiltro ? sedes.find(s => s.id === sedeFiltro)?.nombre : 'las 3 sedes'}</p>
-        </div>
-        <Button variant="outline" onClick={descargarExcel} disabled={exportando || datos.loading} title="Gastos del periodo por sede y categoría, con gasto fijo o variable">
-          {exportando ? <Loader2 size={16} className="mr-1 animate-spin" /> : <Download size={16} className="mr-1" />}
-          Descargar Excel
-        </Button>
-      </div>
+      <CabeceraGerencia
+        titulo="Vista general"
+        explicacion={<>{tituloPeriodo.charAt(0).toUpperCase() + tituloPeriodo.slice(1)} · {sedeFiltro ? sedes.find(s => s.id === sedeFiltro)?.nombre : 'las 3 sedes'}</>}
+        acciones={
+          <Button variant="outline" onClick={descargarExcel} disabled={exportando || datos.loading} title="Gastos del periodo por sede y categoría, con gasto fijo o variable">
+            {exportando ? <Loader2 size={16} className="mr-1 animate-spin" /> : <Download size={16} className="mr-1" />}
+            Descargar Excel
+          </Button>
+        }
+      />
 
       {/* Filtros */}
       <div className="space-y-3 rounded-lg border bg-white p-3 shadow-sm">
@@ -154,13 +148,11 @@ export function VistaGeneralPage() {
       </div>
 
       {/* Números clave del periodo */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <Cifra titulo="Total gastado" valor={formatMonto(v.totalGastado)} detalle={<>Caja {formatMonto(v.totalCaja)} + compras {formatMonto(v.totalCompras)}</>} />
-        <Cifra titulo="Gastos de caja (administradores)" valor={formatMonto(v.totalCaja)} detalle={`${v.gastosCaja.length} gasto(s) registrados`} />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Cifra
-          titulo="Compras a proveedores"
-          valor={formatMonto(v.totalCompras)}
-          detalle={<>{v.compras.length} compra(s) · contado {formatMonto(v.comprasContado)} · crédito {formatMonto(v.comprasCredito)}{v.sinBoleta > 0 && <> · sin boleta {formatMonto(v.sinBoleta)}</>}{v.fotosPendientes > 0 && <> · <strong className="text-amber-700">{v.fotosPendientes} con foto pendiente</strong></>}</>}
+          titulo="Total gastado"
+          valor={formatMonto(v.totalGastado)}
+          detalle={<>Caja {formatMonto(v.totalCaja)} ({v.gastosCaja.length}) + compras {formatMonto(v.totalCompras)} ({v.compras.length}){v.fotosPendientes > 0 && <> · <strong className="text-amber-700">{v.fotosPendientes} con foto pendiente</strong></>}</>}
           alerta={v.fotosPendientes > 0}
         />
         <Cifra titulo="Dinero entregado a Compras" valor={formatMonto(v.entregado)} detalle={`${v.entregas.length} entrega(s) de los administradores`} />
@@ -172,15 +164,6 @@ export function VistaGeneralPage() {
         />
         <Cifra titulo="Productos sin comprar" valor={String(v.sinComprar.length)} detalle={`${noHabia} no había · ${pendientes} siguen pendientes`} alerta={v.sinComprar.length > 0} />
       </div>
-
-      {/* Alertas de ahora */}
-      <Link to="/finanzas" className={`flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm shadow-sm ${alertasAltas > 0 ? 'border-red-300 bg-red-50/60' : alertas.length > 0 ? 'border-amber-200 bg-amber-50/50' : 'bg-white'}`}>
-        <BellRing size={16} className={alertasAltas > 0 ? 'text-red-600' : 'text-muted-foreground'} />
-        {alertas.length === 0
-          ? <span className="text-emerald-700">Para revisar ahora: todo en orden.</span>
-          : <span><strong>Para revisar ahora: {alertas.length} alerta(s)</strong>{alertasAltas > 0 && <span className="text-red-700"> · {alertasAltas} importante(s)</span>} <span className="text-xs text-muted-foreground">(facturas, rendiciones, fotos, efectivo de deliverys, precios)</span></span>}
-        <span className="ml-auto flex items-center gap-1 text-xs font-medium text-yayis-green">Panel de Finanzas <ArrowRight size={14} /></span>
-      </Link>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {/* Por sede */}

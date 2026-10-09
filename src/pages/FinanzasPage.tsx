@@ -4,6 +4,7 @@ import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useFinanzas, type CompraFinanzas } from '@/hooks/useFinanzas';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CabeceraGerencia } from '@/components/layout/CabeceraGerencia';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -180,13 +181,10 @@ export function FinanzasPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-yayis-dark">Panel de Finanzas</h1>
-        <p className="text-sm capitalize text-muted-foreground">{fechaLarga(hoy)} · las 3 sedes</p>
-      </div>
+      <CabeceraGerencia titulo="Panel de Finanzas" explicacion={<>Alertas, facturas a crédito y control de compras · {fechaLarga(hoy)} · las 3 sedes</>} />
 
       {/* Números clave */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
         <Card><CardContent className="p-4">
           <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><CreditCard size={16} className="text-blue-600" /> Por pagar a crédito</div>
           <p className="text-xl font-bold text-blue-700">{formatMonto(totalPorPagar)}</p>
@@ -202,17 +200,12 @@ export function FinanzasPage() {
           <p className="text-xl font-bold text-yayis-dark">{formatMonto(enManos)}</p>
           <p className="text-xs text-muted-foreground">{abiertas.length} entrega(s) sin cerrar</p>
         </CardContent></Card>
-        <Card className={altas > 0 ? 'border-red-300 bg-red-50/50' : ''}><CardContent className="p-4">
-          <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><BellRing size={16} className={altas > 0 ? 'text-red-600' : 'text-muted-foreground'} /> Alertas</div>
-          <p className={`text-xl font-bold ${altas > 0 ? 'text-red-700' : 'text-yayis-dark'}`}>{alertas.length}</p>
-          <p className="text-xs text-muted-foreground">{altas} importante(s)</p>
-        </CardContent></Card>
       </div>
 
       {/* Alertas */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><AlertTriangle size={18} className="text-orange-600" /> Para revisar</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base"><AlertTriangle size={18} className="text-orange-600" /> Para revisar{alertas.length > 0 && <span className="text-sm font-normal text-muted-foreground">({alertas.length}{altas > 0 ? ` · ${altas} importante(s)` : ""})</span>}</CardTitle>
           <p className="text-xs text-muted-foreground">
             Facturas vencidas, rendiciones que no cuadraron, dinero sin rendir, mercadería sin confirmar, urgentes de la semana, efectivo de deliverys sin entregar y precios que subieron {Math.round(UMBRAL_VARIACION * 100)}% o más sobre su precio habitual.
           </p>

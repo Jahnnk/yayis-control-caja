@@ -7,6 +7,8 @@ import { useArqueo } from '@/hooks/useArqueo';
 import { useReposiciones } from '@/hooks/useReposiciones';
 import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
+import { CabeceraGerencia } from '@/components/layout/CabeceraGerencia';
+import { Desplegable } from '@/components/ui/desplegable';
 import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
 import { useToast } from '@/components/ui/toast';
@@ -675,9 +677,11 @@ export function ResumenPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header + Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-yayis-dark">Resumen</h1>
+      {/* Cabecera y filtros del periodo */}
+      <CabeceraGerencia
+        titulo="Resumen"
+        explicacion={isOwner ? <>La caja de {encargado}{sedeActiva ? ` (${sedeActiva.nombre})` : ''}: lo que falta reponer y en qué se gastó.</> : 'Tus gastos del periodo.'}
+        acciones={
         <div className="flex flex-wrap gap-2">
           <Select value={filterAnio} onChange={e => setFilterAnio(parseInt(e.target.value))} className="w-24">
             <option value={currentYear}>{currentYear}</option>
@@ -700,7 +704,8 @@ export function ResumenPage() {
             </Select>
           )}
         </div>
-      </div>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -767,119 +772,90 @@ export function ResumenPage() {
         </div>
       )}
 
-      {/* Desglose por categoria: Ya repuesto (pagado) */}
-      {isOwner && (totalEfPagado > 0 || totalCtPagado > 0) && (
-        <div>
-          <h3 className="text-base font-bold text-yayis-dark mb-3">Desglose de lo Repuesto (gastos ya pagados)</h3>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {catEfPagado.length > 0 && (
-              <Card className="border-emerald-200 bg-emerald-50/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Wallet size={18} className="text-emerald-600" />
-                    Repuesto Efectivo: {formatMonto(totalEfPagado)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
-                    <tbody>
-                      {catEfPagado.map(c => (
-                        <tr key={c.nombre} className="border-b">
-                          <td className="py-1.5">{c.nombre}</td>
-                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPagado > 0 ? roundTwo((c.total / totalEfPagado) * 100) : 0}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            )}
-            {catCtPagado.length > 0 && (
-              <Card className="border-emerald-200 bg-emerald-50/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard size={18} className="text-emerald-600" />
-                    Repuesto Cuentas: {formatMonto(totalCtPagado)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
-                    <tbody>
-                      {catCtPagado.map(c => (
-                        <tr key={c.nombre} className="border-b">
-                          <td className="py-1.5">{c.nombre}</td>
-                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPagado > 0 ? roundTwo((c.total / totalCtPagado) * 100) : 0}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Reposiciones */}
+      {isOwner && (
+        <Card>
+          <CardHeader><CardTitle>Reposiciones a {encargado}{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle></CardHeader>
+          <CardContent className="space-y-5">
+            {/* Saldo */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                <p className="text-xs text-red-600 font-medium">Deuda Total</p>
+                <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))}</p>
+                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.deudaEfectivo)} | Ct: {formatMonto(saldo.deudaCuentas)}</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                <p className="text-xs text-emerald-600 font-medium">Repuesto Total</p>
+                <p className="text-lg font-bold text-emerald-700">{formatMonto(roundTwo(saldo.repuestoEfectivo + saldo.repuestoCuentas))}</p>
+                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.repuestoEfectivo)} | Ct: {formatMonto(saldo.repuestoCuentas)}</p>
+              </div>
+              <div className={`border-2 rounded-lg p-3 text-center ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+                <p className="text-xs font-medium">Saldo Pendiente</p>
+                <p className={`text-lg font-bold ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {formatMonto(roundTwo(Math.max(0, saldo.saldoEfectivo) + Math.max(0, saldo.saldoCuentas)))}
+                </p>
+                <p className="text-xs text-muted-foreground">Ef: {formatMonto(Math.max(0, saldo.saldoEfectivo))} | Ct: {formatMonto(Math.max(0, saldo.saldoCuentas))}</p>
+              </div>
+            </div>
 
-      {/* Desglose por categoria: Pendiente (aun no repuesto) — DEUDA TOTAL con el administrador */}
-      {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
-        <div>
-          <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con {encargado} por categoria</h3>
-          <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Los totales cuadran con "Reponer Efectivo/Cuentas".</p>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {categoriasEfectivo.length > 0 && (
-              <Card className="border-amber-200 bg-amber-50/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Wallet size={18} className="text-amber-600" />
-                    Pendiente Efectivo: {formatMonto(totalEfPend)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+            {/* Formulario */}
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-bold mb-1">Registrar Reposición</h4>
+              <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><label className="text-xs font-medium">Fecha</label><Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" /></div>
+                <div><label className="text-xs font-medium">Tipo</label>
+                  <Select value={repoMetodo} onChange={e => setRepoMetodo(e.target.value as MetodoPago)} className="mt-1">
+                    <option value="efectivo">Efectivo</option><option value="cuentas">Cuentas</option>
+                  </Select>
+                </div>
+                <div><label className="text-xs font-medium">Monto (S/)</label><Input type="number" step="0.01" min="0.01" placeholder="0.00" value={repoMonto} onChange={e => setRepoMonto(e.target.value)} className="mt-1" /></div>
+                <div><label className="text-xs font-medium">Notas</label><Input placeholder="Opcional..." value={repoNotas} onChange={e => setRepoNotas(e.target.value)} className="mt-1" /></div>
+              </div>
+              <Button className="mt-3" disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0} onClick={async () => {
+                setRepoSaving(true);
+                const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
+                if (error) addToast(`Error: ${error}`, 'error');
+                else {
+                  if (warning) addToast(warning, 'warning');
+                  else addToast('Reposicion registrada', 'success');
+                  setRepoMonto(''); setRepoNotas(''); loadData();
+                }
+                setRepoSaving(false);
+              }}>
+                {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
+                Registrar Reposicion
+              </Button>
+            </div>
+
+            {/* Historial */}
+            {reposiciones.length > 0 && (
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-bold mb-3">Historial de reposiciones</h4>
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Accion</th></tr></thead>
                     <tbody>
-                      {categoriasEfectivo.map(c => (
-                        <tr key={c.nombre} className="border-b">
-                          <td className="py-1.5">{c.nombre}</td>
-                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPend > 0 ? roundTwo((c.total / totalEfPend) * 100) : 0}%</td>
+                      {reposiciones.map(r => (
+                        <tr key={r.id} className="border-b">
+                          <td className="py-2 whitespace-nowrap">{r.fecha}</td>
+                          <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
+                          <td className="py-2 text-right font-medium whitespace-nowrap">{formatMonto(Number(r.monto))}</td>
+                          <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
+                          <td className="py-2 text-right whitespace-nowrap">
+                            <Button variant="outline" size="sm" className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setConfirmDeleteRepoId(r.id)}>
+                              <Trash2 size={14} className="mr-1" /> Eliminar
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
-            {categoriasCuentas.length > 0 && (
-              <Card className="border-amber-200 bg-amber-50/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard size={18} className="text-amber-600" />
-                    Pendiente Cuentas: {formatMonto(totalCtPend)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
-                    <tbody>
-                      {categoriasCuentas.map(c => (
-                        <tr key={c.nombre} className="border-b">
-                          <td className="py-1.5">{c.nombre}</td>
-                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
-                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPend > 0 ? roundTwo((c.total / totalCtPend) * 100) : 0}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Valores a revisar (deteccion de duplicados y montos sospechosos) */}
@@ -1026,6 +1002,130 @@ export function ResumenPage() {
         </Card>
       )}
 
+      {/* Análisis del periodo: plegado, con su resumen a la vista */}
+      {isOwner && (
+        <Desplegable titulo="En qué se gastó (por categoría)" resumen={<span>Falta reponer <strong className="text-yayis-dark">{formatMonto(totalPendiente)}</strong> · repuesto {formatMonto(totalPagado)}</span>}>
+          <div className="space-y-6">
+      {/* Desglose por categoria: Ya repuesto (pagado) */}
+      {isOwner && (totalEfPagado > 0 || totalCtPagado > 0) && (
+        <div>
+          <h3 className="text-base font-bold text-yayis-dark mb-3">Desglose de lo Repuesto (gastos ya pagados)</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {catEfPagado.length > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Wallet size={18} className="text-emerald-600" />
+                    Repuesto Efectivo: {formatMonto(totalEfPagado)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {catEfPagado.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPagado > 0 ? roundTwo((c.total / totalEfPagado) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+            {catCtPagado.length > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard size={18} className="text-emerald-600" />
+                    Repuesto Cuentas: {formatMonto(totalCtPagado)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {catCtPagado.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPagado > 0 ? roundTwo((c.total / totalCtPagado) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Desglose por categoria: Pendiente (aun no repuesto) — DEUDA TOTAL con el administrador */}
+      {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
+        <div>
+          <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con {encargado} por categoria</h3>
+          <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Los totales cuadran con "Reponer Efectivo/Cuentas".</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {categoriasEfectivo.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Wallet size={18} className="text-amber-600" />
+                    Pendiente Efectivo: {formatMonto(totalEfPend)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {categoriasEfectivo.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalEfPend > 0 ? roundTwo((c.total / totalEfPend) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+            {categoriasCuentas.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CreditCard size={18} className="text-amber-600" />
+                    Pendiente Cuentas: {formatMonto(totalCtPend)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <tbody>
+                      {categoriasCuentas.map(c => (
+                        <tr key={c.nombre} className="border-b">
+                          <td className="py-1.5">{c.nombre}</td>
+                          <td className="text-right py-1.5 font-medium">{formatMonto(c.total)}</td>
+                          <td className="text-right py-1.5 text-muted-foreground">{totalCtPend > 0 ? roundTwo((c.total / totalCtPend) * 100) : 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+          </div>
+        </Desplegable>
+      )}
+      <Desplegable titulo="Por semana, gráficos y lo más gastado" resumen={<span>Total del periodo <strong className="text-yayis-dark">{formatMonto(totalGastado)}</strong></span>}>
+        <div className="space-y-6">
       {/* Tabla por semana (solo si no se filtro por semana) */}
       {filterSemana === 0 && (
         <Card>
@@ -1237,6 +1337,10 @@ export function ResumenPage() {
         </div>
       )}
 
+        </div>
+      </Desplegable>
+      <Desplegable titulo="Historial de lo repuesto" resumen={<span>Última reposición y lo pendiente por categoría</span>}>
+        <div className="space-y-6">
       {/* Historico de gastos pagados */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -1408,6 +1512,8 @@ export function ResumenPage() {
         )}
       </Card>
 
+        </div>
+      </Desplegable>
       {/* Arqueo Semanal - solo cuando se selecciona semana especifica */}
       {isOwner && filterSemana > 0 && (
         <Card>
@@ -1455,92 +1561,6 @@ export function ResumenPage() {
                 <Button onClick={() => setShowCerrar(true)} className="bg-yayis-green hover:bg-yayis-green/90">
                   <Lock size={16} className="mr-2" /> Cerrar Semana
                 </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Reposiciones */}
-      {isOwner && (
-        <Card>
-          <CardHeader><CardTitle>Reposiciones a {encargado}{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
-            {/* Saldo */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-red-600 font-medium">Deuda Total</p>
-                <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))}</p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.deudaEfectivo)} | Ct: {formatMonto(saldo.deudaCuentas)}</p>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-emerald-600 font-medium">Repuesto Total</p>
-                <p className="text-lg font-bold text-emerald-700">{formatMonto(roundTwo(saldo.repuestoEfectivo + saldo.repuestoCuentas))}</p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.repuestoEfectivo)} | Ct: {formatMonto(saldo.repuestoCuentas)}</p>
-              </div>
-              <div className={`border-2 rounded-lg p-3 text-center ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-                <p className="text-xs font-medium">Saldo Pendiente</p>
-                <p className={`text-lg font-bold ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {formatMonto(roundTwo(Math.max(0, saldo.saldoEfectivo) + Math.max(0, saldo.saldoCuentas)))}
-                </p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(Math.max(0, saldo.saldoEfectivo))} | Ct: {formatMonto(Math.max(0, saldo.saldoCuentas))}</p>
-              </div>
-            </div>
-
-            {/* Formulario */}
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-bold mb-1">Registrar Reposición</h4>
-              <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}.</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><label className="text-xs font-medium">Fecha</label><Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" /></div>
-                <div><label className="text-xs font-medium">Tipo</label>
-                  <Select value={repoMetodo} onChange={e => setRepoMetodo(e.target.value as MetodoPago)} className="mt-1">
-                    <option value="efectivo">Efectivo</option><option value="cuentas">Cuentas</option>
-                  </Select>
-                </div>
-                <div><label className="text-xs font-medium">Monto (S/)</label><Input type="number" step="0.01" min="0.01" placeholder="0.00" value={repoMonto} onChange={e => setRepoMonto(e.target.value)} className="mt-1" /></div>
-                <div><label className="text-xs font-medium">Notas</label><Input placeholder="Opcional..." value={repoNotas} onChange={e => setRepoNotas(e.target.value)} className="mt-1" /></div>
-              </div>
-              <Button className="mt-3" disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0} onClick={async () => {
-                setRepoSaving(true);
-                const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
-                if (error) addToast(`Error: ${error}`, 'error');
-                else {
-                  if (warning) addToast(warning, 'warning');
-                  else addToast('Reposicion registrada', 'success');
-                  setRepoMonto(''); setRepoNotas(''); loadData();
-                }
-                setRepoSaving(false);
-              }}>
-                {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
-                Registrar Reposicion
-              </Button>
-            </div>
-
-            {/* Historial */}
-            {reposiciones.length > 0 && (
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-bold mb-3">Historial de reposiciones</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Accion</th></tr></thead>
-                    <tbody>
-                      {reposiciones.map(r => (
-                        <tr key={r.id} className="border-b">
-                          <td className="py-2 whitespace-nowrap">{r.fecha}</td>
-                          <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
-                          <td className="py-2 text-right font-medium whitespace-nowrap">{formatMonto(Number(r.monto))}</td>
-                          <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
-                          <td className="py-2 text-right whitespace-nowrap">
-                            <Button variant="outline" size="sm" className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setConfirmDeleteRepoId(r.id)}>
-                              <Trash2 size={14} className="mr-1" /> Eliminar
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             )}
           </CardContent>
