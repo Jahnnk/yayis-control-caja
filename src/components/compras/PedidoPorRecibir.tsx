@@ -47,7 +47,7 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
     <Card className="border-emerald-200">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-base capitalize">
+          <CardTitle className="flex items-center gap-2 text-base">
             <PackageCheck size={18} className="text-emerald-700" />
             {pedido.urgente ? 'Pedido urgente' : 'Lista'} del {fechaLarga(pedido.fecha_compra)}
           </CardTitle>

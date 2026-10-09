@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
-import { AlertTriangle, Gauge, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
 import { CATEGORIAS_DEL_ADMIN, CATEGORIAS_PRESUPUESTO, estimarLineasPedido, estimarPorCategoria, mesDe, nombreCategoria, type UsoCategoria } from '@/lib/presupuesto';
@@ -77,6 +77,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const [motivoTope, setMotivoTope] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [confirmCancelar, setConfirmCancelar] = useState(false);
+  // «Más opciones» al agregar (proveedor, categoría, precio de referencia, nota, urgente): plegado; lo habitual se completa solo.
+  const [masOpciones, setMasOpciones] = useState(false);
+  const nombreRef = useRef<HTMLInputElement>(null);
 
   const enviado = pedido.estado === 'enviado';
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
@@ -156,6 +159,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     setProveedorId('');
     setUrgenteNuevo(false);
     setReferenciaNueva('');
+    setMasOpciones(false);
+    // Listo para el siguiente producto sin tocar la pantalla.
+    nombreRef.current?.focus();
   }
 
   /** Guarda (o borra, si se deja vacío) el precio de referencia de una línea. */
@@ -264,11 +270,23 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     else addToast(pedido.estado === 'borrador' ? 'Lista descartada' : 'Pedido cancelado', 'success');
   }
 
+  // Lo que el sistema ya recuerda del producto que se está escribiendo (se usa si no se abre «Más opciones»).
+  const conocido = productos.find(p => p.nombre.toLowerCase() === nombre.trim().toLowerCase());
+  const nombreProveedor = (id: string | null | undefined) => proveedores.find(p => p.id === id)?.nombre;
+  const resumenNuevo = [
+    proveedorId ? `a ${nombreProveedor(proveedorId) ?? 'proveedor'}` : null,
+    categoriaNueva ? nombreCategoria(categoriaNueva) : null,
+    referenciaNueva.trim() ? `ref. ${formatMonto(parseFloat(referenciaNueva) || 0)}` : null,
+    nota.trim() ? `"${nota.trim()}"` : null,
+    urgenteNuevo ? '⚡ urgente' : null,
+  ].filter(Boolean).join(' · ');
+  const editable = (i: { estado: string }) => i.estado === 'pendiente';
+
   return (
     <Card className={pedido.urgente ? 'border-amber-300' : ''}>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base capitalize">
+          <CardTitle className="text-base">
             {pedido.urgente ? 'Pedido urgente' : 'Lista'} para el {fechaLarga(pedido.fecha_compra)}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -290,279 +308,228 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
         {seguimiento && <div className="pt-2">{seguimiento}</div>}
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Agregar producto */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-12">
-          <div className="col-span-2 sm:col-span-5">
-            <label className="text-xs font-medium" htmlFor={`prod-${pedido.id}`}>Producto</label>
-            <Input
-              id={`prod-${pedido.id}`}
-              list={datalistId}
-              placeholder="Ej: HARINA PREPARADA"
-              value={nombre}
-              onChange={e => handleNombre(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAgregar()}
-              className="mt-1"
-              autoComplete="off"
-            />
-            <datalist id={datalistId}>
-              {productos.filter(p => p.activo).map(p => <option key={p.id} value={p.nombre} />)}
-            </datalist>
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium" htmlFor={`cant-${pedido.id}`}>Cantidad</label>
-            <Input
-              id={`cant-${pedido.id}`}
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={cantidad}
-              onChange={e => setCantidad(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAgregar()}
-              className="mt-1"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium" htmlFor={`uni-${pedido.id}`}>Unidad</label>
-            <Input
-              id={`uni-${pedido.id}`}
-              list={datalistUnidades}
-              value={unidad}
-              onChange={e => setUnidad(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAgregar()}
-              className="mt-1"
-              autoComplete="off"
-              placeholder="kg, sol…"
-            />
-            <datalist id={datalistUnidades}>
-              {sugeridas.map(u => <option key={u} value={u} />)}
-            </datalist>
-          </div>
-          <div className="col-span-2 sm:col-span-5">
-            <label className="text-xs font-medium" htmlFor={`prov-${pedido.id}`}>Proveedor (a quién se le compra)</label>
-            <Select id={`prov-${pedido.id}`} value={proveedorId} onChange={e => setProveedorId(e.target.value)} className="mt-1">
-              <option value="">Sin proveedor todavía</option>
-              {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
-          </div>
-          <div className="col-span-2 sm:col-span-7">
-            <label className="text-xs font-medium" htmlFor={`cat-${pedido.id}`}>Categoría del presupuesto</label>
-            <Select id={`cat-${pedido.id}`} value={categoriaNueva} onChange={e => setCategoriaNueva(e.target.value)} className="mt-1">
-              <option value="">Elegir…</option>
-              <OpcionesCategoria />
-            </Select>
-          </div>
-          <div className="col-span-2 sm:col-span-4">
-            <label className="text-xs font-medium" htmlFor={`ref-${pedido.id}`}>Precio de referencia (opcional)</label>
-            <div className="mt-1 flex items-center gap-1 text-sm">
-              S/
-              <Input id={`ref-${pedido.id}`} type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={referenciaNueva}
-                onChange={e => setReferenciaNueva(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAgregar()} />
-              <span className="whitespace-nowrap text-xs text-muted-foreground">por {baseDePrecio(unidad || 'unidad').etiqueta}</span>
+        {/* Agregar producto: una sola línea; lo demás se completa con lo que el sistema recuerda */}
+        <div className="rounded-lg border bg-yayis-cream/50 p-3">
+          <div className="grid grid-cols-[1fr_5.5rem_6rem] gap-2 sm:grid-cols-[1fr_6rem_7rem_auto]">
+            <div className="col-span-3 sm:col-span-1">
+              <label className="text-xs font-medium" htmlFor={`prod-${pedido.id}`}>Producto</label>
+              <Input
+                ref={nombreRef}
+                id={`prod-${pedido.id}`}
+                list={datalistId}
+                placeholder="Ej: HARINA PREPARADA"
+                value={nombre}
+                onChange={e => handleNombre(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAgregar()}
+                className="mt-1 h-10 bg-white"
+                autoComplete="off"
+              />
+              <datalist id={datalistId}>
+                {productos.filter(p => p.activo).map(p => <option key={p.id} value={p.nombre} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="text-xs font-medium" htmlFor={`cant-${pedido.id}`}>Cantidad</label>
+              <Input id={`cant-${pedido.id}`} type="number" inputMode="decimal" min="0" step="0.01" value={cantidad}
+                onChange={e => setCantidad(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 h-10 bg-white" />
+            </div>
+            <div>
+              <label className="text-xs font-medium" htmlFor={`uni-${pedido.id}`}>Unidad</label>
+              <Input id={`uni-${pedido.id}`} list={datalistUnidades} value={unidad} onChange={e => setUnidad(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 h-10 bg-white" autoComplete="off" placeholder="kg, sol…" />
+              <datalist id={datalistUnidades}>
+                {sugeridas.map(u => <option key={u} value={u} />)}
+              </datalist>
+            </div>
+            <div className="flex items-end">
+              <Button onClick={handleAgregar} disabled={guardando} className="h-10 w-full px-3 sm:w-auto">
+                {guardando ? <Loader2 size={15} className="animate-spin sm:mr-1" /> : <Plus size={15} className="sm:mr-1" />}
+                <span className="hidden sm:inline">Agregar</span>
+                <span className="sr-only sm:hidden">Agregar a la lista</span>
+              </Button>
             </div>
           </div>
-          <div className="col-span-2 sm:col-span-8">
-            <label className="text-xs font-medium" htmlFor={`nota-${pedido.id}`}>Nota (opcional)</label>
-            <Input
-              id={`nota-${pedido.id}`}
-              placeholder="Marca, tamaño..."
-              value={nota}
-              onChange={e => setNota(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAgregar()}
-              className="mt-1"
-            />
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <button type="button" onClick={() => setMasOpciones(v => !v)} aria-expanded={masOpciones}
+              className="inline-flex items-center gap-1 font-medium text-yayis-green">
+              <SlidersHorizontal size={13} /> Más opciones
+              <ChevronDown size={13} className={`transition-transform ${masOpciones ? 'rotate-180' : ''}`} />
+            </button>
+            {!masOpciones && (resumenNuevo
+              ? <span className="text-muted-foreground">{resumenNuevo}</span>
+              : nombre.trim() && !conocido && <span className="text-muted-foreground">Producto nuevo: elige su proveedor y categoría aquí o después en la lista.</span>)}
+            {unidad.trim().toLowerCase() === 'sol' && <span className="w-full text-muted-foreground">💡 {AYUDA_UNIDAD_SOL}</span>}
           </div>
-          <div className="col-span-2 flex flex-wrap items-center gap-4 sm:col-span-12">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input type="checkbox" checked={urgenteNuevo} onChange={e => setUrgenteNuevo(e.target.checked)} />
-              <span className="font-medium text-red-700">⚡ Urgente</span>
-              <span className="text-xs text-muted-foreground">(Compras lo compra primero)</span>
-            </label>
-            <Button size="sm" onClick={handleAgregar} disabled={guardando}>
-              {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Plus size={14} className="mr-1" />}
-              Agregar a la lista
-            </Button>
-          </div>
+
+          {masOpciones && (
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-medium" htmlFor={`prov-${pedido.id}`}>Proveedor (a quién se le compra)</label>
+                <Select id={`prov-${pedido.id}`} value={proveedorId} onChange={e => setProveedorId(e.target.value)} className="mt-1 bg-white">
+                  <option value="">Sin proveedor todavía</option>
+                  {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium" htmlFor={`cat-${pedido.id}`}>Categoría del presupuesto</label>
+                <Select id={`cat-${pedido.id}`} value={categoriaNueva} onChange={e => setCategoriaNueva(e.target.value)} className="mt-1 bg-white">
+                  <option value="">Elegir…</option>
+                  <OpcionesCategoria />
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium" htmlFor={`ref-${pedido.id}`}>Precio de referencia (opcional)</label>
+                <div className="mt-1 flex items-center gap-1 text-sm">
+                  S/
+                  <Input id={`ref-${pedido.id}`} type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={referenciaNueva} className="bg-white"
+                    onChange={e => setReferenciaNueva(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAgregar()} />
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">por {baseDePrecio(unidad || 'unidad').etiqueta}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium" htmlFor={`nota-${pedido.id}`}>Nota (opcional)</label>
+                <Input id={`nota-${pedido.id}`} placeholder="Marca, tamaño..." value={nota} onChange={e => setNota(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 bg-white" />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" className="h-4 w-4 accent-red-600" checked={urgenteNuevo} onChange={e => setUrgenteNuevo(e.target.checked)} />
+                <span className="font-medium text-red-700">⚡ Urgente</span>
+                <span className="text-xs text-muted-foreground">(Compras lo compra primero)</span>
+              </label>
+            </div>
+          )}
         </div>
 
-        <p className="-mt-1 text-xs text-muted-foreground">💡 {AYUDA_UNIDAD_SOL}</p>
-
-        {/* Lista */}
+        {/* Lista: una fila por producto; categoría y precio de referencia, plegados */}
         {items.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">La lista está vacía. Agrega el primer producto.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="py-2 font-medium">Producto</th>
-                  <th className="py-2 font-medium">Cantidad</th>
-                  <th className="py-2 font-medium">Proveedor</th>
-                  <th className="py-2 font-medium">Categoría</th>
-                  <th className="py-2 font-medium" title="Lo que crees que costará. Compras la recibe con la lista y, si cambia al comprar, ve cuánto subió o bajó.">Precio ref.</th>
-                  <th className="py-2 text-right font-medium" title="Lo que costaría (precio habitual) si falta comprar; lo que se pagó si ya se compró">Precio</th>
-                  <th className="py-2 text-center font-medium">⚡ Urgente</th>
-                  <th className="py-2 font-medium">Nota</th>
-                  {enviado && <th className="py-2 font-medium">Estado</th>}
-                  <th className="py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(i => (
-                  <tr key={i.id} className={`border-b last:border-b-0 ${i.urgente && i.estado === 'pendiente' ? 'bg-red-50/60' : ''}`}>
-                    <td className="py-2 pr-2 font-medium">{i.productos?.nombre ?? '—'}</td>
-                    <td className="py-2 pr-2 whitespace-nowrap">
-                      {i.estado === 'pendiente' ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="0.01"
-                            defaultValue={Number(i.cantidad)}
-                            onBlur={e => handleCantidad(i.id, i.cantidad, e.target.value)}
-                            className="h-8 w-20"
-                            aria-label={`Cantidad de ${i.productos?.nombre ?? 'producto'}`}
-                          />
-                          <Input
-                            key={`${i.id}-${i.unidad}`}
-                            list={datalistUnidades}
-                            defaultValue={i.unidad}
-                            onBlur={e => { handleUnidad(i.id, e.target.value); if (!e.target.value.trim()) e.target.value = i.unidad; }}
-                            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                            className="h-8 w-24 text-xs"
-                            autoComplete="off"
-                            aria-label={`Unidad de ${i.productos?.nombre ?? 'producto'}`}
-                          />
-                        </span>
-                      ) : (
-                        <CantidadCelda item={i} pago={pagos.get(i.id)} />
-                      )}
-                    </td>
-                    <td className="py-2 pr-2">
-                      {i.estado === 'pendiente' ? (
-                        <Select
-                          className={`h-8 w-44 text-xs ${i.proveedor_id ? '' : 'border-amber-400'}`}
-                          value={i.proveedor_id ?? ''}
-                          onChange={e => handleProveedor(i.id, e.target.value)}
-                          aria-label={`Proveedor de ${i.productos?.nombre ?? 'producto'}`}
-                        >
-                          <option value="">Elegir proveedor…</option>
-                          {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                          {i.proveedor_id && !proveedoresActivos.some(p => p.id === i.proveedor_id) && (
-                            <option value={i.proveedor_id}>{i.proveedores?.nombre ?? 'Proveedor'}</option>
-                          )}
-                        </Select>
-                      ) : (
-                        <span className="text-xs">{i.proveedores?.nombre ?? '—'}</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-2">
-                      {i.estado === 'pendiente' ? (
-                        <Select
-                          className={`h-8 w-40 text-xs ${categoriaDe(i.producto_id) ? '' : 'border-amber-400'}`}
-                          value={categoriaDe(i.producto_id) ?? ''}
-                          onChange={e => handleCategoria(i.producto_id, i.productos?.nombre ?? 'El producto', e.target.value)}
-                          aria-label={`Categoría de ${i.productos?.nombre ?? 'producto'}`}
-                        >
-                          <option value="">Elegir…</option>
+          <div className="divide-y rounded-lg border">
+            {items.map(i => {
+              const nombreItem = i.productos?.nombre ?? 'producto';
+              const cat = categoriaDe(i.producto_id);
+              const precio = (() => {
+                if (i.estado === 'comprado') return <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} />;
+                if (i.estado !== 'pendiente') return null;
+                const ref = referenciaPorUnidadLinea(i.precio_referencia, i.unidad);
+                if (ref !== undefined) return <span title="Estimado con tu precio de referencia">≈ {formatMonto(roundTwo(ref * Number(i.cantidad)))}</span>;
+                const h = habituales.get(`${i.producto_id}|${i.unidad}`);
+                return h ? <span title="Estimado con el precio habitual">≈ {formatMonto(roundTwo(h.unitario * Number(i.cantidad)))}</span> : null;
+              })();
+              return (
+                <div key={i.id} className={`space-y-2 px-3 py-2.5 text-sm ${i.urgente && i.estado === 'pendiente' ? 'bg-red-50/60' : ''}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-yayis-dark">{nombreItem}{i.urgente && <span className="ml-1 text-xs text-red-700">⚡ urgente</span>}</p>
+                      {i.nota && <p className="text-xs italic text-muted-foreground">"{i.nota}"</p>}
+                    </div>
+                    {editable(i) && (
+                      <span className="-my-1 flex shrink-0 items-center">
+                        <Button variant="ghost" size="icon" onClick={() => handleUrgente(i.id, !i.urgente)} aria-pressed={!!i.urgente}
+                          aria-label={i.urgente ? `Quitar urgente de ${nombreItem}` : `Marcar ${nombreItem} como urgente`} title={i.urgente ? 'Quitar urgente' : 'Marcar urgente (Compras lo compra primero)'}
+                          className={`h-9 w-9 ${i.urgente ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'text-gray-400 hover:text-red-600'}`}>
+                          ⚡
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEliminar(i.id)} aria-label={`Quitar ${nombreItem}`} className="h-9 w-9 text-red-500 hover:text-red-700">
+                          <Trash2 size={15} />
+                        </Button>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {editable(i) ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Input type="number" inputMode="decimal" min="0" step="0.01" defaultValue={Number(i.cantidad)}
+                          onBlur={e => handleCantidad(i.id, i.cantidad, e.target.value)} className="h-9 w-20" aria-label={`Cantidad de ${nombreItem}`} />
+                        <Input key={`${i.id}-${i.unidad}`} list={datalistUnidades} defaultValue={i.unidad}
+                          onBlur={e => { handleUnidad(i.id, e.target.value); if (!e.target.value.trim()) e.target.value = i.unidad; }}
+                          onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          className="h-9 w-20 text-xs" autoComplete="off" aria-label={`Unidad de ${nombreItem}`} />
+                      </span>
+                    ) : (
+                      <CantidadCelda item={i} pago={pagos.get(i.id)} />
+                    )}
+                    {editable(i) ? (
+                      <Select className={`h-9 basis-full text-xs sm:max-w-56 sm:flex-1 sm:basis-auto ${i.proveedor_id ? '' : 'border-amber-400'}`} value={i.proveedor_id ?? ''}
+                        onChange={e => handleProveedor(i.id, e.target.value)} aria-label={`Proveedor de ${nombreItem}`}>
+                        <option value="">Elegir proveedor…</option>
+                        {proveedoresActivos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        {i.proveedor_id && !proveedoresActivos.some(p => p.id === i.proveedor_id) && <option value={i.proveedor_id}>{i.proveedores?.nombre ?? 'Proveedor'}</option>}
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{i.proveedores?.nombre ?? '—'}</span>
+                    )}
+                    {precio && <span className="ml-auto text-right text-xs tabular-nums text-muted-foreground">{precio}</span>}
+                  </div>
+                  {editable(i) ? (
+                    <details className="group text-xs">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-muted-foreground">
+                        <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                        <span className={cat ? '' : 'font-medium text-amber-700'}>{cat ? nombreCategoria(cat) : 'Falta la categoría'}</span>
+                        <span>· {i.precio_referencia !== null && i.precio_referencia !== undefined ? `ref. ${formatMonto(Number(i.precio_referencia))}/${baseDePrecio(i.unidad).etiqueta}` : 'sin precio de referencia'}</span>
+                      </summary>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Select className={`h-9 w-48 text-xs ${cat ? '' : 'border-amber-400'}`} value={cat ?? ''}
+                          onChange={e => handleCategoria(i.producto_id, nombreItem, e.target.value)} aria-label={`Categoría de ${nombreItem}`}>
+                          <option value="">Elegir categoría…</option>
                           <OpcionesCategoria />
                         </Select>
-                      ) : (
-                        <span className="text-xs">{categoriaDe(i.producto_id) ? nombreCategoria(categoriaDe(i.producto_id)!) : '—'}</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-2 whitespace-nowrap">
-                      {i.estado === 'pendiente' ? (
-                        <span className="inline-flex items-center gap-1 text-xs">
-                          S/
-                          <Input
-                            key={`${i.id}-${i.precio_referencia ?? ''}`}
-                            type="number" inputMode="decimal" min="0" step="0.01" placeholder="—"
-                            defaultValue={i.precio_referencia ?? ''}
-                            onBlur={e => handleReferencia(i.id, i.precio_referencia, e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                            className="h-8 w-20"
-                            aria-label={`Precio de referencia de ${i.productos?.nombre ?? 'producto'}`}
-                          />
+                        <span className="inline-flex items-center gap-1">
+                          Ref. S/
+                          <Input key={`${i.id}-${i.precio_referencia ?? ''}`} type="number" inputMode="decimal" min="0" step="0.01" placeholder="—"
+                            defaultValue={i.precio_referencia ?? ''} onBlur={e => handleReferencia(i.id, i.precio_referencia, e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} className="h-9 w-20"
+                            aria-label={`Precio de referencia de ${nombreItem}`} />
                           <span className="text-muted-foreground">/{baseDePrecio(i.unidad).etiqueta}</span>
                         </span>
-                      ) : (
-                        <span className="text-xs tabular-nums">
-                          {i.precio_referencia !== null && i.precio_referencia !== undefined ? `${formatMonto(Number(i.precio_referencia))}/${baseDePrecio(i.unidad).etiqueta}` : '—'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-2 text-right text-xs tabular-nums text-muted-foreground">
-                      {(() => {
-                        if (i.estado === 'comprado') return <PrecioPagadoCelda pago={pagos.get(i.id)} referencia={i.precio_referencia} />;
-                        if (i.estado !== 'pendiente') return '';
-                        const ref = referenciaPorUnidadLinea(i.precio_referencia, i.unidad);
-                        if (ref !== undefined) return <span title="Estimado con tu precio de referencia">≈ {formatMonto(roundTwo(ref * Number(i.cantidad)))}</span>;
-                        const h = habituales.get(`${i.producto_id}|${i.unidad}`);
-                        return h ? <span title="Estimado con el precio habitual">≈ {formatMonto(roundTwo(h.unitario * Number(i.cantidad)))}</span> : '—';
-                      })()}
-                    </td>
-                    <td className="py-2 pr-2 text-center">
-                      {i.estado === 'pendiente' ? (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 cursor-pointer accent-red-600"
-                          checked={!!i.urgente}
-                          onChange={e => handleUrgente(i.id, e.target.checked)}
-                          aria-label={`Marcar ${i.productos?.nombre ?? 'producto'} como urgente`}
-                        />
-                      ) : (
-                        i.urgente && <span className="text-xs font-bold text-red-700">⚡</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-2 text-xs text-muted-foreground">{i.nota ?? ''}</td>
-                    {enviado && (
-                      <td className="py-2 pr-2">
-                        <EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} />
-                      </td>
-                    )}
-                    <td className="py-2 text-right">
-                      {i.estado === 'pendiente' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleEliminar(i.id)} aria-label={`Quitar ${i.productos?.nombre ?? 'producto'}`} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                    </details>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{cat ? nombreCategoria(cat) : 'Sin categoría'}{i.precio_referencia !== null && i.precio_referencia !== undefined ? ` · ref. ${formatMonto(Number(i.precio_referencia))}/${baseDePrecio(i.unidad).etiqueta}` : ''}</p>
+                  )}
+                  {enviado && i.estado !== 'pendiente' && (
+                    <div><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} /></div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Presupuesto: cuánto usaría esta lista de cada tope */}
+        {/* Presupuesto: el costo estimado siempre a la vista; las barras, plegadas salvo que algo pase el tope */}
         {lineasEstimadas.length > 0 && (
-          <div className="space-y-3 rounded-lg border bg-yayis-cream p-3">
-            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-yayis-dark">
-              <Gauge size={16} /> Esta lista cuesta unos <strong>{formatMonto(totalEstimado)}</strong>
-              <span className="text-xs font-normal text-muted-foreground">(con el precio habitual de cada producto)</span>
-            </p>
-            {hayTopes ? (
-              barras.filter(b => b.uso.tope).map(b => (
-                <BarraPresupuesto key={b.uso.categoria} uso={b.uso} extra={b.extra}
-                  etiquetaExtra={b.otros > 0 ? `esta lista y otras sin comprar (estimado)` : 'esta lista (estimado)'} />
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">Todavía no hay presupuesto aprobado para este mes: cuando Gerencia lo apruebe, aquí verás cuánto usa la lista de cada tope.</p>
-            )}
-            {hayTopes && barras.some(b => !b.uso.tope) && (
-              <p className="text-xs text-muted-foreground">
-                Sin tope este mes: {barras.filter(b => !b.uso.tope).map(b => `${nombreCategoria(b.uso.categoria)} (${formatMonto(b.esta)})`).join(', ')}.
-              </p>
-            )}
-            {(estimado.sinCategoria > 0 || estimado.sinPrecio > 0) && (
-              <p className="text-xs text-amber-800">
-                {estimado.sinCategoria > 0 && <>{estimado.sinCategoria} producto(s) sin categoría: elígela en la columna <strong>Categoría</strong>. </>}
-                {estimado.sinPrecio > 0 && <>{estimado.sinPrecio} producto(s) todavía sin precio conocido (no se compraron antes en esa unidad): no entran en el estimado.</>}
-              </p>
-            )}
-          </div>
+          <details className="group rounded-lg border bg-yayis-cream" open={excedidas.length > 0}>
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 p-3 text-sm font-medium text-yayis-dark">
+              <Gauge size={16} className="shrink-0" /> <span>{totalEstimado > 0 ? <>Esta lista cuesta unos <strong>{formatMonto(totalEstimado)}</strong></> : 'Costo de la lista: todavía sin precios conocidos'}</span>
+              {excedidas.length > 0
+                ? <span className="text-xs font-semibold text-red-700">· pasa el tope de {excedidas.map(b => nombreCategoria(b.uso.categoria)).join(', ')}</span>
+                : hayTopes && <span className="text-xs font-normal text-emerald-700">· dentro del presupuesto</span>}
+              <ChevronDown size={15} className="ml-auto transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="space-y-3 px-3 pb-3">
+              <p className="text-xs text-muted-foreground">Con tu precio de referencia o, si no hay, con el precio habitual de cada producto.</p>
+              {hayTopes ? (
+                barras.filter(b => b.uso.tope).map(b => (
+                  <BarraPresupuesto key={b.uso.categoria} uso={b.uso} extra={b.extra}
+                    etiquetaExtra={b.otros > 0 ? `esta lista y otras sin comprar (estimado)` : 'esta lista (estimado)'} />
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">Todavía no hay presupuesto aprobado para este mes: cuando Gerencia lo apruebe, aquí verás cuánto usa la lista de cada tope.</p>
+              )}
+              {hayTopes && barras.some(b => !b.uso.tope) && (
+                <p className="text-xs text-muted-foreground">
+                  Sin tope este mes: {barras.filter(b => !b.uso.tope).map(b => `${nombreCategoria(b.uso.categoria)} (${formatMonto(b.esta)})`).join(', ')}.
+                </p>
+              )}
+              {(estimado.sinCategoria > 0 || estimado.sinPrecio > 0) && (
+                <p className="text-xs text-amber-800">
+                  {estimado.sinCategoria > 0 && <>{estimado.sinCategoria} producto(s) sin categoría: elígela en «Falta la categoría» debajo del producto. </>}
+                  {estimado.sinPrecio > 0 && <>{estimado.sinPrecio} producto(s) todavía sin precio conocido: no entran en el estimado.</>}
+                </p>
+              )}
+            </div>
+          </details>
         )}
 
         {pidiendoMotivo && excedidas.length > 0 && pedido.estado === 'borrador' && (
@@ -581,41 +548,41 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
           </div>
         )}
 
-        {urgentes > 0 && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-            ⚡ {urgentes === 1 ? '1 producto urgente' : `${urgentes} productos urgentes`}: Compras {pedido.estado === 'borrador' ? 'los verá primero cuando envíes la lista' : 'ya los ve primero en su ruta'}.
-          </p>
-        )}
-
         {sinProveedor > 0 && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            {sinProveedor === 1 ? '1 producto' : `${sinProveedor} productos`} sin proveedor. Elígelo en la columna <strong>Proveedor</strong> para que Compras vea la lista ya agrupada por proveedor; si no, tendrá que asignarlo él.
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <span>{sinProveedor === 1 ? '1 producto' : `${sinProveedor} productos`} sin proveedor: elígelo para que Compras vea la lista agrupada.</span>
             {recordables.length > 0 && (
-              <Button size="sm" variant="outline" className="mt-2 block border-amber-400" onClick={handleCompletarRecordados}>
-                Completar los proveedores que el sistema ya recuerda ({recordables.length})
+              <Button size="sm" variant="outline" className="border-amber-400 bg-white" onClick={handleCompletarRecordados}>
+                Completar los que el sistema recuerda ({recordables.length})
               </Button>
             )}
-          </p>
+          </div>
         )}
 
-        {/* Acciones */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        {/* Acciones: fijas abajo mientras se arma la lista */}
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-t pt-3 ${pedido.estado === 'borrador' ? 'sticky -bottom-4 z-10 -mx-6 bg-white/95 px-6 pb-4 backdrop-blur lg:-bottom-6 lg:pb-6' : ''}`}>
           {pedido.estado === 'borrador' ? (
-            <p className="text-xs text-muted-foreground">Compras todavía no ve esta lista. Envíala cuando esté completa.</p>
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-yayis-dark">{items.length} producto(s)</strong>
+              {totalEstimado > 0 && <> · ≈ {formatMonto(totalEstimado)}</>}
+              {urgentes > 0 && <span className="text-red-700"> · ⚡ {urgentes} urgente(s)</span>}
+              <span className="block">Compras no la ve hasta que la envíes.</span>
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">
               Enviada a Compras{pedido.enviado_at ? ` el ${new Date(pedido.enviado_at).toLocaleString('es-PE', { timeZone: 'America/Lima', weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}.
               {' '}Si agregas algo más, Compras lo verá al instante.
+              {urgentes > 0 && <span className="text-red-700"> ⚡ {urgentes} urgente(s): ya los ve primero.</span>}
             </p>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setConfirmCancelar(true)} className="text-red-600">
-              {pedido.estado === 'borrador' ? 'Descartar lista' : 'Cancelar pedido'}
+            <Button variant="ghost" size="sm" onClick={() => setConfirmCancelar(true)} className="text-red-600">
+              {pedido.estado === 'borrador' ? 'Descartar' : 'Cancelar pedido'}
             </Button>
             {pedido.estado === 'borrador' && (
-              <Button size="sm" onClick={handleEnviar} disabled={items.length === 0}
-                className={pidiendoMotivo && excedidas.length > 0 ? 'bg-red-600 hover:bg-red-700' : ''}>
-                <Send size={14} className="mr-1" /> {pidiendoMotivo && excedidas.length > 0 ? 'Enviar igual' : 'Enviar a Compras'}
+              <Button onClick={handleEnviar} disabled={items.length === 0}
+                className={`h-10 ${pidiendoMotivo && excedidas.length > 0 ? 'bg-red-600 hover:bg-red-700' : ''}`}>
+                <Send size={15} className="mr-1" /> {pidiendoMotivo && excedidas.length > 0 ? 'Enviar igual' : 'Enviar a Compras'}
               </Button>
             )}
           </div>
