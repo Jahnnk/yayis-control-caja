@@ -288,10 +288,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       ...candidatas.filter(c => lineas[c.pedido_item_id]?.incluir).map(c => ({
         clave: `L:${c.pedido_item_id}`,
         estimado: (() => { const h = habituales.get(claveProducto(c.producto_id, c.unidad)); const q = parseFloat(lineas[c.pedido_item_id]?.cantidad ?? ''); return h && q > 0 ? h.unitario * q : null; })(),
+        // Unidad «sol»: el monto es la cantidad (2 sol = S/ 2), no se reparte.
+        fijo: c.unidad === 'sol' ? parseFloat(lineas[c.pedido_item_id]?.cantidad ?? '') || null : null,
       })),
       ...extras.map((e, i) => ({ e, i })).filter(x => x.e.nombre.trim()).map(({ e, i }) => ({
         clave: `E:${i}`,
         estimado: (() => { const p = productoDeExtra(e.nombre); const h = p ? habituales.get(claveProducto(p.id, e.unidad)) : undefined; const q = parseFloat(e.cantidad); return h && q > 0 ? h.unitario * q : null; })(),
+        fijo: e.unidad === 'sol' ? parseFloat(e.cantidad) || null : null,
       })),
     ];
     return repartirTotal(total, lista);
