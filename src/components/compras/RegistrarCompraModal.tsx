@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EvidenciaInput } from '@/components/compras/EvidenciaInput';
+import { Segmentado } from '@/components/ui/segmentado';
 import { AvisoPrecio } from '@/components/compras/AvisoPrecio';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { useUltimosPreciosProveedor } from '@/hooks/useUltimosPreciosProveedor';
@@ -729,24 +730,5 @@ function PasoTitulo({ numero, titulo, listo }: { numero: number; titulo: string;
       </span>
       {titulo}
     </h4>
-  );
-}
-
-/** Botones de opción grandes, del mismo ancho, para elegir con el pulgar. */
-function Segmentado({ etiqueta, opciones, valor, onCambiar }: {
-  etiqueta: string;
-  opciones: { valor: string; texto: string; deshabilitado?: boolean }[];
-  valor: string;
-  onCambiar: (v: string) => void;
-}) {
-  return (
-    <div className="flex gap-2" role="group" aria-label={etiqueta}>
-      {opciones.map(o => (
-        <Button key={o.valor} type="button" variant={valor === o.valor ? 'default' : 'outline'} aria-pressed={valor === o.valor}
-          disabled={o.deshabilitado} onClick={() => onCambiar(o.valor)} className="h-10 flex-1 px-2 text-sm">
-          {o.texto}
-        </Button>
-      ))}
-    </div>
   );
 }
