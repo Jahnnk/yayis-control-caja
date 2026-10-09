@@ -1,34 +1,10 @@
 -- =============================================================
--- Checklist de recepción por producto (pedido de Jahnn, 8-oct-2026)
--- Ejecutar UNA VEZ en el SQL Editor de Supabase. Es seguro volver a ejecutarlo.
---
--- El administrador revisa cada producto que le llega y marca:
---   conforme · incompleto (cuánto llegó) · no llegó · llegó mal   (los problemas piden una nota)
--- «Entregado» (entregado_at) pasa a significar «el administrador ya revisó este producto» y recepcion_estado
--- dice cómo salió la revisión. Lo ya marcado como entregado antes queda como «conforme».
--- Reglas que hace cumplir la base:
---   · solo el administrador de la sede (o Gerencia) registra la recepción; Compras no
---   · un problema (incompleto / no llegó / llegó mal) exige una nota
---   · «incompleto» exige cuánto llegó, y debe ser menos de lo comprado
---   · si se deshace la revisión, se borra el resultado
--- La lista sigue pasando sola a «recibido» cuando todos los productos comprados están revisados.
--- No cambia ninguna compra ni dinero.
+-- Arreglo: «Conforme», «Problema» y «Marcar todo conforme» fallaban (9-oct-2026)
+-- Error que veía el administrador: invalid input value for enum rol_usuario: ""
+-- Causa: la regla que revisa quién registra la recepción comparaba el rol con un texto vacío
+-- sin convertirlo a texto. Aquí se vuelve a crear la misma función, con ese único cambio (::TEXT).
+-- Ejecutar UNA VEZ en el SQL Editor de Supabase. Es seguro volver a ejecutarlo. No cambia datos.
 -- =============================================================
-
-ALTER TABLE pedido_items ADD COLUMN IF NOT EXISTS recepcion_estado TEXT;
-ALTER TABLE pedido_items ADD COLUMN IF NOT EXISTS cantidad_recibida NUMERIC(10,2);
-ALTER TABLE pedido_items ADD COLUMN IF NOT EXISTS recepcion_nota TEXT;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pedido_items_recepcion_valida') THEN
-    ALTER TABLE pedido_items ADD CONSTRAINT pedido_items_recepcion_valida
-      CHECK (recepcion_estado IS NULL OR recepcion_estado IN ('conforme', 'incompleto', 'no_llego', 'llego_mal'));
-  END IF;
-END $$;
-
--- Lo que ya se había marcado como entregado queda como «conforme».
-UPDATE pedido_items SET recepcion_estado = 'conforme' WHERE entregado_at IS NOT NULL AND recepcion_estado IS NULL;
 
 CREATE OR REPLACE FUNCTION public.proteger_entrega_item()
 RETURNS TRIGGER AS $$
@@ -81,10 +57,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
--- (el disparador trg_proteger_entrega_item ya existe y usa esta función)
-
--- Verificación: las 3 columnas nuevas (3) y cuántos productos quedaron como «conforme».
-SELECT
-  (SELECT count(*) FROM information_schema.columns
-    WHERE table_name = 'pedido_items' AND column_name IN ('recepcion_estado', 'cantidad_recibida', 'recepcion_nota')) AS columnas,
-  (SELECT count(*) FROM pedido_items WHERE recepcion_estado = 'conforme') AS ya_conformes;
+-- Verificación: debe decir «arreglado».
+SELECT CASE WHEN pg_get_functiondef('public.proteger_entrega_item'::regproc) LIKE '%get_user_rol()::TEXT%'
+            THEN 'arreglado' ELSE 'todavía no' END AS estado;

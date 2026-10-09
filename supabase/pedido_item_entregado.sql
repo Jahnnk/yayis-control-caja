@@ -31,7 +31,7 @@ BEGIN
     RETURN NEW;
   END IF;
   -- Sin sesión (SQL Editor) se permite; con sesión, solo administrador o Gerencia.
-  IF auth.uid() IS NOT NULL AND COALESCE(get_user_rol(), '') NOT IN ('admin', 'owner') THEN
+  IF auth.uid() IS NOT NULL AND COALESCE(get_user_rol()::TEXT, '') NOT IN ('admin', 'owner') THEN
     RAISE EXCEPTION 'Solo el administrador de la sede puede confirmar que un producto fue entregado.';
   END IF;
   IF NEW.entregado_at IS NOT NULL THEN
