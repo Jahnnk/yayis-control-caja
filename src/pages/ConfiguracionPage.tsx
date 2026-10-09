@@ -6,7 +6,8 @@ import { CATEGORIAS_PRESUPUESTO, nombreCategoria } from '@/lib/presupuesto';
 import { useFondos } from '@/hooks/useFondos';
 import { useSedes } from '@/hooks/useSedes';
 import { useToast } from '@/components/ui/toast';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Desplegable } from '@/components/ui/desplegable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
@@ -149,12 +150,16 @@ export function ConfiguracionPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-yayis-dark">Configuracion</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-yayis-dark">Configuración</h1>
+        <p className="text-sm text-muted-foreground">Se usa pocas veces: cada sección está plegada con su resumen. Tócala para cambiarla.</p>
+      </div>
 
       {/* Categorías */}
-      <Card>
+      <Desplegable titulo={`Categorías de gasto${sedeActiva ? ` — ${sedeActiva.nombre}` : ''}`} resumen={<span>{categorias.filter(c => c.activa).length} activas{categorias.some(c => c.activa && !c.tipo_gasto) ? ` · ${categorias.filter(c => c.activa && !c.tipo_gasto).length} sin fijo/variable` : ''}{categorias.some(c => c.activa && !c.categoria_presupuesto) ? ` · ${categorias.filter(c => c.activa && !c.categoria_presupuesto).length} sin presupuesto` : ''}</span>}>
+      <div className="[&>*]:border-0 [&>*]:shadow-none [&_.p-6]:px-0"><Card>
         <CardHeader>
-          <CardTitle>Categorías de gasto{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
+
           <p className="text-xs text-muted-foreground">El tipo (gasto fijo o variable) se usa en el Excel de gastos por categoría y se aplica igual en las 3 sedes.</p>
           <p className="text-xs text-muted-foreground">«En el presupuesto» dice a qué barra del presupuesto suma cada gasto (la lista única de Cash Control). Sin emparejar, el gasto se ve pero no consume ningún tope.</p>
         </CardHeader>
@@ -236,12 +241,14 @@ export function ConfiguracionPage() {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card></div>
+      </Desplegable>
 
       {/* Fondos */}
-      <Card>
+      <Desplegable titulo={`Fondo de caja chica${sedeActiva ? ` — ${sedeActiva.nombre}` : ''}`} resumen={<span>{fondos ? `Efectivo ${formatMonto(Number(fondos.fondo_efectivo))} · cuentas ${formatMonto(Number(fondos.fondo_cuentas))}` : 'Sin configurar'}</span>}>
+      <div className="[&>*]:border-0 [&>*]:shadow-none [&_.p-6]:px-0"><Card>
         <CardHeader>
-          <CardTitle>Fondo de caja chica{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle>
+
           <p className="text-xs text-muted-foreground">Para cambiar de sede, usa el selector de arriba.</p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -302,12 +309,14 @@ export function ConfiguracionPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card></div>
+      </Desplegable>
 
       {/* Sedes */}
-      <Card>
+      <Desplegable titulo="Sedes, días de compra y montos" resumen={<span>{sedes.filter(x => x.activa).map(x => `${x.nombre} ${DIAS_SEMANA.filter(d => (x.dias_compra ?? []).includes(d.valor)).map(d => d.corto).join('/') || 'sin días'}`).join(' · ')}</span>}>
+      <div className="[&>*]:border-0 [&>*]:shadow-none [&_.p-6]:px-0"><Card>
         <CardHeader>
-          <CardTitle>Sedes y días de compra</CardTitle>
+
           <p className="text-xs text-muted-foreground">Marca los días en que Compras sale a comprar para cada sede. Así las compras y los pagos no se juntan en un solo día. El <strong>monto semanal para compras</strong> es el dinero que el administrador maneja para Compras cada semana. El <strong>tope sin boleta</strong> es lo máximo que Compras puede comprar en efectivo, por compra, cuando no le dan boleta.</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -380,7 +389,8 @@ export function ConfiguracionPage() {
             })}
           </div>
         </CardContent>
-      </Card>
+      </Card></div>
+      </Desplegable>
     </div>
   );
 }
