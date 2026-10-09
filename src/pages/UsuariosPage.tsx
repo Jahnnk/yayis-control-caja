@@ -120,7 +120,7 @@ export function UsuariosPage() {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle>Crear Usuario</CardTitle>
+            <CardTitle>Crear usuario</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -133,7 +133,7 @@ export function UsuariosPage() {
                 <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="mt-1" />
               </div>
               <div>
-                <label className="text-sm font-medium">Contrasena</label>
+                <label className="text-sm font-medium">Contraseña</label>
                 <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="mt-1" />
               </div>
               <div>

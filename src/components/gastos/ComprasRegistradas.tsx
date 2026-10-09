@@ -8,7 +8,7 @@ function FilasCompras({ compras }: { compras: CompraDeCompras[] }) {
     <div className="divide-y rounded-md border bg-white text-sm">
       {compras.map(c => (
         <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-          <span className="w-24 capitalize text-muted-foreground">{fechaCorta(c.fecha)}</span>
+          <span className="w-24 text-muted-foreground">{fechaCorta(c.fecha)}</span>
           <span className="min-w-[8rem] flex-1 font-medium">{c.proveedor}</span>
           {c.evidenciaPendiente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Falta una foto</span>}
           <span className="font-bold">{formatMonto(c.total)}</span>

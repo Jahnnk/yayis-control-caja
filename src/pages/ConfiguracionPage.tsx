@@ -52,7 +52,7 @@ export function ConfiguracionPage() {
     const { error } = await createCategoria(newCat, sedeId);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
-      addToast('Categoria creada', 'success');
+      addToast('Categoría creada', 'success');
       setNewCat('');
     }
   }
@@ -80,7 +80,7 @@ export function ConfiguracionPage() {
     const { error } = await updateCategoria(id, { nombre: editCatName.trim() });
     if (error) addToast(`Error: ${error}`, 'error');
     else {
-      addToast('Categoria actualizada', 'success');
+      addToast('Categoría actualizada', 'success');
       setEditingCat(null);
     }
   }
@@ -100,7 +100,7 @@ export function ConfiguracionPage() {
   async function handleToggleCategoria(id: string, activa: boolean) {
     const { error } = await updateCategoria(id, { activa: !activa });
     if (error) addToast(`Error: ${error}`, 'error');
-    else addToast(activa ? 'Categoria desactivada' : 'Categoria activada', 'success');
+    else addToast(activa ? 'Categoría desactivada' : 'Categoría activada', 'success');
   }
 
   async function handleSaveFondos() {
@@ -166,7 +166,7 @@ export function ConfiguracionPage() {
         <CardContent className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Nueva categoria..."
+              placeholder="Nueva categoría..."
               value={newCat}
               onChange={e => setNewCat(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddCategoria()}

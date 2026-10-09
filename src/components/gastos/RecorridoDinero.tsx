@@ -79,7 +79,7 @@ export function RecorridoDinero({ saldo }: { saldo: SaldoSemanal }) {
             <div className="divide-y border-t">
               {sinMarcar.gastos.map(g => (
                 <div key={g.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5">
-                  <span className="w-20 capitalize text-muted-foreground">{fechaCorta(g.fecha)}</span>
+                  <span className="w-20 text-muted-foreground">{fechaCorta(g.fecha)}</span>
                   <span className="min-w-[8rem] flex-1">{g.descripcion}</span>
                   <span className="font-medium">{formatMonto(g.monto)}</span>
                 </div>

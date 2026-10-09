@@ -138,8 +138,8 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!form.descripcion.trim()) return addToast('La descripcion es obligatoria', 'error');
-    if (!form.categoria_id) return addToast('Selecciona una categoria', 'error');
+    if (!form.descripcion.trim()) return addToast('Escribe en qué se gastó', 'error');
+    if (!form.categoria_id) return addToast('Elige una categoría', 'error');
     if (!form.monto || parseFloat(form.monto) <= 0) return addToast('El monto debe ser mayor a 0', 'error');
     if (pideMotivo && !motivoTope.trim()) return addToast('Este gasto pasa el tope del presupuesto: escribe por qué', 'error');
     const datos: GastoFormData = { ...form, motivo_sobre_tope: pideMotivo ? motivoTope.trim() : undefined };

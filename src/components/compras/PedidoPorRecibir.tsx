@@ -125,7 +125,7 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onProblema, 
   return (
     <details className="group rounded-lg border bg-white shadow-sm">
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
-        <span className="font-bold capitalize text-yayis-dark">{pedido.urgente ? 'Urgente · ' : ''}{fechaCorta(pedido.fecha_compra)}</span>
+        <span className="font-bold text-yayis-dark">{pedido.urgente ? 'Urgente · ' : ''}{fechaCorta(pedido.fecha_compra)}</span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[pedido.estado].clase}`}>{ESTADO_PEDIDO[pedido.estado].label}</span>
         <span className="text-xs text-muted-foreground">
           {comprados.length} producto(s) recibido(s)

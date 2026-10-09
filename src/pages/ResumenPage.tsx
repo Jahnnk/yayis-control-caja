@@ -253,7 +253,7 @@ export function ResumenPage() {
       // Guardar gasto individual para el detalle "Top 5 por categoria"
       if (!itemsByCategoria.has(catName)) itemsByCategoria.set(catName, []);
       itemsByCategoria.get(catName)!.push({
-        descripcion: (g.descripcion as string) ?? '(sin descripcion)',
+        descripcion: (g.descripcion as string) ?? '(sin descripción)',
         monto,
         fecha: g.fecha as string,
         metodo,
@@ -318,7 +318,7 @@ export function ResumenPage() {
       if ((g.estado as string) !== 'pendiente') continue; // ignorar gastos ya pagados/repuestos
       allGastosFlat.push({
         id: g.id as string,
-        descripcion: ((g.descripcion as string) ?? '(sin descripcion)').trim(),
+        descripcion: ((g.descripcion as string) ?? '(sin descripción)').trim(),
         monto: Number(g.monto),
         fecha: g.fecha as string,
         metodo: g.metodo_pago as string,
@@ -619,7 +619,7 @@ export function ResumenPage() {
     setConfirmVerificarIdx(null);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
-      addToast('Grupo verificado. Movido al historico.', 'success');
+      addToast('Grupo verificado. Movido al histórico.', 'success');
       await fetchValoresRevisados(sedeId);
     }
   }
@@ -629,7 +629,7 @@ export function ResumenPage() {
     const { error } = await deleteReposicion(confirmDeleteRepoId);
     setConfirmDeleteRepoId(null);
     if (error) addToast(`Error: ${error}`, 'error');
-    else { addToast('Reposicion eliminada. Sus gastos volvieron a pendiente.', 'success'); loadData(); }
+    else { addToast('Reposición eliminada. Sus gastos volvieron a «por reponer».', 'success'); loadData(); }
   }
 
   async function handleConfirmReabrir() {
@@ -680,7 +680,7 @@ export function ResumenPage() {
       {/* Cabecera y filtros del periodo */}
       <CabeceraGerencia
         titulo="Resumen"
-        explicacion={isOwner ? <>La caja de {encargado}{sedeActiva ? ` (${sedeActiva.nombre})` : ''}: lo que falta reponer y en qué se gastó.</> : 'Tus gastos del periodo.'}
+        explicacion={isOwner ? <>La caja de {encargado}{sedeActiva ? ` (${sedeActiva.nombre})` : ''}: lo que falta reponer y en qué se gastó.</> : 'Tus gastos del período.'}
         acciones={
         <div className="flex flex-wrap gap-2">
           <Select value={filterAnio} onChange={e => setFilterAnio(parseInt(e.target.value))} className="w-24">
@@ -688,7 +688,7 @@ export function ResumenPage() {
             <option value={currentYear - 1}>{currentYear - 1}</option>
           </Select>
           <Select value={filterMes} onChange={e => { setFilterMes(parseInt(e.target.value)); setFilterSemana(0); }} className="w-44">
-            <option value={0}>Todo el Año</option>
+            <option value={0}>Todo el año</option>
             {Array.from({ length: 12 }, (_, i) => {
               const d = new Date(filterAnio, i, 1);
               const label = d.toLocaleDateString('es-PE', { month: 'long' });
@@ -711,26 +711,26 @@ export function ResumenPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-yayis-accent" /><span className="text-xs text-muted-foreground">Total Gastado</span></div>
+            <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-yayis-accent" /><span className="text-xs text-muted-foreground">Total gastado</span></div>
             <p className="text-xl font-bold">{formatMonto(totalGastado)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><CheckCircle size={16} className="text-emerald-500" /><span className="text-xs text-muted-foreground">Total Pagado</span></div>
+            <div className="flex items-center gap-2 mb-1"><CheckCircle size={16} className="text-emerald-500" /><span className="text-xs text-muted-foreground">Repuesto</span></div>
             <p className="text-xl font-bold text-emerald-600">{formatMonto(totalPagado)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} className="text-amber-500" /><span className="text-xs text-muted-foreground">Total Pendiente</span></div>
+            <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} className="text-amber-500" /><span className="text-xs text-muted-foreground">Por reponer</span></div>
             <p className="text-xl font-bold text-amber-600">{formatMonto(totalPendiente)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con {encargado} esta en "Reponer".</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con {encargado} está en «Reponer».</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-muted-foreground" /><span className="text-xs text-muted-foreground">Gastado Efectivo / Cuentas</span></div>
+            <div className="flex items-center gap-2 mb-1"><DollarSign size={16} className="text-muted-foreground" /><span className="text-xs text-muted-foreground">Gastado en efectivo / cuentas</span></div>
             <p className="text-lg font-bold">{formatMonto(totalEfectivo)} <span className="text-muted-foreground">/</span> {formatMonto(totalCuentas)}</p>
           </CardContent>
         </Card>
@@ -743,14 +743,14 @@ export function ResumenPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-yayis-green/30 bg-yayis-cream">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer Efectivo</span></div>
+              <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer en efectivo</span></div>
               <p className="text-xl font-bold text-yayis-green">{formatMonto(saldo.deudaEfectivo)}</p>
               <p className="text-xs text-muted-foreground">Deuda total en efectivo (todos los meses)</p>
             </CardContent>
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer Cuentas</span></div>
+              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer en cuentas</span></div>
               <p className="text-xl font-bold text-blue-600">{formatMonto(saldo.deudaCuentas)}</p>
               <p className="text-xs text-muted-foreground">Deuda total en cuentas (todos los meses)</p>
             </CardContent>
@@ -780,17 +780,17 @@ export function ResumenPage() {
             {/* Saldo */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-red-600 font-medium">Deuda Total</p>
+                <p className="text-xs text-red-600 font-medium">Deuda total</p>
                 <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))}</p>
                 <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.deudaEfectivo)} | Ct: {formatMonto(saldo.deudaCuentas)}</p>
               </div>
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-emerald-600 font-medium">Repuesto Total</p>
+                <p className="text-xs text-emerald-600 font-medium">Repuesto total</p>
                 <p className="text-lg font-bold text-emerald-700">{formatMonto(roundTwo(saldo.repuestoEfectivo + saldo.repuestoCuentas))}</p>
                 <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.repuestoEfectivo)} | Ct: {formatMonto(saldo.repuestoCuentas)}</p>
               </div>
               <div className={`border-2 rounded-lg p-3 text-center ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-                <p className="text-xs font-medium">Saldo Pendiente</p>
+                <p className="text-xs font-medium">Saldo por reponer</p>
                 <p className={`text-lg font-bold ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
                   {formatMonto(roundTwo(Math.max(0, saldo.saldoEfectivo) + Math.max(0, saldo.saldoCuentas)))}
                 </p>
@@ -800,7 +800,7 @@ export function ResumenPage() {
 
             {/* Formulario */}
             <div className="border-t pt-4">
-              <h4 className="text-sm font-bold mb-1">Registrar Reposición</h4>
+              <h4 className="text-sm font-bold mb-1">Registrar reposición</h4>
               <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}.</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div><label className="text-xs font-medium">Fecha</label><Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" /></div>
@@ -818,13 +818,13 @@ export function ResumenPage() {
                 if (error) addToast(`Error: ${error}`, 'error');
                 else {
                   if (warning) addToast(warning, 'warning');
-                  else addToast('Reposicion registrada', 'success');
+                  else addToast('Reposición registrada', 'success');
                   setRepoMonto(''); setRepoNotas(''); loadData();
                 }
                 setRepoSaving(false);
               }}>
                 {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
-                Registrar Reposicion
+                Registrar reposición
               </Button>
             </div>
 
@@ -834,7 +834,7 @@ export function ResumenPage() {
                 <h4 className="text-sm font-bold mb-3">Historial de reposiciones</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Accion</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Acción</th></tr></thead>
                     <tbody>
                       {reposiciones.map(r => (
                         <tr key={r.id} className="border-b">
@@ -877,8 +877,8 @@ export function ResumenPage() {
             {valoresActivos.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-6">
                 {verificadosEnPeriodo.length > 0
-                  ? 'No hay valores nuevos por revisar. Ya verificaste todos los grupos detectados en este periodo.'
-                  : 'No hay valores sospechosos en este periodo.'}
+                  ? 'No hay valores nuevos por revisar. Ya verificaste todos los grupos detectados en este período.'
+                  : 'No hay valores sospechosos en este período.'}
               </p>
             ) : (
               <div className="space-y-4">
@@ -924,7 +924,7 @@ export function ResumenPage() {
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">
                         {isAlta
-                          ? 'Misma descripcion y mismo monto — probablemente es un duplicado o un pago recurrente. Verifica.'
+                          ? 'Misma descripción y mismo monto — probablemente es un duplicado o un pago recurrente. Verifica.'
                           : 'Mismo monto exacto en gastos con descripciones distintas — revisa si son pagos independientes.'}
                       </p>
                       <table className="w-full text-xs">
@@ -1021,7 +1021,7 @@ export function ResumenPage() {
                 </CardHeader>
                 <CardContent>
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoría</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
                     <tbody>
                       {catEfPagado.map(c => (
                         <tr key={c.nombre} className="border-b">
@@ -1045,7 +1045,7 @@ export function ResumenPage() {
                 </CardHeader>
                 <CardContent>
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoría</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
                     <tbody>
                       {catCtPagado.map(c => (
                         <tr key={c.nombre} className="border-b">
@@ -1079,7 +1079,7 @@ export function ResumenPage() {
                 </CardHeader>
                 <CardContent>
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoría</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
                     <tbody>
                       {categoriasEfectivo.map(c => (
                         <tr key={c.nombre} className="border-b">
@@ -1103,7 +1103,7 @@ export function ResumenPage() {
                 </CardHeader>
                 <CardContent>
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoria</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-1.5 font-medium">Categoría</th><th className="text-right py-1.5 font-medium">Monto</th><th className="text-right py-1.5 font-medium">%</th></tr></thead>
                     <tbody>
                       {categoriasCuentas.map(c => (
                         <tr key={c.nombre} className="border-b">
@@ -1124,19 +1124,19 @@ export function ResumenPage() {
           </div>
         </Desplegable>
       )}
-      <Desplegable titulo="Por semana, gráficos y lo más gastado" resumen={<span>Total del periodo <strong className="text-yayis-dark">{formatMonto(totalGastado)}</strong></span>}>
+      <Desplegable titulo="Por semana, gráficos y lo más gastado" resumen={<span>Total del período <strong className="text-yayis-dark">{formatMonto(totalGastado)}</strong></span>}>
         <div className="space-y-6">
       {/* Tabla por semana (solo si no se filtro por semana) */}
       {filterSemana === 0 && (
         <Card>
-          <CardHeader><CardTitle>{isAnual ? 'Resumen por Mes' : 'Resumen por Semana'}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{isAnual ? 'Resumen por mes' : 'Resumen por semana'}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 font-medium">{isAnual ? 'Mes' : 'Semana'}</th>
-                    <th className="text-right py-2 font-medium">Total Gastado</th>
+                    <th className="text-right py-2 font-medium">Total gastado</th>
                     <th className="text-right py-2 font-medium">Efectivo</th>
                     <th className="text-right py-2 font-medium">Cuentas</th>
                     <th className="text-right py-2 font-medium">Pendiente</th>
@@ -1173,7 +1173,7 @@ export function ResumenPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle>{filterSemana === 0 ? (isAnual ? 'Gasto por Mes' : 'Gasto por Semana') : 'Gasto por Categoria'}</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{filterSemana === 0 ? (isAnual ? 'Gasto por mes' : 'Gasto por semana') : 'Gasto por categoría'}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={barData}>
@@ -1188,7 +1188,7 @@ export function ResumenPage() {
         </Card>
         {filterSemana === 0 && (
           <Card>
-            <CardHeader><CardTitle>{isAnual ? 'Categorias por Mes' : 'Categorias por Semana'}</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{isAnual ? 'Categorías por mes' : 'Categorías por semana'}</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={stackedData}>
@@ -1226,7 +1226,7 @@ export function ResumenPage() {
       {topCategorias.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <CardHeader><CardTitle>Top 5 Categorias</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Las 5 categorías con más gasto</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {topCategorias.map((c, i) => (
@@ -1252,8 +1252,8 @@ export function ResumenPage() {
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} Gastos por Categoria</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? `Todos los gastos pendientes por categoria (faltan reponer a ${encargado})` : `Los ${topItemsCount} gastos pendientes mas costosos por categoria (faltan reponer a ${encargado})`}</p>
+                  <CardTitle>Detalle: {topItemsCount === 'todos' ? 'Todos los' : `Top ${topItemsCount}`} gastos por categoría</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">{topItemsCount === 'todos' ? `Todos los gastos por reponer, por categoría (se le deben a ${encargado})` : `Los ${topItemsCount} gastos por reponer más altos de cada categoría (se le deben a ${encargado})`}</p>
                 </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                   <div className="inline-flex rounded-md border border-gray-200 bg-white" role="group">
@@ -1292,7 +1292,7 @@ export function ResumenPage() {
               </CardHeader>
               <CardContent>
                 {topItemsPorCategoria.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">No hay gastos pendientes por reponer en este periodo</p>
+                  <p className="text-center text-sm text-muted-foreground py-8">No hay gastos por reponer en este período</p>
                 ) : (
                   <div className="space-y-5">
                     {topItemsPorCategoria.map((cat, i) => {
@@ -1307,7 +1307,7 @@ export function ResumenPage() {
                             <span className="text-xs text-muted-foreground">Total: <strong className="text-yayis-dark">{formatMonto(cat.total)}</strong></span>
                           </div>
                           {visibleItems.length === 0 ? (
-                            <p className="text-xs text-muted-foreground italic pl-5">Sin gastos pendientes en el periodo</p>
+                            <p className="text-xs text-muted-foreground italic pl-5">Sin gastos por reponer en el período</p>
                           ) : (
                             <table className="w-full text-xs">
                               <tbody>
@@ -1325,7 +1325,7 @@ export function ResumenPage() {
                             </table>
                           )}
                           {topItemsCount !== 'todos' && cat.items.length > topItemsCount && (
-                            <p className="text-[10px] text-muted-foreground italic mt-1 pl-5">+{cat.items.length - topItemsCount} gastos pendientes mas en esta categoria</p>
+                            <p className="text-[10px] text-muted-foreground italic mt-1 pl-5">+{cat.items.length - topItemsCount} gastos por reponer más en esta categoría</p>
                           )}
                         </div>
                       );
@@ -1344,10 +1344,10 @@ export function ResumenPage() {
       {/* Historico de gastos pagados */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Historico de Gastos</CardTitle>
+          <CardTitle>Histórico de gastos</CardTitle>
           <Button variant="outline" size="sm" onClick={() => { setShowHistorico(!showHistorico); setHistoricoPage(0); }}>
             <History size={16} className="mr-2" />
-            {showHistorico ? 'Ocultar' : 'Ver Historico'}
+            {showHistorico ? 'Ocultar' : 'Ver histórico'}
           </Button>
         </CardHeader>
         {showHistorico && (
@@ -1357,7 +1357,7 @@ export function ResumenPage() {
               <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
-                    <CheckCircle size={16} /> Ultima reposicion registrada
+                    <CheckCircle size={16} /> Última reposición registrada
                   </h4>
                   <span className="text-xs text-emerald-700">{ultimaReposicion.fecha}</span>
                 </div>
@@ -1376,22 +1376,22 @@ export function ResumenPage() {
             {/* Desglose por categoria de la ultima reposicion */}
             {ultimaReposicion && !desgloseError && (
               <div className="border border-yayis-green/30 bg-yayis-cream/40 rounded-lg p-4">
-                <h4 className="text-sm font-bold text-yayis-dark mb-1">Desglose por categoria</h4>
-                <p className="text-xs text-muted-foreground mb-3">Como se distribuyo el monto de la ultima reposicion entre las categorias de gasto.</p>
+                <h4 className="text-sm font-bold text-yayis-dark mb-1">Desglose por categoría</h4>
+                <p className="text-xs text-muted-foreground mb-3">Cómo se distribuyó el monto de la última reposición entre las categorías de gasto.</p>
                 {desgloseLoading ? (
                   <p className="text-xs text-muted-foreground">Cargando desglose...</p>
                 ) : desgloseData.length === 0 ? (
                   <div className="flex items-start gap-2 border border-amber-300 bg-amber-50 rounded-md p-3">
                     <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-800">
-                      No se pudo recuperar el desglose de esta reposicion historica (los montos no cuadran exactamente con los gastos registrados). Las reposiciones nuevas tendran desglose automaticamente.
+                      No se pudo recuperar el desglose de esta reposición antigua (los montos no cuadran exactamente con los gastos registrados). Las reposiciones nuevas tienen su desglose automáticamente.
                     </p>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-1.5 font-medium">Categoria</th>
+                        <th className="text-left py-1.5 font-medium">Categoría</th>
                         <th className="text-right py-1.5 font-medium">Monto</th>
                         <th className="text-right py-1.5 font-medium w-16">%</th>
                       </tr>
@@ -1465,7 +1465,7 @@ export function ResumenPage() {
 
             <p className="text-xs text-muted-foreground">Gastos ya pagados{!isAnual ? ` - ${mesLabel}` : ` - ${filterAnio}`}{filterSemana > 0 ? ` - Semana ${filterSemana}` : ''}</p>
             {historicoGastos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No hay gastos pagados en este periodo</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No hay gastos repuestos en este período</p>
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -1473,8 +1473,8 @@ export function ResumenPage() {
                     <thead>
                       <tr className="border-b bg-gray-50">
                         <th className="text-left px-3 py-2 font-medium">Fecha</th>
-                        <th className="text-left px-3 py-2 font-medium">Descripcion</th>
-                        <th className="text-left px-3 py-2 font-medium">Categoria</th>
+                        <th className="text-left px-3 py-2 font-medium">Descripción</th>
+                        <th className="text-left px-3 py-2 font-medium">Categoría</th>
                         <th className="text-left px-3 py-2 font-medium">Pago</th>
                         <th className="text-right px-3 py-2 font-medium">Monto</th>
                       </tr>
@@ -1517,10 +1517,10 @@ export function ResumenPage() {
       {/* Arqueo Semanal - solo cuando se selecciona semana especifica */}
       {isOwner && filterSemana > 0 && (
         <Card>
-          <CardHeader><CardTitle>Arqueo Semanal</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Arqueo semanal</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {arqueo?.cerrado && (
-              <div className="flex items-center gap-2 text-emerald-700 font-bold"><CheckCircle size={18} /> Semana Cerrada</div>
+              <div className="flex items-center gap-2 text-emerald-700 font-bold"><CheckCircle size={18} /> Semana cerrada</div>
             )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -1559,7 +1559,7 @@ export function ResumenPage() {
                   </div>
                 )}
                 <Button onClick={() => setShowCerrar(true)} className="bg-yayis-green hover:bg-yayis-green/90">
-                  <Lock size={16} className="mr-2" /> Cerrar Semana
+                  <Lock size={16} className="mr-2" /> Cerrar semana
                 </Button>
               </div>
             )}
@@ -1567,13 +1567,13 @@ export function ResumenPage() {
         </Card>
       )}
 
-      <ConfirmDialog open={showCerrar} title="Cerrar Semana" message="Una vez cerrada, los registros no podran modificarse." confirmLabel="Cerrar Semana" onConfirm={handleCerrarSemana} onCancel={() => setShowCerrar(false)} />
+      <ConfirmDialog open={showCerrar} title="Cerrar semana" message="Una vez cerrada, los registros no podrán modificarse." confirmLabel="Cerrar semana" onConfirm={handleCerrarSemana} onCancel={() => setShowCerrar(false)} />
 
       {/* Confirmacion: eliminar reposicion */}
       <ConfirmDialog
         open={confirmDeleteRepoId !== null}
-        title="¿Eliminar esta reposicion?"
-        message="Los gastos que esta reposicion pago volveran a quedar como pendientes por reponer."
+        title="¿Eliminar esta reposición?"
+        message="Los gastos que pagó esta reposición volverán a quedar por reponer."
         confirmLabel="Si, eliminar"
         variant="destructive"
         onConfirm={handleConfirmDeleteRepo}
@@ -1584,7 +1584,7 @@ export function ResumenPage() {
       <ConfirmDialog
         open={confirmVerificarIdx !== null}
         title="¿Marcar este grupo como verificado?"
-        message="Se ocultara del listado activo y se guardara en el historico. Puedes re-abrirlo despues si lo necesitas."
+        message="Se ocultará del listado activo y se guardará en el histórico. Puedes reabrirlo después si lo necesitas."
         confirmLabel="Si, verificado"
         onConfirm={handleConfirmVerificar}
         onCancel={() => setConfirmVerificarIdx(null)}

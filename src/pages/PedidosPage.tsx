@@ -195,7 +195,7 @@ export function PedidosPage() {
               <div>
                 <label className="text-xs font-medium" htmlFor="fecha-nueva">Para el día de compra</label>
                 <Select id="fecha-nueva" value={fechaElegida} onChange={e => setFechaNueva(e.target.value)} className="mt-1 w-56 capitalize">
-                  {fechasLibres.map(f => <option key={f} value={f} className="capitalize">{fechaLarga(f)}</option>)}
+                  {fechasLibres.map(f => <option key={f} value={f} >{fechaLarga(f)}</option>)}
                 </Select>
               </div>
               <Button onClick={handleNuevaLista} disabled={creando}>
@@ -260,7 +260,7 @@ export function PedidosPage() {
               return (
                 <details key={p.id} className="px-4 py-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium capitalize">{fechaCorta(p.fecha_compra)}</span>
+                    <span className="font-medium">{fechaCorta(p.fecha_compra)}</span>
                     {p.urgente && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">Urgente</span>}
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_PEDIDO[p.estado].clase}`}>{ESTADO_PEDIDO[p.estado].label}</span>
                     <span className="text-xs text-muted-foreground">

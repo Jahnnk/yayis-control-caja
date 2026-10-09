@@ -42,7 +42,7 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
     <Card className={abierta ? '' : 'border-blue-200 bg-blue-50/30'}>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base">Entrega del <span className="capitalize">{fechaCorta(entrega.fecha)}</span></CardTitle>
+          <CardTitle className="text-base">Entrega del <span>{fechaCorta(entrega.fecha)}</span></CardTitle>
           <span className="text-sm">Recibiste <strong>{formatMonto(Number(entrega.monto))}</strong> <span className="text-xs text-muted-foreground">({entrega.metodo_pago === 'efectivo' ? 'efectivo' : 'cuentas'})</span></span>
         </div>
         {entrega.notas && <p className="text-xs text-muted-foreground">Nota: {entrega.notas}</p>}
@@ -256,7 +256,7 @@ export function RendicionPage() {
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
                   <span className="font-medium">{e.sedes?.nombre}</span>
-                  <span className="capitalize text-muted-foreground">{fechaCorta(e.fecha)}</span>
+                  <span className="text-muted-foreground">{fechaCorta(e.fecha)}</span>
                   <span>Recibido {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · sigue contigo ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                     {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Sobraron ${formatMonto(-diferencia)}`}

@@ -154,7 +154,7 @@ export function useReposiciones() {
     return {
       error: null,
       warning: errorMarcado
-        ? `La reposicion se guardo, pero no se pudieron marcar los gastos como pagados (${errorMarcado}). Recarga la pagina e intenta de nuevo.`
+        ? `La reposición se guardó, pero no se pudieron marcar los gastos como repuestos (${errorMarcado}). Recarga la pagina e intenta de nuevo.`
         : null,
     };
   }, [profile, sedeActivaId, fetchSaldo, marcarGastosPagados]);

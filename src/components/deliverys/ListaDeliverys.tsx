@@ -22,7 +22,7 @@ export function ListaDeliverys({ deliverys, mostrarSede, puedeBorrar, onBorrar, 
         const estado = estadoDelivery(d);
         return (
           <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-            <span className="w-20 shrink-0 capitalize text-muted-foreground">{fechaCorta(d.fecha)}</span>
+            <span className="w-20 shrink-0 text-muted-foreground">{fechaCorta(d.fecha)}</span>
             {mostrarSede && <span className="rounded bg-yayis-cream px-2 py-0.5 text-xs font-bold text-yayis-dark">{d.sedes?.nombre}</span>}
             <div className="min-w-[10rem] flex-1">
               <p className="font-medium">{d.cliente}</p>

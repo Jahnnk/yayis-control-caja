@@ -247,7 +247,7 @@ export function VistaGeneralPage() {
                   const vacio = d.total === 0 && d.listas === 0 && d.deliverys === 0;
                   return (
                     <tr key={d.fecha} className={`border-b last:border-b-0 ${vacio ? 'text-muted-foreground' : ''}`}>
-                      <td className="py-2 capitalize">{fechaCorta(d.fecha)}</td>
+                      <td className="py-2">{fechaCorta(d.fecha)}</td>
                       <td className="py-2 text-right">{d.gastosCaja ? formatMonto(d.gastosCaja) : '—'}</td>
                       <td className="py-2 text-right">{d.compras ? formatMonto(d.compras) : '—'}</td>
                       <td className="py-2 text-right font-bold">{d.total ? formatMonto(d.total) : '—'}</td>
@@ -285,7 +285,7 @@ export function VistaGeneralPage() {
                 <details key={p.id} className="py-2">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
                     <Sede nombre={p.sedes?.nombre} />
-                    <span className="capitalize">{fechaCorta(p.fecha_compra)}</span>
+                    <span>{fechaCorta(p.fecha_compra)}</span>
                     <SeguimientoMini seguimiento={seguimiento(p)} />
                     {p.urgente && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">Urgente</span>}
                     {p.estado === 'enviado' && p.fecha_compra < hoy && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">Atrasada</span>}
@@ -361,7 +361,7 @@ export function VistaGeneralPage() {
               <details key={c.id} className="py-2">
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
                   <Sede nombre={c.sedes?.nombre} />
-                  <span className="capitalize text-muted-foreground">{fechaCorta(c.fecha)}</span>
+                  <span className="text-muted-foreground">{fechaCorta(c.fecha)}</span>
                   <span className="font-medium">{c.proveedores?.nombre}</span>
                   <span className="text-xs text-muted-foreground">
                     {c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}
@@ -427,7 +427,7 @@ export function VistaGeneralPage() {
             {v.deliverys.map(d => (
               <div key={d.id} className="flex flex-wrap items-center gap-2 py-1.5">
                 <Sede nombre={d.sedes?.nombre} />
-                <span className="capitalize text-muted-foreground">{fechaCorta(d.fecha)}</span>
+                <span className="text-muted-foreground">{fechaCorta(d.fecha)}</span>
                 <span className="font-medium">{d.cliente}</span>
                 <span className="text-xs text-muted-foreground">{MODALIDAD_LABEL[d.modalidad]}{d.detalle ? ` · ${d.detalle}` : ''}</span>
                 <span className="ml-auto">cobró <strong>{formatMonto(Number(d.cobrado))}</strong>{d.metodo_cobro && <span className="text-xs text-muted-foreground"> ({d.metodo_cobro === 'efectivo' ? 'efectivo' : 'Yape/transf.'})</span>}</span>
@@ -451,7 +451,7 @@ export function VistaGeneralPage() {
             {v.gastosCaja.map(g => (
               <div key={g.id} className="flex flex-wrap items-center gap-2 py-1.5">
                 <Sede nombre={sedes.find(s => s.id === g.sede_id)?.nombre} />
-                <span className="capitalize text-muted-foreground">{fechaCorta(g.fecha)}</span>
+                <span className="text-muted-foreground">{fechaCorta(g.fecha)}</span>
                 <span>{g.descripcion}</span>
                 <span className="text-xs text-muted-foreground">{g.categorias?.nombre} · {g.metodo_pago === 'efectivo' ? 'efectivo' : 'cuentas'}</span>
                 <span className="ml-auto font-bold">{formatMonto(Number(g.monto))}</span>
