@@ -182,6 +182,7 @@ export function RutaComprasPage() {
           cantidad: Number(item.cantidad),
           unidad: item.unidad,
           precio_referencia: item.precio_referencia ?? null,
+          pagado_directo: !!item.pagado_directo,
         });
         porSede.set(pedido.sede_id, entrada);
       }
@@ -334,6 +335,7 @@ export function RutaComprasPage() {
                 <span className="text-[11px] text-amber-700">(se pidieron {formatCantidad(item.cantidad)})</span>
               )}
               {item.urgente && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
+              {item.pagado_directo && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Solo recoger</span>}
               {etiquetaPedido(pedido)}
               {item.nota && <span className="text-xs italic text-muted-foreground">"{item.nota}"</span>}
               <span className="ml-auto text-xs text-muted-foreground">{item.proveedores?.nombre ?? 'sin proveedor'}</span>
@@ -429,6 +431,7 @@ export function RutaComprasPage() {
                                 <span className="text-xs text-blue-700" title="Precio de referencia que puso la sede">Ref. {formatMonto(Number(item.precio_referencia))} por {baseDePrecio(item.unidad).etiqueta}</span>
                               )}
                               {item.urgente && item.estado === 'pendiente' && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">⚡ Urgente</span>}
+                              {item.pagado_directo && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Solo recoger · ya pagado</span>}
                               {etiquetaPedido(pedido)}
                               {item.nota && <span className="w-full text-xs italic text-muted-foreground sm:w-auto">"{item.nota}"</span>}
                             </div>

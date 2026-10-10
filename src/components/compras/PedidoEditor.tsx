@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
-import { AlertTriangle, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
 import { CATEGORIAS_DEL_ADMIN, CATEGORIAS_PRESUPUESTO, estimarLineasPedido, estimarPorCategoria, mesDe, nombreCategoria, type UsoCategoria } from '@/lib/presupuesto';
@@ -47,7 +47,7 @@ interface Props {
   otrosPorCategoria: Map<string, number>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
-  onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean; precio_referencia?: number | null }) => Promise<{ error: string | null }>;
+  onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean; precio_referencia?: number | null; pagado_directo?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
   /** Lo pagado por cada línea ya comprada (clave: id de la línea del pedido). */
   pagos: Map<string, PrecioPagado>;
@@ -71,6 +71,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const [nota, setNota] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [urgenteNuevo, setUrgenteNuevo] = useState(false);
+  const [pagadoDirectoNuevo, setPagadoDirectoNuevo] = useState(false);
   const [referenciaNueva, setReferenciaNueva] = useState('');
   const [categoriaNueva, setCategoriaNueva] = useState('');
   const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
@@ -100,7 +101,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   // sobre lo ya gastado en el mes y lo estimado de las otras listas sin comprar.
   const { uso, hayTopes } = usePresupuestoCaja(pedido.sede_id, mesDe(pedido.fecha_compra));
   const categoriaDe = (productoId: string) => productos.find(p => p.id === productoId)?.categoria_presupuesto;
-  const lineasEstimadas = estimarLineasPedido(items, categoriaDe, habituales);
+  // Lo que Gerencia paga directo no sale de la caja: no entra al estimado de la lista.
+  const lineasEstimadas = estimarLineasPedido(items.filter(i => !i.pagado_directo), categoriaDe, habituales);
   const estimado = estimarPorCategoria(lineasEstimadas);
   const totalEstimado = roundTwo([...estimado.porCategoria.values()].reduce((s, v) => s + v, 0));
   const barras = [...estimado.porCategoria.entries()].map(([categoria, esta]) => {
@@ -145,6 +147,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
       nota: nota.trim() || null,
       proveedor_id: proveedorId || producto.proveedor_id,
       urgente: urgenteNuevo,
+      // La columna solo se envía cuando se marca.
+      ...(pagadoDirectoNuevo ? { pagado_directo: true } : {}),
       ...(referenciaNueva.trim() !== '' && parseFloat(referenciaNueva) >= 0 ? { precio_referencia: parseFloat(referenciaNueva) } : {}),
     });
     setGuardando(false);
@@ -158,6 +162,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     setNota('');
     setProveedorId('');
     setUrgenteNuevo(false);
+    setPagadoDirectoNuevo(false);
     setReferenciaNueva('');
     setMasOpciones(false);
     // Listo para el siguiente producto sin tocar la pantalla.
@@ -242,6 +247,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (error) addToast(`Error: ${error}`, 'error');
   }
 
+  async function handlePagadoDirecto(itemId: string, valor: boolean) {
+    const { error } = await onActualizar(itemId, { pagado_directo: valor });
+    if (error) addToast(`Error: ${error}`, 'error');
+  }
+
   async function handleEliminar(itemId: string) {
     const { error } = await onEliminar(itemId);
     if (error) addToast(`Error: ${error}`, 'error');
@@ -279,6 +289,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     referenciaNueva.trim() ? `ref. ${formatMonto(parseFloat(referenciaNueva) || 0)}` : null,
     nota.trim() ? `"${nota.trim()}"` : null,
     urgenteNuevo ? '⚡ urgente' : null,
+    pagadoDirectoNuevo ? 'ya pagado · solo recoger' : null,
   ].filter(Boolean).join(' · ');
   const editable = (i: { estado: string }) => i.estado === 'pendiente';
 
@@ -397,6 +408,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                 <span className="font-medium text-red-700">⚡ Urgente</span>
                 <span className="text-xs text-muted-foreground">(Compras lo compra primero)</span>
               </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={pagadoDirectoNuevo} onChange={e => setPagadoDirectoNuevo(e.target.checked)} />
+                <span className="font-medium text-blue-700">Ya pagado · solo recoger</span>
+                <span className="text-xs text-muted-foreground">(Gerencia lo paga directo; Compras no paga nada)</span>
+              </label>
             </div>
           )}
         </div>
@@ -422,6 +438,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-yayis-dark">{nombreItem}{i.urgente && <span className="ml-1 text-xs text-red-700">⚡ urgente</span>}</p>
+                      {i.pagado_directo && <p className="text-xs font-medium text-blue-700">Ya pagado · Compras solo lo recoge</p>}
                       {i.nota && <p className="text-xs italic text-muted-foreground">"{i.nota}"</p>}
                     </div>
                     {editable(i) && (
@@ -430,6 +447,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                           aria-label={i.urgente ? `Quitar urgente de ${nombreItem}` : `Marcar ${nombreItem} como urgente`} title={i.urgente ? 'Quitar urgente' : 'Marcar urgente (Compras lo compra primero)'}
                           className={`h-9 w-9 ${i.urgente ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'text-gray-400 hover:text-red-600'}`}>
                           ⚡
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handlePagadoDirecto(i.id, !i.pagado_directo)} aria-pressed={!!i.pagado_directo}
+                          aria-label={i.pagado_directo ? `Quitar «ya pagado» de ${nombreItem}` : `Marcar ${nombreItem} como ya pagado (solo recoger)`} title={i.pagado_directo ? 'Quitar «ya pagado»' : 'Ya pagado: Gerencia lo paga directo, Compras solo lo recoge'}
+                          className={`h-9 w-9 ${i.pagado_directo ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'text-gray-400 hover:text-blue-600'}`}>
+                          <BadgeCheck size={16} />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleEliminar(i.id)} aria-label={`Quitar ${nombreItem}`} className="h-9 w-9 text-red-500 hover:text-red-700">
                           <Trash2 size={15} />
