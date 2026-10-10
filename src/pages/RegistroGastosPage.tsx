@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGastos } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
@@ -36,7 +36,17 @@ export function RegistroGastosPage() {
   const { responsable } = useSedeActiva();
   const { consolidado, sinRendir } = useConsolidadoReposicion(versionSaldo);
   // Quién originó los gastos que se ven: todos, los del administrador o las compras de Fabio.
-  const [filterOrigen, setFilterOrigen] = useState<'' | 'administrador' | 'compras'>('');
+  // Se puede llegar con ?origen=administrador|compras (desde el Consolidado del Resumen): la lista sale ya filtrada.
+  const [params] = useSearchParams();
+  const origenInicial = params.get('origen');
+  const [filterOrigen, setFilterOrigen] = useState<'' | 'administrador' | 'compras'>(origenInicial === 'administrador' || origenInicial === 'compras' ? origenInicial : '');
+  const { hash } = useLocation();
+  // Con #lista-gastos se baja directo a la lista (el detalle que se vino a ver).
+  useEffect(() => {
+    if (hash !== '#lista-gastos') return;
+    const t = window.setTimeout(() => document.getElementById('lista-gastos')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+    return () => window.clearTimeout(t);
+  }, [hash]);
   const [page, setPage] = useState(0);
   // Lo gastado hoy (efectivo y cuentas).
   const [hoyResumen, setHoyResumen] = useState({ efectivo: 0, cuentas: 0, total: 0 });
@@ -147,6 +157,7 @@ export function RegistroGastosPage() {
       )}
 
       {/* ¿Quién lo originó? */}
+      <span id="lista-gastos" className="block scroll-mt-20" aria-hidden />
       <div className="flex flex-wrap gap-1" role="group" aria-label="Origen de los gastos">
         {([
           ['', 'Todos'],
