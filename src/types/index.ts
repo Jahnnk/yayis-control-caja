@@ -254,6 +254,8 @@ export interface PedidoItem {
   repedido_at?: string | null;
   /** Precio que el administrador cree que costará (S/ por kg / litro / unidad; por kg si la línea es en g). */
   precio_referencia?: number | null;
+  /** Gerencia ya lo pagó directo (p. ej. por transferencia al puesto): Compras solo lo recoge y va en S/ 0. */
+  pagado_directo?: boolean;
   created_at: string;
 }
 

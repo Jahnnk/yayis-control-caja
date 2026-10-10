@@ -38,6 +38,8 @@ export interface LineaCandidata {
   unidad: string;
   /** Precio de referencia que puso el administrador (por kg / litro / unidad). */
   precio_referencia?: number | null;
+  /** Gerencia ya lo pagó directo: va en S/ 0 (Compras solo lo recoge). */
+  pagado_directo?: boolean;
 }
 
 interface Props {
@@ -159,7 +161,9 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     const borrador = leerBorrador(clave);
 
     const base: Record<string, EstadoLinea> = Object.fromEntries(
-      candidatas.map(c => [c.pedido_item_id, { incluir: true, cantidad: String(Number(c.cantidad)), precio: '', unit: '', ultimo: null } as EstadoLinea]),
+      candidatas.map(c => [c.pedido_item_id, (c.pagado_directo
+        ? { incluir: true, cantidad: String(Number(c.cantidad)), precio: '0', unit: '0', ultimo: 'total' }
+        : { incluir: true, cantidad: String(Number(c.cantidad)), precio: '', unit: '', ultimo: null }) as EstadoLinea]),
     );
     if (borrador) for (const id of Object.keys(base)) if (borrador.lineas[id]) base[id] = { ...base[id]!, ...borrador.lineas[id]! };
     setLineas(base);
@@ -286,7 +290,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   const repartido = useMemo(() => {
     if (!soloTotal) return new Map<string, number>();
     const lista = [
-      ...candidatas.filter(c => lineas[c.pedido_item_id]?.incluir).map(c => ({
+      // Lo ya pagado por Gerencia va en S/ 0: no recibe parte del total.
+      ...candidatas.filter(c => lineas[c.pedido_item_id]?.incluir && !c.pagado_directo).map(c => ({
         clave: `L:${c.pedido_item_id}`,
         estimado: (() => { const h = habituales.get(claveProducto(c.producto_id, c.unidad)); const q = parseFloat(lineas[c.pedido_item_id]?.cantidad ?? ''); return h && q > 0 ? h.unitario * q : null; })(),
         // Unidad «sol»: el monto es la cantidad (2 sol = S/ 2), no se reparte.
@@ -364,7 +369,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             nombre: c.nombre,
             cantidad_pedida: c.cantidad,
             resto: l.resto ?? 'pendiente',
-            precio_total: soloTotal ? (repartido.get(`L:${c.pedido_item_id}`) ?? NaN) : l.precio === '' ? NaN : parseFloat(l.precio),
+            precio_total: soloTotal ? (c.pagado_directo ? 0 : repartido.get(`L:${c.pedido_item_id}`) ?? NaN) : l.precio === '' ? NaN : parseFloat(l.precio),
             precio_repartido: soloTotal && !esRecojo,
           };
         }),
@@ -502,6 +507,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     <span className="font-semibold text-yayis-dark">{c.nombre}</span>
                     <span className="text-xs text-muted-foreground">pedido: {formatCantidad(c.cantidad)} {c.unidad}</span>
                   </label>
+                  {c.pagado_directo && <p className="pl-7 text-xs font-medium text-blue-700">Ya pagado por Gerencia: va en S/ 0, solo lo recoges.</p>}
                   {l.incluir && (
                     <div className="flex flex-wrap items-end gap-2 pl-7">
                       <label className="text-[11px] text-muted-foreground">
