@@ -4,7 +4,7 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import type { ConsolidadoReposicion as Datos, SinRendir, TotalOrigen } from '@/hooks/useConsolidadoReposicion';
 import { Landmark, ShoppingBasket, UserRound } from 'lucide-react';
 
-function Columna({ titulo, icono, t, destacado, to }: { titulo: string; icono: React.ReactNode; t: TotalOrigen; destacado?: boolean; to: string }) {
+function Columna({ titulo, icono, t, destacado, to, nota }: { titulo: string; icono: React.ReactNode; t: TotalOrigen; destacado?: boolean; to: string; nota?: string }) {
   return (
     <Link to={to} title="Ver el detalle de estos gastos" className={`group block rounded-md border p-3 transition hover:border-yayis-green hover:shadow-sm ${destacado ? 'border-yayis-green bg-emerald-50/60' : 'bg-white'}`}>
       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">{icono} {titulo}</p>
@@ -12,13 +12,16 @@ function Columna({ titulo, icono, t, destacado, to }: { titulo: string; icono: R
       <p className="text-xs text-muted-foreground">
         {t.cantidad} gasto(s) · efectivo {formatMonto(t.efectivo)} · cuentas {formatMonto(t.cuentas)}
       </p>
+      {nota && <p className="text-xs font-medium text-yayis-green">{nota}</p>}
       <p className="mt-1 text-xs font-medium text-yayis-green opacity-80 group-hover:opacity-100">Ver detalle →</p>
     </Link>
   );
 }
 
 /** Consolidado para reposición: lo pendiente de reponer, separado entre lo que pagó el administrador y las compras de Fabio. */
-export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos: Datos; responsable: string; sinRendir?: SinRendir }) {
+export function ConsolidadoReposicion({ datos, responsable, sinRendir, aFavor = 0 }: { datos: Datos; responsable: string; sinRendir?: SinRendir; aFavor?: number }) {
+  // Lo que Gerencia ya repuso y no alcanzó a marcar un gasto completo se descuenta del total: es lo que realmente falta.
+  const totalReponer = Math.max(0, roundTwo(datos.total.total - aFavor));
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
@@ -31,12 +34,13 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Columna titulo="Pagado por el administrador" icono={<UserRound size={14} />} t={datos.administrador} to="/gastos?origen=administrador#lista-gastos" />
           <Columna titulo="Compras (a proveedores)" icono={<ShoppingBasket size={14} />} t={datos.compras} to="/gastos?origen=compras#lista-gastos" />
-          <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={datos.total} destacado to="/gastos#lista-gastos" />
+          <Columna titulo="Total a reponer" icono={<Landmark size={14} />} t={{ ...datos.total, total: totalReponer }} destacado to="/gastos#lista-gastos"
+            nota={aFavor > 0 ? `${formatMonto(datos.total.total)} en gastos − ${formatMonto(aFavor)} ya repuestos` : undefined} />
         </div>
         {sinRendir && sinRendir.cantidad > 0 && (() => {
           const rendidas = sinRendir.compras.filter(c => c.estado === 'rendida').reduce((t, c) => roundTwo(t + Number(c.total)), 0);
           const porRendir = roundTwo(sinRendir.total - rendidas);
-          const totalConCompras = roundTwo(datos.total.total + sinRendir.total);
+          const totalConCompras = roundTwo(totalReponer + sinRendir.total);
           return (
             <div className="space-y-2 rounded-md border-2 border-amber-300 bg-amber-50 p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -44,7 +48,7 @@ export function ConsolidadoReposicion({ datos, responsable, sinRendir }: { datos
                 <p className="text-2xl font-bold tabular-nums text-amber-900">{formatMonto(totalConCompras)}</p>
               </div>
               <p className="text-xs text-amber-900">
-                {formatMonto(datos.total.total)} que ya se puede reponer + <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) de Compras con la rendición sin cerrar
+                {formatMonto(totalReponer)} que ya se puede reponer + <strong>{formatMonto(sinRendir.total)}</strong> en {sinRendir.cantidad} compra(s) de Compras con la rendición sin cerrar
                 {rendidas > 0 && porRendir > 0 ? ` (${formatMonto(rendidas)} ya rendidas, falta que ${responsable} las cierre; ${formatMonto(porRendir)} Compras aún no rinde)` : rendidas > 0 ? ` (ya rendidas: falta que ${responsable} las cierre)` : ' (Compras aún no rinde)'}.
               </p>
               <p className="text-xs text-amber-800">
