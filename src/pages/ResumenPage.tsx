@@ -771,6 +771,20 @@ export function ResumenPage() {
 
       {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />}
 
+      {/* Lo repuesto que no alcanzó para marcar un gasto completo: se descuenta solo en la próxima reposición */}
+      {isOwner && roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas) > 0 && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <p>
+            <strong>{formatMonto(roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas))} a favor.</strong>{' '}
+            Es lo que Gerencia ya repuso pero no alcanzó para marcar un gasto completo (un gasto no se parte). Se suma solo a la próxima reposición.
+          </p>
+          <p className="mt-1 text-xs">
+            Por reponer en total, descontando eso: <strong>{formatMonto(Math.max(0, roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas - saldo.sobranteEfectivo - saldo.sobranteCuentas)))}</strong>
+            {' '}(de {formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))} en gastos pendientes).
+          </p>
+        </div>
+      )}
+
       {/* Descargas: lo que falta reponer del período elegido, con las compras de Compras ya cerradas */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3">
         <div>
