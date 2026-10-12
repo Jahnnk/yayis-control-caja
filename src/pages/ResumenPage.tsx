@@ -527,6 +527,9 @@ export function ResumenPage() {
   // Caja del administrador de la sede
   // Lo repuesto que no alcanzó a marcar un gasto completo se descuenta de lo que falta reponer (solo para Gerencia).
   const descuentoAFavor = isOwner ? Math.min(totalPendiente, roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas)) : 0;
+  // Deuda con Gerencia por método, ya descontando lo repuesto que está a favor (la caja del administrador no cambia).
+  const deudaNetaEf = Math.max(0, roundTwo(saldo.deudaEfectivo - saldo.sobranteEfectivo));
+  const deudaNetaCt = Math.max(0, roundTwo(saldo.deudaCuentas - saldo.sobranteCuentas));
   const cajaEfectivo = roundTwo(fondoEf - saldo.deudaEfectivo + saldo.repuestoEfectivo);
   const cajaCuentas = roundTwo(fondoCt - saldo.deudaCuentas + saldo.repuestoCuentas);
 
@@ -810,15 +813,15 @@ export function ResumenPage() {
           <Card className="border-yayis-green/30 bg-yayis-cream">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer en efectivo</span></div>
-              <p className="text-xl font-bold text-yayis-green">{formatMonto(saldo.deudaEfectivo)}</p>
-              <p className="text-xs text-muted-foreground">Deuda total en efectivo (todos los meses)</p>
+              <p className="text-xl font-bold text-yayis-green">{formatMonto(deudaNetaEf)}</p>
+              <p className="text-xs text-muted-foreground">Deuda total en efectivo (todos los meses){saldo.sobranteEfectivo > 0 ? ` · ${formatMonto(saldo.deudaEfectivo)} − ${formatMonto(saldo.sobranteEfectivo)} ya repuestos` : ''}</p>
             </CardContent>
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer en cuentas</span></div>
-              <p className="text-xl font-bold text-blue-600">{formatMonto(saldo.deudaCuentas)}</p>
-              <p className="text-xs text-muted-foreground">Deuda total en cuentas (todos los meses)</p>
+              <p className="text-xl font-bold text-blue-600">{formatMonto(deudaNetaCt)}</p>
+              <p className="text-xs text-muted-foreground">Deuda total en cuentas (todos los meses){saldo.sobranteCuentas > 0 ? ` · ${formatMonto(saldo.deudaCuentas)} − ${formatMonto(saldo.sobranteCuentas)} ya repuestos` : ''}</p>
             </CardContent>
           </Card>
           <Card className={`border-2 ${cajaEfectivo >= fondoEf ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
@@ -847,8 +850,8 @@ export function ResumenPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
                 <p className="text-xs text-red-600 font-medium">Deuda total</p>
-                <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))}</p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.deudaEfectivo)} | Ct: {formatMonto(saldo.deudaCuentas)}</p>
+                <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(deudaNetaEf + deudaNetaCt))}</p>
+                <p className="text-xs text-muted-foreground">Ef: {formatMonto(deudaNetaEf)} | Ct: {formatMonto(deudaNetaCt)}</p>
               </div>
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
                 <p className="text-xs text-emerald-600 font-medium">Repuesto total</p>
