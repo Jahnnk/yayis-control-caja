@@ -224,8 +224,14 @@ export function RutaComprasPage() {
     if (error) addToast(error, 'error');
   }
 
+  // Una sede puede tener dos listas el mismo día (la primera ya recibida): se muestra la que sigue abierta.
+  function listaRegularDelDia(sedeId: string) {
+    const delDia = pedidos.filter(p => p.sede_id === sedeId && !p.urgente && p.fecha_compra === fecha);
+    return delDia.find(p => p.estado !== 'recibido') ?? delDia[0];
+  }
+
   function estadoSede(sedeId: string) {
-    const regular = pedidos.find(p => p.sede_id === sedeId && !p.urgente && p.fecha_compra === fecha);
+    const regular = listaRegularDelDia(sedeId);
     if (regular?.estado === 'recibido') return { texto: 'Compra terminada y recibida por la sede', clase: 'text-emerald-700', icono: Check };
     if (regular?.estado === 'comprado') return { texto: 'Compra terminada', clase: 'text-emerald-700', icono: Check };
     if (regular) return { texto: `Lista enviada (${regular.pedido_items.length} productos)`, clase: 'text-blue-700', icono: Check };
@@ -265,7 +271,7 @@ export function RutaComprasPage() {
             sedesDelDia.map(s => {
               const e = estadoSede(s.id);
               // Con la lista ya enviada se muestra su seguimiento (Enviada → Comprando → En camino → Recibido).
-              const regular = pedidos.find(p => p.sede_id === s.id && !p.urgente && p.fecha_compra === fecha);
+              const regular = listaRegularDelDia(s.id);
               return (
                 <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
                   <span className="font-medium">{s.nombre}</span>

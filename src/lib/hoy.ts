@@ -106,7 +106,9 @@ export function tareasDeAdministrador(d: {
   // Próximo día de compra (hoy o mañana): la lista tiene que estar enviada.
   const proximo = proximasFechasCompra(d.sede?.dias_compra ?? [], hoy, 1)[0];
   if (proximo && proximo <= sumarDias(hoy, 1)) {
-    const lista = pedidos.find(p => !p.urgente && p.fecha_compra === proximo && p.estado !== 'cancelado');
+    // Si ese día hay dos listas (la primera ya recibida), cuenta la que sigue abierta.
+    const delDia = pedidos.filter(p => !p.urgente && p.fecha_compra === proximo && p.estado !== 'cancelado');
+    const lista = delDia.find(p => p.estado !== 'recibido') ?? delDia[0];
     if (!lista) {
       t.push({
         clave: 'armar', urgencia: proximo === hoy ? 'ahora' : 'hoy', icono: 'lista',

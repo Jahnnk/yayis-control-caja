@@ -76,9 +76,10 @@ export function PedidosPage() {
   const hayEnCurso = pedidos.some(p => p.estado === 'enviado' || p.estado === 'comprado');
 
   // Fechas de compra disponibles para una lista nueva: las proximas del calendario
-  // que todavia no tienen su lista regular.
+  // que todavia no tienen su lista regular abierta. Si la lista del dia ya se recibio,
+  // se puede armar una segunda para ese mismo dia.
   const fechasOcupadas = new Set(
-    pedidos.filter(p => !p.urgente && p.estado !== 'cancelado').map(p => p.fecha_compra),
+    pedidos.filter(p => !p.urgente && p.estado !== 'cancelado' && p.estado !== 'recibido').map(p => p.fecha_compra),
   );
   const fechasLibres = proximasFechasCompra(diasCompra, hoy, 6).filter(f => !fechasOcupadas.has(f)).slice(0, 3);
 
