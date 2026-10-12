@@ -158,7 +158,7 @@ export function ResumenPage() {
     for (let desde = 0; ; desde += PAGE_SIZE) {
       let query = supabase
         .from('gastos')
-        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, categorias(nombre)')
+        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, origen, categorias(nombre)')
         .eq('sede_id', sedeId)
         .order('fecha', { ascending: true })
         .order('id', { ascending: true })
@@ -189,7 +189,7 @@ export function ResumenPage() {
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
-    const itemsByCategoria = new Map<string, Array<{ descripcion: string; monto: number; fecha: string; metodo: string; estado: string }>>();
+    const itemsByCategoria = new Map<string, Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string }>>();
     const catEfectivoMap = new Map<string, number>();
     const catCuentasMap = new Map<string, number>();
     const catEfPagadoMap = new Map<string, number>();
@@ -253,6 +253,8 @@ export function ResumenPage() {
       // Guardar gasto individual para el detalle "Top 5 por categoria"
       if (!itemsByCategoria.has(catName)) itemsByCategoria.set(catName, []);
       itemsByCategoria.get(catName)!.push({
+        id: g.id as string,
+        origen: (g.origen as string) ?? 'administrador',
         descripcion: (g.descripcion as string) ?? '(sin descripción)',
         monto,
         fecha: g.fecha as string,
@@ -280,7 +282,7 @@ export function ResumenPage() {
     // Filtramos a estado='pendiente', calculamos un total de pendientes por categoria,
     // ordenamos por ese total y tomamos las top 5 categorias que tengan al menos 1 pendiente.
     // El slice a 5/10/todos ocurre al renderizar segun topItemsCount.
-    type ItemDetalle = { descripcion: string; monto: number; fecha: string; metodo: string; estado: string };
+    type ItemDetalle = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string };
     const pendientesPorCategoria = new Map<string, { items: ItemDetalle[]; total: number }>();
     for (const [cat, items] of itemsByCategoria) {
       const soloPendientes = items.filter(it => it.estado === 'pendiente');
@@ -295,6 +297,28 @@ export function ResumenPage() {
       total,
       items: items.slice().sort((a, b) => b.monto - a.monto),
     })));
+    // Para Kelly: de cada gasto de Compras, qué se compró y con qué comprobante (para pedir las boletas y facturas).
+    const idsPendientes = allPendientesSorted.flatMap(([, { items }]) => items.filter(it => it.origen === 'compras').map(it => it.id));
+    const comprasPorGasto = new Map<string, { proveedor: string; tipo: string; numero: string | null; productos: string }>();
+    for (let i = 0; i < idsPendientes.length; i += 100) {
+      const { data: comprasData } = await supabase
+        .from('compras')
+        .select('gasto_id, tipo_comprobante, numero_comprobante, proveedores(nombre), compra_items(cantidad, unidad, productos(nombre))')
+        .in('gasto_id', idsPendientes.slice(i, i + 100));
+      for (const c of (comprasData ?? []) as unknown as Array<{
+        gasto_id: string; tipo_comprobante: string; numero_comprobante: string | null;
+        proveedores: { nombre: string } | null;
+        compra_items: Array<{ cantidad: number; unidad: string; productos: { nombre: string } | null }>;
+      }>) {
+        comprasPorGasto.set(c.gasto_id, {
+          proveedor: c.proveedores?.nombre ?? '',
+          tipo: c.tipo_comprobante,
+          numero: c.numero_comprobante,
+          productos: c.compra_items.map(ci => `${ci.productos?.nombre ?? 'Producto'} (${Number(ci.cantidad)} ${ci.unidad})`).join(', '),
+        });
+      }
+    }
+    if (cargaId !== ultimaCarga.current) return;
     // Set completo (todas las categorias, todos los items) para exportar
     setPendientesCompletos(allPendientesSorted.map(([nombre, { items, total }]) => ({
       categoria: nombre,
@@ -302,7 +326,16 @@ export function ResumenPage() {
       items: items
         .slice()
         .sort((a, b) => b.monto - a.monto)
-        .map(it => ({ descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo })),
+        .map(it => {
+          const compra = comprasPorGasto.get(it.id);
+          return {
+            descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo,
+            origen: it.origen === 'compras' ? 'Compras' : 'Administrador',
+            productos: compra?.productos ?? '',
+            comprobante: compra ? (compra.tipo === 'boleta' ? 'Boleta' : compra.tipo === 'factura' ? 'Factura' : 'Sin comprobante') : '',
+            numeroComprobante: compra?.numero ?? '',
+          };
+        }),
     })));
 
     // ====== Deteccion de "Valores a revisar" ======
