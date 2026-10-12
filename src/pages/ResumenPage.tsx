@@ -738,6 +738,22 @@ export function ResumenPage() {
 
       {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />}
 
+      {/* Descargas: lo que falta reponer del período elegido, con las compras de Compras ya cerradas */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3">
+        <div>
+          <p className="text-sm font-bold text-yayis-dark">Descargar lo que falta reponer</p>
+          <p className="text-xs text-muted-foreground">{periodoLabel} · por categoría, con el detalle de cada gasto.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportExcel} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
+            <FileSpreadsheet size={14} className="mr-1.5" /> Excel
+          </Button>
+          <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportPDF} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
+            <FileText size={14} className="mr-1.5" /> PDF
+          </Button>
+        </div>
+      </div>
+
       {/* Reponer + Caja del administrador */}
       {isOwner && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1278,14 +1294,6 @@ export function ResumenPage() {
                     >
                       Todos
                     </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportExcel} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
-                      <FileSpreadsheet size={14} className="mr-1.5" /> Exportar Excel
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={pendientesCompletos.length === 0} onClick={handleExportPDF} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
-                      <FileText size={14} className="mr-1.5" /> Exportar PDF
-                    </Button>
                   </div>
                   </div>
                 </div>
