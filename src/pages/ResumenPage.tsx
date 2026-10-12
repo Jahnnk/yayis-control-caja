@@ -525,6 +525,8 @@ export function ResumenPage() {
   }
 
   // Caja del administrador de la sede
+  // Lo repuesto que no alcanzó a marcar un gasto completo se descuenta de lo que falta reponer (solo para Gerencia).
+  const descuentoAFavor = isOwner ? Math.min(totalPendiente, roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas)) : 0;
   const cajaEfectivo = roundTwo(fondoEf - saldo.deudaEfectivo + saldo.repuestoEfectivo);
   const cajaCuentas = roundTwo(fondoCt - saldo.deudaCuentas + saldo.repuestoCuentas);
 
@@ -757,7 +759,8 @@ export function ResumenPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} className="text-amber-500" /><span className="text-xs text-muted-foreground">Por reponer</span></div>
-            <p className="text-xl font-bold text-amber-600">{formatMonto(totalPendiente)}</p>
+            <p className="text-xl font-bold text-amber-600">{formatMonto(roundTwo(totalPendiente - descuentoAFavor))}</p>
+            {descuentoAFavor > 0 && <p className="text-[11px] font-medium text-emerald-700">{formatMonto(totalPendiente)} en gastos − {formatMonto(descuentoAFavor)} ya repuestos</p>}
             <p className="text-[11px] text-muted-foreground mt-0.5">Solo {isAnual ? filterAnio : mesLabel}. La deuda total con {encargado} está en «Reponer».</p>
           </CardContent>
         </Card>
@@ -769,7 +772,7 @@ export function ResumenPage() {
         </Card>
       </div>
 
-      {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} />}
+      {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} aFavor={roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas)} />}
 
       {/* Lo repuesto que no alcanzó para marcar un gasto completo: se descuenta solo en la próxima reposición */}
       {isOwner && roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas) > 0 && (
