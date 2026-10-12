@@ -110,6 +110,8 @@ export interface Reposicion {
   monto: number;
   notas: string | null;
   registrado_por: string;
+  /** Su sobrante (lo que no alcanzó a marcar un gasto completo) pasa a la próxima reposición. */
+  sobrante_activo?: boolean;
   created_at: string;
 }
 
@@ -145,6 +147,9 @@ export interface SaldoReposicion {
   repuestoCuentas: number;
   saldoEfectivo: number;
   saldoCuentas: number;
+  /** Reposiciones que no alcanzaron para marcar un gasto completo: quedan a favor y se suman a la próxima. */
+  sobranteEfectivo: number;
+  sobranteCuentas: number;
 }
 
 export interface GastoFormData {

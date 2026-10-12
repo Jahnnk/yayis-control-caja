@@ -13,10 +13,34 @@ export function useReposiciones() {
     deudaEfectivo: 0, deudaCuentas: 0,
     repuestoEfectivo: 0, repuestoCuentas: 0,
     saldoEfectivo: 0, saldoCuentas: 0,
+    sobranteEfectivo: 0, sobranteCuentas: 0,
   });
   const [loading, setLoading] = useState(false);
   // Si gerencia cambia de sede mientras carga, la respuesta vieja no debe pisar a la nueva.
   const ultimaSedePedida = useRef<string | null>(null);
+
+  /**
+   * Lo que Gerencia ya repuso pero no alcanzó a marcar un gasto completo (un gasto nunca se parte).
+   * = lo registrado en reposiciones con sobrante_activo − lo que esas reposiciones marcaron como pagado.
+   * Solo cuentan las reposiciones nuevas; las viejas (del respaldo) no tienen desglose confiable.
+   */
+  const calcularSobrante = useCallback(async (sid: string, metodoPago: 'efectivo' | 'cuentas') => {
+    const { data: reposActivas } = await supabase
+      .from('reposiciones')
+      .select('id, monto')
+      .eq('sede_id', sid)
+      .eq('metodo_pago', metodoPago)
+      .eq('sobrante_activo', true);
+    if (!reposActivas || reposActivas.length === 0) return 0;
+    const { data: marcados } = await supabase
+      .from('gastos')
+      .select('monto')
+      .eq('estado', 'pagado')
+      .in('reposicion_id', reposActivas.map(r => r.id as string));
+    const repuesto = reposActivas.reduce((t, r) => roundTwo(t + Number(r.monto)), 0);
+    const aplicado = (marcados ?? []).reduce((t, g) => roundTwo(t + Number(g.monto)), 0);
+    return Math.max(0, roundTwo(repuesto - aplicado));
+  }, []);
 
   const fetchSaldo = useCallback(async (sedeId?: string) => {
     const sid = sedeId ?? sedeActivaId;
@@ -50,6 +74,8 @@ export function useReposiciones() {
       else repCt = roundTwo(repCt + Number(r.monto));
     }
 
+    const [sobranteEf, sobranteCt] = await Promise.all([calcularSobrante(sid, 'efectivo'), calcularSobrante(sid, 'cuentas')]);
+
     if (ultimaSedePedida.current !== sid) return;
     setReposiciones((reposData ?? []) as Reposicion[]);
     setSaldo({
@@ -59,10 +85,12 @@ export function useReposiciones() {
       repuestoCuentas: repCt,
       saldoEfectivo: roundTwo(deudaEf - repEf),
       saldoCuentas: roundTwo(deudaCt - repCt),
+      sobranteEfectivo: sobranteEf,
+      sobranteCuentas: sobranteCt,
     });
 
     setLoading(false);
-  }, [sedeActivaId]);
+  }, [sedeActivaId, calcularSobrante]);
 
   /**
    * Aplica una reposicion marcando como "pagados" los gastos pendientes del
@@ -129,6 +157,9 @@ export function useReposiciones() {
   ) => {
     if (!profile || !sedeActivaId) return { error: 'Sin sede' };
 
+    // Lo que sobró en reposiciones anteriores de esta misma caja se suma a esta.
+    const sobranteAnterior = await calcularSobrante(sedeActivaId, metodoPago);
+
     const { data: nuevaReposicion, error } = await supabase
       .from('reposiciones')
       .insert({
@@ -138,6 +169,7 @@ export function useReposiciones() {
         monto,
         notas: notas.trim() || null,
         registrado_por: profile.id,
+        sobrante_activo: true,
       })
       .select('id')
       .single();
@@ -147,17 +179,20 @@ export function useReposiciones() {
     // Marcar gastos como pagados si la suma coincide.
     // Si este paso falla, la reposicion YA quedo guardada: avisamos con un
     // warning (no un error) para que el usuario no la registre dos veces.
-    const { error: errorMarcado } = await marcarGastosPagados(sedeActivaId, metodoPago, monto, nuevaReposicion.id);
+    const { error: errorMarcado } = await marcarGastosPagados(sedeActivaId, metodoPago, roundTwo(monto + sobranteAnterior), nuevaReposicion.id);
 
     // Recalcular saldo
     await fetchSaldo(sedeActivaId);
+    const sobranteNuevo = await calcularSobrante(sedeActivaId, metodoPago);
     return {
       error: null,
       warning: errorMarcado
         ? `La reposición se guardó, pero no se pudieron marcar los gastos como repuestos (${errorMarcado}). Recarga la pagina e intenta de nuevo.`
-        : null,
+        : sobranteNuevo > 0
+          ? `Reposición registrada. S/ ${sobranteNuevo.toFixed(2)} no alcanzaron para marcar un gasto completo: quedan a favor y se suman a la próxima reposición.`
+          : null,
     };
-  }, [profile, sedeActivaId, fetchSaldo, marcarGastosPagados]);
+  }, [profile, sedeActivaId, fetchSaldo, marcarGastosPagados, calcularSobrante]);
 
   const deleteReposicion = useCallback(async (id: string) => {
     // Antes de borrar la reposicion, los gastos que ella pago vuelven a
