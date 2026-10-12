@@ -9,6 +9,13 @@ export type ExportGastoItem = {
   monto: number;
   fecha: string;
   metodo: string; // 'efectivo' | 'cuentas'
+  /** Quién lo originó: «Administrador» o «Compras». */
+  origen?: string;
+  /** Solo en compras de Compras: los productos comprados. */
+  productos?: string;
+  /** «Boleta», «Factura» o «Sin comprobante» (vacío si el gasto no viene de una compra). */
+  comprobante?: string;
+  numeroComprobante?: string;
 };
 
 export type ExportCategoria = {
@@ -58,11 +65,16 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Gastos Pendientes');
 
-  // Anchos de columna: N°, Descripcion, Fecha, Metodo, Monto
+  // Anchos de columna: N°, Categoria, Fecha, Origen, Descripcion, Productos, Comprobante, N° comprobante, Metodo, Monto
   ws.columns = [
     { width: 6 },
-    { width: 40 },
+    { width: 22 },
+    { width: 12 },
     { width: 14 },
+    { width: 30 },
+    { width: 50 },
+    { width: 16 },
+    { width: 16 },
     { width: 14 },
     { width: 14 },
   ];
@@ -77,7 +89,7 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
   ws.addRow([]); // fila en blanco
 
   // --- Encabezados de la tabla ---
-  const headerRow = ws.addRow(['N°', 'Descripcion', 'Fecha', 'Metodo de pago', 'Monto']);
+  const headerRow = ws.addRow(['N°', 'Categoría', 'Fecha', 'Origen', 'Descripción', 'Productos comprados', 'Comprobante', 'N° de comprobante', 'Método de pago', 'Monto']);
   headerRow.eachCell(cell => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${YAYIS_GREEN}` } };
@@ -91,27 +103,28 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
 
     // Filas de gastos
     cat.items.forEach((it, i) => {
-      const row = ws.addRow([i + 1, it.descripcion, it.fecha, metodoLabel(it.metodo), it.monto]);
-      const montoCell = row.getCell(5);
-      montoCell.numFmt = '#,##0.00';
+      const row = ws.addRow([i + 1, cat.categoria, it.fecha, it.origen ?? '', it.descripcion, it.productos ?? '', it.comprobante ?? '', it.numeroComprobante ?? '', metodoLabel(it.metodo), it.monto]);
+      row.getCell(6).alignment = { wrapText: true, vertical: 'top' };
+      if (it.comprobante === 'Sin comprobante') row.getCell(7).font = { color: { argb: 'FFC0392B' }, bold: true };
+      row.getCell(10).numFmt = '#,##0.00';
     });
 
     // Subtotal de la categoria (en negrita)
-    const subtotalRow = ws.addRow(['', '', '', `Subtotal ${cat.categoria}`, cat.total]);
+    const subtotalRow = ws.addRow(['', '', '', '', '', '', '', '', `Subtotal ${cat.categoria}`, cat.total]);
     subtotalRow.font = { bold: true };
-    subtotalRow.getCell(5).numFmt = '#,##0.00';
-    subtotalRow.getCell(5).font = { bold: true };
+    subtotalRow.getCell(10).numFmt = '#,##0.00';
+    subtotalRow.getCell(10).font = { bold: true };
   }
 
   // --- Total general (en negrita) ---
   ws.addRow([]);
-  const totalRow = ws.addRow(['', '', '', 'TOTAL GENERAL', totalGeneral(categorias)]);
+  const totalRow = ws.addRow(['', '', '', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral(categorias)]);
   totalRow.font = { bold: true };
   totalRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${YAYIS_DARK}` } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   });
-  totalRow.getCell(5).numFmt = '#,##0.00';
+  totalRow.getCell(10).numFmt = '#,##0.00';
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -124,7 +137,7 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
 export async function exportarGastosPDF(categorias: ExportCategoria[], meta: ExportMeta) {
   const { jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // --- Encabezado del documento ---
@@ -152,7 +165,7 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
     body.push([
       {
         content: cat.categoria,
-        colSpan: 5,
+        colSpan: 7,
         styles: { fontStyle: 'bold', fillColor: [9, 139, 95], textColor: 255 },
       },
     ]);
@@ -160,15 +173,17 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
     cat.items.forEach((it, i) => {
       body.push([
         String(i + 1),
-        it.descripcion,
         it.fecha,
+        it.descripcion,
+        it.productos ?? '',
+        [it.comprobante, it.numeroComprobante].filter(Boolean).join(' '),
         metodoLabel(it.metodo),
         formatMonto(it.monto),
       ]);
     });
     // Subtotal
     body.push([
-      { content: `Subtotal ${cat.categoria}`, colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
+      { content: `Subtotal ${cat.categoria}`, colSpan: 6, styles: { fontStyle: 'bold', halign: 'right' } },
       { content: formatMonto(cat.total), styles: { fontStyle: 'bold', halign: 'right' } },
     ]);
   }
@@ -177,7 +192,7 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
   body.push([
     {
       content: 'TOTAL GENERAL',
-      colSpan: 4,
+      colSpan: 6,
       styles: { fontStyle: 'bold', halign: 'right', fillColor: [0, 76, 64], textColor: 255 },
     },
     {
@@ -188,15 +203,18 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
 
   autoTable(doc, {
     startY: 39,
-    head: [['N°', 'Descripcion', 'Fecha', 'Metodo', 'Monto']],
+    head: [['N°', 'Fecha', 'Descripción', 'Productos comprados', 'Comprobante', 'Método', 'Monto']],
     body: body as never,
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [0, 76, 64], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 12 },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 24 },
-      4: { halign: 'right', cellWidth: 28 },
+      0: { halign: 'center', cellWidth: 10 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 42 },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 34 },
+      5: { cellWidth: 20 },
+      6: { halign: 'right', cellWidth: 24 },
     },
     margin: { left: 14, right: 14 },
   });
