@@ -4,9 +4,9 @@
 -- Correr en el SQL Editor de Supabase ANTES de publicar el código que depende de esto.
 ALTER TABLE reposiciones ADD COLUMN IF NOT EXISTS sobrante_activo BOOLEAN NOT NULL DEFAULT false;
 
--- Las 3 reposiciones de Atelier del 12-oct-2026 (sobrantes 0.80 + 0.60 + 0.80 = S/ 2.20).
+-- Las reposiciones del 12-oct-2026: Atelier (3, sobrantes 0.80 + 0.60 + 0.80 = S/ 2.20) y Centro (1, sobrante S/ 1.46).
 UPDATE reposiciones SET sobrante_activo = true
 WHERE fecha = '2026-10-12'
-  AND sede_id IN (SELECT id FROM sedes WHERE nombre ILIKE 'atelier%');
+  AND sede_id IN (SELECT id FROM sedes WHERE nombre ILIKE 'atelier%' OR nombre ILIKE 'centro%');
 
 SELECT count(*) AS reposiciones_marcadas FROM reposiciones WHERE sobrante_activo;
