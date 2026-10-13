@@ -107,5 +107,14 @@ export function useRutaCompras(fecha: string) {
     return { error: null };
   }, [fetchRuta]);
 
-  return { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor };
+  /** Un producto que «no había» en un proveedor se pasa a otro y vuelve a quedar por comprar (la lista se reabre si ya estaba terminada). */
+  const comprarEnOtroProveedor = useCallback(async (item: ItemRuta, proveedorId: string) => {
+    const { error } = await supabase.from('pedido_items').update({ proveedor_id: proveedorId, estado: 'pendiente' }).eq('id', item.id);
+    if (error) return { error: error.message };
+    await supabase.from('pedidos').update({ estado: 'enviado', comprado_at: null }).eq('id', item.pedido_id).eq('estado', 'comprado');
+    await fetchRuta();
+    return { error: null };
+  }, [fetchRuta]);
+
+  return { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor, comprarEnOtroProveedor };
 }

@@ -61,7 +61,7 @@ export function RutaComprasPage() {
   const hoy = getTodayLima();
   const [fecha, setFecha] = useState(hoy);
   const { sedes } = useSedeActiva();
-  const { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor } = useRutaCompras(fecha);
+  const { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor, comprarEnOtroProveedor } = useRutaCompras(fecha);
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
   const [ocupado, setOcupado] = useState<string | null>(null);
@@ -165,6 +165,32 @@ export function RutaComprasPage() {
     const { error } = await asignarProveedor(linea.item, proveedorId, guardarHabitual);
     setOcupado(null);
     if (error) addToast(error, 'error');
+  }
+
+  async function handleOtroProveedor(linea: LineaRuta, proveedorId: string) {
+    if (!proveedorId) return;
+    setOcupado(linea.item.id);
+    const { error } = await comprarEnOtroProveedor(linea.item, proveedorId);
+    setOcupado(null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast('Listo: ahora aparece en el otro proveedor para comprarlo.', 'success');
+  }
+
+  // Un producto que «no había» se puede pasar a otro proveedor (solo si la lista aún no se recibió).
+  function selectorOtroProveedor(linea: LineaRuta, proveedorActualId: string | null) {
+    if (linea.item.estado !== 'no_habia' || !['enviado', 'comprado'].includes(linea.pedido.estado)) return null;
+    return (
+      <Select
+        value=""
+        onChange={e => handleOtroProveedor(linea, e.target.value)}
+        disabled={ocupado === linea.item.id}
+        className="h-9 w-full text-xs sm:w-52"
+        aria-label={`Comprar ${linea.item.productos?.nombre ?? 'el producto'} en otro proveedor`}
+      >
+        <option value="">Comprar en otro proveedor...</option>
+        {proveedoresActivos.filter(p => p.id !== proveedorActualId).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+      </Select>
+    );
   }
 
   // Lo que falta registrar de este proveedor para cada sede (lo "no había" no se compra).
@@ -480,6 +506,7 @@ export function RutaComprasPage() {
                                 </>
                               )}
                             </div>
+                            {item.estado === 'no_habia' && <div className="w-full sm:ml-auto sm:w-auto">{selectorOtroProveedor(linea, g.proveedor?.id ?? null)}</div>}
                           </div>
                         );
                       })}
@@ -543,6 +570,12 @@ export function RutaComprasPage() {
                     <span className="font-medium">{g.proveedor?.nombre}</span>
                     <span className="text-xs text-muted-foreground">{g.total} producto(s) · {registradasProv.length} compra(s) registrada(s)</span>
                     <span className="ml-auto font-semibold text-emerald-800">{formatMonto(registradasProv.reduce((t, c) => t + Number(c.total), 0))}</span>
+                    {g.productos.flatMap(prod => prod.lineas.filter(l => l.item.estado === 'no_habia').map(linea => (
+                      <div key={linea.item.id} className="flex w-full flex-wrap items-center gap-2 rounded-md bg-red-50/60 px-2 py-1.5">
+                        <span className="min-w-0 flex-1 text-xs"><strong className="text-red-700">No había:</strong> {prod.nombre} · {formatCantidad(linea.item.cantidad)} {linea.item.unidad} · {linea.pedido.sedes?.nombre}</span>
+                        {selectorOtroProveedor(linea, g.proveedor?.id ?? null)}
+                      </div>
+                    )))}
                   </div>
                 );
               })}
