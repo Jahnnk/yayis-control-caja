@@ -15,6 +15,7 @@ import { Bike, CalendarDays, ChevronDown, ClipboardList, Download, Loader2, Pack
 import { useToast } from '@/components/ui/toast';
 import { Desplegable } from '@/components/ui/desplegable';
 import { CabeceraGerencia } from '@/components/layout/CabeceraGerencia';
+import { IndicadoresViajes } from '@/components/viajes/IndicadoresViajes';
 import { SeguimientoMini, SeguimientoPedido } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import type { PedidoVista } from '@/hooks/useVistaGeneral';
@@ -437,6 +438,9 @@ export function VistaGeneralPage() {
           </div>
         )}
       </Desplegable>
+
+      {/* Viajes de Compras en moto: cuántos, cuáles extra y por qué, km y gasolina */}
+      <IndicadoresViajes desde={periodo.desde} hasta={periodo.hasta} hoy={hoy} sedes={sedes} />
 
       {/* Gastos de caja */}
       <Desplegable

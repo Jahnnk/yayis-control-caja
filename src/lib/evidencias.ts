@@ -44,3 +44,13 @@ export async function abrirEvidencia(path: string): Promise<string | null> {
   ventana.location.href = data.signedUrl;
   return null;
 }
+
+/** Foto de la boleta de gasolina de Compras (no es de ninguna sede: va en su propia carpeta). */
+export async function subirFotoGasolina(file: File, userId: string) {
+  const error = validarConstancia(file);
+  if (error) return { path: null, error };
+  const path = `gasolina/${userId}/${crypto.randomUUID()}.${EXTENSION[file.type]}`;
+  const { error: errSubida } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  if (errSubida) return { path: null, error: `No se pudo subir la foto: ${errSubida.message}` };
+  return { path, error: null };
+}

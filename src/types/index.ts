@@ -380,3 +380,35 @@ export interface LiquidacionDelivery {
   fecha_entrega?: string | null;
   created_at: string;
 }
+
+/** Viajes de Compras en su moto (Fase 1: medir). Las compras y deliverys se asocian por la hora. */
+export type TipoViaje = 'compras' | 'deliverys';
+export type MotivoViaje = 'lista_tardia' | 'no_habia' | 'no_cabia' | 'olvido' | 'otro';
+
+export interface Viaje {
+  id: string;
+  conductor: string;
+  fecha: string;
+  tipo: TipoViaje;
+  salida_at: string;
+  km_salida: number;
+  regreso_at: string | null;
+  km_regreso: number | null;
+  /** El primer viaje de compras del día es el planificado; los siguientes son extra y llevan motivo. */
+  es_extra: boolean;
+  motivo: MotivoViaje | null;
+  motivo_sede_id: string | null;
+  motivo_detalle: string | null;
+  created_at: string;
+}
+
+export interface CargaCombustible {
+  id: string;
+  conductor: string;
+  fecha: string;
+  monto: number;
+  km: number | null;
+  foto_path: string | null;
+  nota: string | null;
+  created_at: string;
+}

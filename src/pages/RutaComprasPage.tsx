@@ -4,6 +4,8 @@ import { SeguimientoMini } from '@/components/compras/SeguimientoPedido';
 import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import { Link } from 'react-router-dom';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { ControlViaje } from '@/components/viajes/ControlViaje';
 import { RegistrarCompraModal, type LineaCandidata } from '@/components/compras/RegistrarCompraModal';
 import { abrirEvidencia } from '@/lib/evidencias';
 import { leerCompraAbierta } from '@/lib/borradores';
@@ -61,6 +63,7 @@ export function RutaComprasPage() {
   const hoy = getTodayLima();
   const [fecha, setFecha] = useState(hoy);
   const { sedes } = useSedeActiva();
+  const { profile } = useAuth();
   const { pedidos, borradores, compras, loading, fetchRuta, marcarItem, asignarProveedor, comprarEnOtroProveedor } = useRutaCompras(fecha);
   const { proveedores } = useProveedores();
   const { addToast } = useToast();
@@ -287,6 +290,9 @@ export function RutaComprasPage() {
           {fecha !== hoy && <Button variant="ghost" size="sm" onClick={() => setFecha(hoy)}>Hoy</Button>}
         </div>
       </div>
+
+      {/* Compras anota sus viajes en moto (km, motivo de cada viaje extra, gasolina) */}
+      {profile?.rol === 'compras' && fecha === hoy && <ControlViaje />}
 
       {/* Sedes que compran este día */}
       <Card>

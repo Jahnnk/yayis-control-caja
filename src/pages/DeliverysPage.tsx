@@ -1,6 +1,7 @@
 import { conMayuscula } from '@/lib/compras';
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ControlViaje } from '@/components/viajes/ControlViaje';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useDeliverys, type DeliveryDetalle } from '@/hooks/useDeliverys';
 import { useToast } from '@/components/ui/toast';
@@ -188,6 +189,8 @@ function VistaCompras() {
         <h1 className="text-2xl font-bold text-yayis-dark">Mis deliverys</h1>
         <p className="mt-1 text-sm text-muted-foreground">{conMayuscula(fechaLarga(hoy))}</p>
       </div>
+
+      <ControlViaje />
 
       <Card className={pendientes.length > 0 ? 'border-amber-300 bg-amber-50/40' : ''}>
         <CardHeader className="pb-2">
