@@ -49,7 +49,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
   const [constanciaFile, setConstanciaFile] = useState<File | null>(null);
   const [eliminarConstancia, setEliminarConstancia] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // «Más detalles» (fecha, notas, constancia): plegado al anotar; abierto al editar.
+  // «Más detalles» (notas, constancia): plegado al anotar; abierto al editar. La fecha va siempre a la vista.
   const [masDetalles, setMasDetalles] = useState(!!editData);
   const montoRef = useRef<HTMLInputElement>(null);
 
@@ -198,7 +198,6 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
   const activas = categorias.filter(c => c.activa);
   const chips = Array.from(new Set([...recientes, ...categoriasFrecuentes])).map(id => activas.find(c => c.id === id)).filter((c): c is NonNullable<typeof c> => !!c).slice(0, 4);
   const resumenDetalles = [
-    form.fecha === today ? 'hoy' : form.fecha,
     form.notas.trim() ? `"${form.notas.trim()}"` : 'sin notas',
     constanciaFile || (editData?.constancia_path && !eliminarConstancia) ? 'con constancia' : 'sin constancia',
   ].join(' · ');
@@ -273,7 +272,15 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         </div>
       )}
 
-      {/* Más detalles: fecha, notas y constancia */}
+      {/* Fecha del gasto: siempre a la vista (viene en hoy) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-sm font-medium" htmlFor="fecha-gasto">Fecha del gasto</label>
+        <Input id="fecha-gasto" type="date" value={form.fecha} onChange={e => updateField('fecha', e.target.value)} max={today} className="w-44 bg-white" />
+        {form.fecha === today ? <span className="text-xs text-muted-foreground">hoy</span>
+          : <button type="button" className="text-xs font-medium text-yayis-green" onClick={() => updateField('fecha', today)}>volver a hoy</button>}
+      </div>
+
+      {/* Más detalles: notas y constancia */}
       <div>
         <button type="button" onClick={() => setMasDetalles(v => !v)} aria-expanded={masDetalles}
           className="inline-flex flex-wrap items-center gap-1 text-left text-xs text-muted-foreground">
@@ -282,11 +289,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         </button>
         {masDetalles && (
           <div className="mt-2 grid grid-cols-1 gap-3 rounded-md bg-gray-50 p-3 sm:grid-cols-[10rem_1fr]">
-            <div>
-              <label className="text-sm font-medium" htmlFor="fecha-gasto">Fecha</label>
-              <Input id="fecha-gasto" type="date" value={form.fecha} onChange={e => updateField('fecha', e.target.value)} max={today} className="mt-1 bg-white" />
-            </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="text-sm font-medium" htmlFor="notas-gasto">Notas (opcional)</label>
               <Input id="notas-gasto" placeholder="Detalles adicionales..." value={form.notas} onChange={e => updateField('notas', e.target.value)} className="mt-1 bg-white" />
             </div>
