@@ -34,6 +34,8 @@ export function ControlViaje() {
   const [guardando, setGuardando] = useState(false);
   // Salir
   const [tipo, setTipo] = useState<TipoViaje>(tipoSugerido());
+  // Si elige un tipo distinto al de la hora (deliverys en la mañana, compras en la tarde), tiene que confirmarlo.
+  const [confirmaTipo, setConfirmaTipo] = useState(false);
   const [km, setKm] = useState('');
   const [motivo, setMotivo] = useState<MotivoViaje | null>(null);
   const [motivoSede, setMotivoSede] = useState('');
@@ -65,10 +67,14 @@ export function ControlViaje() {
     setPanel(actual => (actual === p ? null : p));
     setKm(''); setMotivo(null); setMotivoSede(''); setMotivoDetalle(''); setMonto(''); setKmGas(''); setFoto(null);
     setTipo(tipoSugerido());
+    setConfirmaTipo(false);
   }
 
   // Lo que falta para poder guardar, dicho en palabras.
+  const sugerido = tipoSugerido();
+  const tipoInusual = tipo !== sugerido;
   const faltaSalir = !km.trim() ? 'Escribe el km que marca el tablero.'
+    : tipoInusual && !confirmaTipo ? 'Confirma el tipo de viaje.'
     : extra && !motivo ? 'Elige por qué haces otro viaje.'
     : motivo === 'otro' && !motivoDetalle.trim() ? 'Escribe el motivo.'
     : null;
@@ -124,8 +130,25 @@ export function ControlViaje() {
         {/* Salir */}
         {panel === 'salir' && !v.abierto && (
           <div className="space-y-3 border-t pt-3">
-            <Segmentado etiqueta="Tipo de viaje" valor={tipo} onCambiar={x => setTipo(x as TipoViaje)}
+            <Segmentado etiqueta="Tipo de viaje" valor={tipo} onCambiar={x => { setTipo(x as TipoViaje); setConfirmaTipo(false); }}
               opciones={[{ valor: 'compras', texto: 'Compras' }, { valor: 'deliverys', texto: 'Deliverys' }]} />
+            {tipoInusual && (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+                <p className="text-sm text-amber-900">
+                  {tipo === 'deliverys'
+                    ? 'Elegiste «Deliverys» pero todavía es de mañana, cuando se hacen las compras. ¿Este viaje es para entregar deliverys?'
+                    : 'Elegiste «Compras» pero ya es de tarde, cuando se hacen los deliverys. ¿Este viaje es para comprar?'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant={confirmaTipo ? 'default' : 'outline'} aria-pressed={confirmaTipo} onClick={() => setConfirmaTipo(true)}>
+                    {confirmaTipo ? '✓ ' : ''}Sí, es de {tipo === 'deliverys' ? 'deliverys' : 'compras'}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setTipo(sugerido); setConfirmaTipo(false); }}>
+                    No, es de {sugerido === 'compras' ? 'compras' : 'deliverys'}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium" htmlFor="viaje-km-salida">{millas ? 'Millas' : 'Km'} del tablero al salir</label>
               <Input autoFocus id="viaje-km-salida" type="number" inputMode="decimal" min="0" step="0.1" className="mt-1 h-11 text-base"
