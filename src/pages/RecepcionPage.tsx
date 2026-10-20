@@ -29,18 +29,20 @@ import { getTodayLima } from '@/lib/dates';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
 import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
 import { ResumenSemanaDinero } from '@/components/gastos/ResumenSemanaDinero';
-import { deudasConCompras, lunesDe, resumenSemana } from '@/lib/dinero-semana';
+import { deudasConCompras, esArrastre, lunesDe, resumenSemana } from '@/lib/dinero-semana';
 import { ESTADO_ITEM, diaSemanaDe, diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
 
-function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seguimiento }: {
+function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seguimiento, quedaSinDinero }: {
   entrega: EntregaDetalle;
   /** Seguimiento del dinero de esta entrega. */
   seguimiento?: React.ReactNode;
   categoriasSede: { id: string; nombre: string }[];
   onDevolver: (e: EntregaDetalle) => void;
   onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua: number) => void;
+  /** Compras no tiene otra entrega abierta de esta sede: si se cierra sin saldo que siga, se queda sin dinero para comprar. */
+  quedaSinDinero?: boolean;
 }) {
   const [categorias, setCategorias] = useState<Record<string, string>>({});
   // NO viene lleno: el administrador escribe lo que de verdad le entregaron en mano (antes se copiaba lo que dijo Compras y quedaban vueltos que nunca se entregaron).
@@ -131,6 +133,13 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
         {fotosPendientes > 0 && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             {fotosPendientes === 1 ? '1 compra tiene' : `${fotosPendientes} compras tienen`} <strong>evidencia pendiente</strong>: Compras debe subir las fotos que faltan antes de que puedas cerrar. Si prefieres, devuélvela a Compras.
+          </p>
+        )}
+
+        {quedaSinDinero && saldoContinua === 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <strong>Al cerrar, Compras se queda sin dinero de esta sede para comprar:</strong> no podrá registrar compras hasta que le registres una entrega nueva.
+            {diferenciaBruta > 0 && ' Si le sobra plata y se la queda, marca abajo que el saldo sigue con Compras.'}
           </p>
         )}
 
@@ -226,11 +235,30 @@ export function RecepcionPage() {
   const enManosDeCompras = abiertas.reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
   const rendidas = entregas.filter(e => e.estado === 'rendida');
 
-  async function handleEntregar() {
+  // Lo acordado es UNA entrega por semana: si Compras ya tiene dinero sin gastar o ya recibió esta semana, se avisa antes.
+  const [avisoOtraEntrega, setAvisoOtraEntrega] = useState<string | null>(null);
+  function antesDeEntregar(): string | null {
+    const sinGastar = abiertas.filter(e => e.receptor_id === receptorId).reduce((t, e) => roundTwo(t + Number(e.monto) - gastadoDe(e)), 0);
+    const deLaSemana = [...entregas, ...cerradas].filter(e => e.receptor_id === receptorId && e.fecha >= lunesSemana && !esArrastre(e));
+    const yaEntregado = deLaSemana.reduce((t, e) => roundTwo(t + Number(e.monto)), 0);
+    if (sinGastar <= 0 && deLaSemana.length === 0) return null;
+    const partes: string[] = [];
+    if (sinGastar > 0) partes.push(`Compras todavía tiene ${formatMonto(sinGastar)} sin gastar de esta sede.`);
+    if (deLaSemana.length > 0) partes.push(`Esta semana ya le entregaste ${formatMonto(yaEntregado)} en ${deLaSemana.length} entrega(s).`);
+    partes.push('Lo acordado es una sola entrega por semana: muchas entregas chicas confunden las cuentas. ¿Seguro que necesita más dinero?');
+    return partes.join(' ');
+  }
+
+  async function handleEntregar(confirmado = false) {
     const valor = parseFloat(monto);
     if (!receptorId) return addToast('No hay usuario de Compras para recibir el dinero', 'error');
     if (!(valor > 0)) return addToast('El monto debe ser mayor a 0', 'error');
     if (!fechaEntrega || fechaEntrega > hoy) return addToast('La fecha de la entrega no puede ser futura', 'error');
+    if (!confirmado) {
+      const aviso = antesDeEntregar();
+      if (aviso) return setAvisoOtraEntrega(aviso);
+    }
+    setAvisoOtraEntrega(null);
     setGuardando(true);
     const { error } = await crearEntrega({ receptor_id: receptorId, monto: valor, metodo_pago: metodo, fecha: fechaEntrega, notas: nota.trim() || null });
     setGuardando(false);
@@ -337,6 +365,7 @@ export function RecepcionPage() {
           seguimiento={<SeguimientoPedido seguimiento={seguir(e)} />}
           categoriasSede={categoriasSede}
           onDevolver={handleDevolver}
+          quedaSinDinero={!abiertas.some(x => x.receptor_id === e.receptor_id)}
           onCerrar={(ent, vuelto, cats, saldoContinua) => {
             if (!(vuelto >= 0)) return addToast('Escribe el vuelto que recibiste (0 si no hubo)', 'error');
             if (ent.compras.some(c => !cats[c.id])) return addToast('Elige la categoría de cada compra', 'error');
@@ -374,7 +403,7 @@ export function RecepcionPage() {
                 {porEntregar > 0 && (
                   <Button type="button" variant="outline" className="h-11" onClick={() => setMonto(String(porEntregar))}>Todo lo que queda ({formatMonto(porEntregar)})</Button>
                 )}
-                <Button onClick={handleEntregar} disabled={guardando} className="h-11">
+                <Button onClick={() => handleEntregar()} disabled={guardando} className="h-11">
                   {guardando ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
                   Registrar entrega
                 </Button>
@@ -529,6 +558,15 @@ export function RecepcionPage() {
       )}
 
       <ConfirmDialog
+        open={avisoOtraEntrega !== null}
+        title="¿Otra entrega esta semana?"
+        message={avisoOtraEntrega ?? ''}
+        confirmLabel={`Sí, entregar ${formatMonto(parseFloat(monto) || 0)}`}
+        onConfirm={() => handleEntregar(true)}
+        onCancel={() => setAvisoOtraEntrega(null)}
+      />
+
+      <ConfirmDialog
         open={porDevolver !== null}
         title="¿Ya le devolviste este dinero a Compras?"
         message={porDevolver ? `Confirmas que le entregaste en mano ${formatMonto(porDevolver.monto)} a Compras por lo que puso de su bolsillo en la rendición del ${fechaCorta(porDevolver.entrega.fecha)}.` : ''}
@@ -541,7 +579,7 @@ export function RecepcionPage() {
         open={porCerrar !== null}
         title="¿Confirmar y cerrar esta rendición?"
         message={porCerrar
-          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y confirmas que Compras te entregó en mano ${formatMonto(porCerrar.vuelto)}.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Compras: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
+          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y confirmas que Compras te entregó en mano ${formatMonto(porCerrar.vuelto)}.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Compras: se abre una entrega nueva con ese saldo para la próxima semana.` : !abiertas.some(x => x.receptor_id === porCerrar.entrega.receptor_id) ? ' Compras se quedará sin dinero de esta sede para comprar hasta que le registres otra entrega.' : ''} Esto no se puede deshacer.`
           : ''}
         confirmLabel={cerrando ? 'Cerrando...' : 'Sí, cerrar'}
         onConfirm={confirmarCierre}
