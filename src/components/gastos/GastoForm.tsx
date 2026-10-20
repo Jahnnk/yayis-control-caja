@@ -150,6 +150,8 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
       // Solo se envía la casilla si cambió.
       const cambios: Partial<GastoFormData> = { ...datos };
       if (form.con_monto_semanal === editData.con_monto_semanal) delete cambios.con_monto_semanal;
+      // Editar un gasto NUNCA cambia si está repuesto o por reponer: eso solo lo hace una reposición.
+      delete cambios.estado;
       const { error } = await updateGasto(editData.id, cambios, {
         file: constanciaFile,
         pathActual: editData.constancia_path,
