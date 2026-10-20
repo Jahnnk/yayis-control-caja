@@ -117,6 +117,8 @@ export function ResumenPage() {
   const [repoNotas, setRepoNotas] = useState('');
   const [repoSaving, setRepoSaving] = useState(false);
   const [confirmDeleteRepoId, setConfirmDeleteRepoId] = useState<string | null>(null);
+  // Antes de registrar una reposición se confirma a quién y en qué sede (se registraban en la sede equivocada).
+  const [confirmRepo, setConfirmRepo] = useState(false);
 
   // Historico
   const [showHistorico, setShowHistorico] = useState(false);
@@ -662,6 +664,19 @@ export function ResumenPage() {
     }
   }
 
+  async function handleConfirmRepo() {
+    setConfirmRepo(false);
+    setRepoSaving(true);
+    const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else {
+      if (warning) addToast(warning, 'warning');
+      else addToast('Reposición registrada', 'success');
+      setRepoMonto(''); setRepoNotas(''); loadData();
+    }
+    setRepoSaving(false);
+  }
+
   async function handleConfirmDeleteRepo() {
     if (!confirmDeleteRepoId) return;
     const { error } = await deleteReposicion(confirmDeleteRepoId);
@@ -881,19 +896,9 @@ export function ResumenPage() {
                 <div><label className="text-xs font-medium">Monto (S/)</label><Input type="number" step="0.01" min="0.01" placeholder="0.00" value={repoMonto} onChange={e => setRepoMonto(e.target.value)} className="mt-1" /></div>
                 <div><label className="text-xs font-medium">Notas</label><Input placeholder="Opcional..." value={repoNotas} onChange={e => setRepoNotas(e.target.value)} className="mt-1" /></div>
               </div>
-              <Button className="mt-3" disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0} onClick={async () => {
-                setRepoSaving(true);
-                const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
-                if (error) addToast(`Error: ${error}`, 'error');
-                else {
-                  if (warning) addToast(warning, 'warning');
-                  else addToast('Reposición registrada', 'success');
-                  setRepoMonto(''); setRepoNotas(''); loadData();
-                }
-                setRepoSaving(false);
-              }}>
+              <Button className="mt-3" disabled={repoSaving || !repoMonto || parseFloat(repoMonto) <= 0} onClick={() => setConfirmRepo(true)}>
                 {repoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus size={16} className="mr-2" />}
-                Registrar reposición
+                Registrar reposición a {encargado}{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}
               </Button>
             </div>
 
@@ -1630,11 +1635,25 @@ export function ResumenPage() {
 
       <ConfirmDialog open={showCerrar} title="Cerrar semana" message="Una vez cerrada, los registros no podrán modificarse." confirmLabel="Cerrar semana" onConfirm={handleCerrarSemana} onCancel={() => setShowCerrar(false)} />
 
+      {/* Confirmacion: registrar reposicion (a quién y en qué sede) */}
+      <ConfirmDialog
+        open={confirmRepo}
+        title={`¿Reponer ${formatMonto(parseFloat(repoMonto) || 0)} a ${encargado}${sedeActiva ? ` en ${sedeActiva.nombre}` : ''}?`}
+        message={`Se registra en la caja de ${encargado}${sedeActiva ? `, sede ${sedeActiva.nombre}` : ''}, por ${repoMetodo === 'efectivo' ? 'efectivo' : 'cuentas'}, con fecha ${repoFecha}. Revisa que la sede de arriba sea la correcta. Si no calza exacto con los gastos, lo que sobra queda a favor para la próxima reposición: no hace falta eliminarla.`}
+        confirmLabel={`Sí, reponer a ${encargado}`}
+        onConfirm={handleConfirmRepo}
+        onCancel={() => setConfirmRepo(false)}
+      />
+
       {/* Confirmacion: eliminar reposicion */}
       <ConfirmDialog
         open={confirmDeleteRepoId !== null}
         title="¿Eliminar esta reposición?"
-        message="Los gastos que pagó esta reposición volverán a quedar por reponer."
+        message={(() => {
+          const r = reposiciones.find(x => x.id === confirmDeleteRepoId);
+          const cual = r ? `La de ${formatMonto(Number(r.monto))} del ${r.fecha}. ` : '';
+          return `${cual}Los gastos que pagó volverán a quedar por reponer. Si es solo porque sobran o faltan centavos, no hace falta eliminarla: lo que sobra queda a favor para la próxima reposición. Elimínala solo si la registraste por error (sede, monto o fecha equivocados).`;
+        })()}
         confirmLabel="Si, eliminar"
         variant="destructive"
         onConfirm={handleConfirmDeleteRepo}
