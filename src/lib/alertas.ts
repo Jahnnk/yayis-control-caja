@@ -199,7 +199,7 @@ export function calcularAlertas(
   for (const e of entregas) {
     const sede = e.sedes?.nombre ?? '';
     if (e.estado === 'cerrada') {
-      const diferencia = diferenciaDeCierre(e.monto, gastadoEntrega(e), e.vuelto_recibido, e.saldo_continua);
+      const diferencia = diferenciaDeCierre(e.monto, gastadoEntrega(e), e.vuelto_recibido, e.saldo_continua, e.devuelto_a_compras);
       if (diferencia !== 0) {
         alertas.push({
           clave: `descuadre-${e.id}`, nivel: diferencia > 0 ? 'alta' : 'media', tipo: 'Rendición descuadrada',

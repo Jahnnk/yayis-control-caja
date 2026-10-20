@@ -292,6 +292,9 @@ export interface Entrega {
   vuelto_recibido: number | null;
   /** Lo que no se devolvió y sigue con Compras para la semana siguiente. */
   saldo_continua: number;
+  /** Lo que la sede le devolvió en mano a Compras por lo que puso de su bolsillo (0 si no hubo). */
+  devuelto_a_compras?: number;
+  devuelto_a_compras_at?: string | null;
   cerrada_at: string | null;
   cerrada_por: string | null;
   created_at: string;
