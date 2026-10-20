@@ -22,7 +22,7 @@ export interface EstadoReposicion {
   repuestos: number;
 }
 
-type EntregaSeguible = Pick<Entrega, 'monto' | 'estado' | 'fecha' | 'created_at' | 'rendida_at' | 'cerrada_at' | 'vuelto' | 'vuelto_recibido' | 'saldo_continua'> & {
+type EntregaSeguible = Pick<Entrega, 'monto' | 'estado' | 'fecha' | 'created_at' | 'rendida_at' | 'cerrada_at' | 'vuelto' | 'vuelto_recibido' | 'saldo_continua' | 'devuelto_a_compras'> & {
   compras: Pick<Compra, 'total' | 'created_at' | 'evidencia_pendiente'>[];
 };
 
@@ -104,7 +104,7 @@ export function seguimientoDeEntrega(e: EntregaSeguible, opciones: {
     // cerrada
     detalles[1] = `Gastó ${formatMonto(gastado)}`;
     detalles[2] = `Vuelto ${formatMonto(Number(e.vuelto ?? 0))}`;
-    const diferencia = diferenciaDeCierre(e.monto, gastado, e.vuelto_recibido, e.saldo_continua);
+    const diferencia = diferenciaDeCierre(e.monto, gastado, e.vuelto_recibido, e.saldo_continua, e.devuelto_a_compras);
     detalles[3] = diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`;
     if (diferencia !== 0) tono = 'alerta';
     const sigue = Number(e.saldo_continua) > 0 ? ` ${formatMonto(Number(e.saldo_continua))} siguieron con Compras para la semana siguiente.` : '';

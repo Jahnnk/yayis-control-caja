@@ -130,7 +130,20 @@ export function useEntregas(modo: 'sede' | 'mias') {
     return { error: null };
   }, [fetchEntregas]);
 
-  return { entregas, cerradas, loading, fetchEntregas, crearEntrega, anularEntrega, rendirEntrega, devolverACompras, cerrarEntrega, eliminarCompra };
+  /** La sede le devolvió en mano a Compras lo que puso de su bolsillo en una rendición ya cerrada. */
+  const registrarDevolucion = useCallback(async (entregaId: string) => {
+    const { error } = await supabase.rpc('registrar_devolucion_a_compras', { p_entrega: entregaId });
+    if (error) {
+      if (error.message.includes('registrar_devolucion_a_compras') || error.message.includes('function')) {
+        return { error: 'Falta activar esta opción en la base de datos (avísale a Gerencia).' };
+      }
+      return { error: error.message };
+    }
+    await fetchEntregas();
+    return { error: null };
+  }, [fetchEntregas]);
+
+  return { entregas, cerradas, loading, fetchEntregas, crearEntrega, anularEntrega, rendirEntrega, devolverACompras, cerrarEntrega, eliminarCompra, registrarDevolucion };
 }
 
 /** Quienes pueden recibir dinero para comprar (usuarios con rol Compras). */

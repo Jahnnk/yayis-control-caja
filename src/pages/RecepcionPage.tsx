@@ -28,6 +28,8 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
 import { SaldoMontoSemanal } from '@/components/gastos/SaldoMontoSemanal';
+import { ResumenSemanaDinero } from '@/components/gastos/ResumenSemanaDinero';
+import { deudasConCompras, lunesDe, resumenSemana } from '@/lib/dinero-semana';
 import { ESTADO_ITEM, diaSemanaDe, diferenciaDeCierre, fechaCorta, formatCantidad, sumarDias } from '@/lib/compras';
 import { CheckCircle2, ChevronDown, HandCoins, Loader2, PackageCheck, Undo2, Wallet } from 'lucide-react';
 import type { CompraDetalle, MetodoPago } from '@/types';
@@ -41,7 +43,9 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
   onCerrar: (e: EntregaDetalle, vueltoRecibido: number, categorias: Record<string, string>, saldoContinua: number) => void;
 }) {
   const [categorias, setCategorias] = useState<Record<string, string>>({});
-  const [vueltoRecibido, setVueltoRecibido] = useState(String(Number(entrega.vuelto ?? 0)));
+  // NO viene lleno: el administrador escribe lo que de verdad le entregaron en mano (antes se copiaba lo que dijo Compras y quedaban vueltos que nunca se entregaron).
+  const [vueltoRecibido, setVueltoRecibido] = useState('');
+  const vueltoInformado = Number(entrega.vuelto ?? 0);
   // Lo que Fabio no devolvió puede seguir con él para la semana siguiente (no es un faltante).
   const [sigueConFabio, setSigueConFabio] = useState(false);
 
@@ -97,13 +101,26 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
           <div><p className="text-xs text-muted-foreground">Compras dice que devuelve</p><p className="font-bold">{formatMonto(Number(entrega.vuelto ?? 0))}</p></div>
         </div>
 
+        <div className="space-y-2">
+          <p className="text-sm font-medium">¿Compras te entregó dinero <strong>en mano</strong>?</p>
+          <div className="flex flex-wrap gap-2">
+            {vueltoInformado > 0 && (
+              <Button type="button" size="sm" variant={vueltoRecibido === String(vueltoInformado) ? 'default' : 'outline'} onClick={() => { setVueltoRecibido(String(vueltoInformado)); setSigueConFabio(false); }}>
+                Sí, me entregó {formatMonto(vueltoInformado)}
+              </Button>
+            )}
+            <Button type="button" size="sm" variant={vueltoRecibido === '0' ? 'default' : 'outline'} onClick={() => { setVueltoRecibido('0'); setSigueConFabio(vueltoEsperado > 0); }}>
+              No me entregó nada{vueltoEsperado > 0 ? ': el saldo sigue con Compras' : ''}
+            </Button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="text-xs font-medium" htmlFor={`recibido-${entrega.id}`}>Vuelto que recibiste de verdad (S/)</label>
+            <label className="text-xs font-medium" htmlFor={`recibido-${entrega.id}`}>Lo que te entregó en mano (S/)</label>
             <Input id={`recibido-${entrega.id}`} type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-36" value={vueltoRecibido} onChange={e => setVueltoRecibido(e.target.value)} />
           </div>
-          <p className={`pb-2 text-sm font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-            {diferencia === 0
+          <p className={`pb-2 text-sm font-bold ${vueltoRecibido.trim() === '' ? 'text-muted-foreground' : diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+            {vueltoRecibido.trim() === '' ? 'Escribe cuánto te entregó (0 si nada).' : diferencia === 0
               ? (saldoContinua > 0 ? `✓ Cuadra: ${formatMonto(saldoContinua)} siguen con Compras` : '✓ Cuadra al céntimo')
               : diferencia > 0
                 ? `Faltan ${formatMonto(diferencia)}`
@@ -131,7 +148,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
           <Button variant="outline" size="sm" onClick={() => onDevolver(entrega)}>
             <Undo2 size={14} className="mr-1" /> Devolver a Compras para corregir
           </Button>
-          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias, saldoContinua)} disabled={!(recibido >= 0) || fotosPendientes > 0}>
+          <Button size="sm" onClick={() => onCerrar(entrega, recibido, categorias, saldoContinua)} disabled={vueltoRecibido.trim() === '' || !(recibido >= 0) || fotosPendientes > 0}>
             <CheckCircle2 size={14} className="mr-1" /> Confirmar y cerrar
           </Button>
         </div>
@@ -142,7 +159,7 @@ function RendicionPorCerrar({ entrega, categoriasSede, onDevolver, onCerrar, seg
 
 export function RecepcionPage() {
   const { sedeActiva, responsable } = useSedeActiva();
-  const { entregas, cerradas, loading, fetchEntregas, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega } = useEntregas('sede');
+  const { entregas, cerradas, loading, fetchEntregas, crearEntrega, anularEntrega, devolverACompras, cerrarEntrega, registrarDevolucion } = useEntregas('sede');
   const { pedidos } = usePedidos();
   const { categorias } = useCategorias();
   const { addToast } = useToast();
@@ -175,6 +192,21 @@ export function RecepcionPage() {
 
   const [porCerrar, setPorCerrar] = useState<{ entrega: EntregaDetalle; vuelto: number; categorias: Record<string, string>; saldoContinua: number } | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  // Lo que Compras puso de su bolsillo y la sede le devuelve en mano.
+  const [porDevolver, setPorDevolver] = useState<{ entrega: EntregaDetalle; monto: number } | null>(null);
+  const [devolviendo, setDevolviendo] = useState(false);
+  const lunesSemana = lunesDe(hoy);
+  const semana = useMemo(() => resumenSemana([...entregas, ...cerradas], lunesSemana), [entregas, cerradas, lunesSemana]);
+  const deudas = useMemo(() => deudasConCompras(cerradas), [cerradas]);
+  async function confirmarDevolucion() {
+    if (!porDevolver) return;
+    setDevolviendo(true);
+    const { error } = await registrarDevolucion(porDevolver.entrega.id);
+    setDevolviendo(false);
+    setPorDevolver(null);
+    if (error) addToast(`Error: ${error}`, 'error');
+    else addToast('Listo: quedó registrado que le devolviste ese dinero a Compras.', 'success');
+  }
 
   const categoriasSede = useMemo(() => categorias.filter(c => c.activa).map(c => ({ id: c.id, nombre: c.nombre })), [categorias]);
   const abiertas = entregas.filter(e => e.estado === 'abierta');
@@ -275,6 +307,27 @@ export function RecepcionPage() {
         <Dato etiqueta="Compras tiene sin gastar" valor={formatMonto(enManosDeCompras)} nota={abiertas.length === 1 ? '1 entrega abierta' : `${abiertas.length} entregas abiertas`} alerta={enManosDeCompras < 0} />
         <Dato etiqueta="Gerencia te debe reponer" valor={formatMonto(consolidado.total.total)} nota={sinRendir.cantidad > 0 ? `+ ${formatMonto(sinRendir.total)} de Compras sin cerrar` : `${consolidado.total.cantidad} gasto(s) pendiente(s)`} />
       </section>
+
+      {/* El dinero de toda la semana (todas las entregas juntas) */}
+      <ResumenSemanaDinero filas={semana} lunes={lunesSemana} mirada="sede" />
+
+      {/* Por hacer: devolverle a Compras lo que puso de su bolsillo */}
+      {deudas.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/50">
+          <CardContent className="space-y-2 p-4">
+            <p className="text-sm font-bold text-amber-900">Le debes dinero a Compras</p>
+            <p className="text-xs text-amber-900">En estas rendiciones Compras gastó más de lo que le entregaste y puso la diferencia de su bolsillo. Devuélveselo <strong>en mano</strong> y márcalo aquí. No lo registres como una entrega nueva: eso mezcla las cuentas.</p>
+            {deudas.map(({ entrega: e, monto: m }) => (
+              <div key={e.id} className="flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2 text-sm">
+                <span>Rendición del {fechaCorta(e.fecha)}: <strong>{formatMonto(m)}</strong></span>
+                <Button size="sm" className="ml-auto" onClick={() => setPorDevolver({ entrega: e, monto: m })}>
+                  <HandCoins size={14} className="mr-1" /> Ya se lo devolví
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Por hacer: rendiciones que Compras ya rindió */}
       {rendidas.map(e => (
@@ -432,14 +485,14 @@ export function RecepcionPage() {
           </summary>
           <div className="divide-y border-t text-sm">
             {cerradas.map(e => {
-              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
+              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua, e.devuelto_a_compras);
               return (
                 <div key={e.id} className="space-y-2 px-4 py-2">
                 <div className="flex flex-wrap items-center gap-3">
                   <span>{fechaCorta(e.fecha)}</span>
                   <span>Entregado {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · siguió con Compras ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                    {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Se le debía ${formatMonto(-diferencia)}`}
+                    {diferencia === 0 ? (Number(e.devuelto_a_compras ?? 0) > 0 ? `Cuadró · le devolviste ${formatMonto(Number(e.devuelto_a_compras))}` : 'Cuadró') : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Le debes ${formatMonto(-diferencia)} a Compras`}
                   </span>
                   <SeguimientoMini seguimiento={seguir(e)} />
                 </div>
@@ -476,10 +529,19 @@ export function RecepcionPage() {
       )}
 
       <ConfirmDialog
+        open={porDevolver !== null}
+        title="¿Ya le devolviste este dinero a Compras?"
+        message={porDevolver ? `Confirmas que le entregaste en mano ${formatMonto(porDevolver.monto)} a Compras por lo que puso de su bolsillo en la rendición del ${fechaCorta(porDevolver.entrega.fecha)}.` : ''}
+        confirmLabel={devolviendo ? 'Guardando...' : 'Sí, ya se lo devolví'}
+        onConfirm={confirmarDevolucion}
+        onCancel={() => setPorDevolver(null)}
+      />
+
+      <ConfirmDialog
         open={porCerrar !== null}
         title="¿Confirmar y cerrar esta rendición?"
         message={porCerrar
-          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y registras que recibiste ${formatMonto(porCerrar.vuelto)} de vuelto.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Compras: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
+          ? `Se crearán ${porCerrar.entrega.compras.length} gasto(s) por ${formatMonto(gastadoDe(porCerrar.entrega))} en la caja de ${encargado}, pendientes de reposición, y confirmas que Compras te entregó en mano ${formatMonto(porCerrar.vuelto)}.${porCerrar.saldoContinua > 0 ? ` Además, ${formatMonto(porCerrar.saldoContinua)} siguen con Compras: se abre una entrega nueva con ese saldo para la próxima semana.` : ''} Esto no se puede deshacer.`
           : ''}
         confirmLabel={cerrando ? 'Cerrando...' : 'Sí, cerrar'}
         onConfirm={confirmarCierre}

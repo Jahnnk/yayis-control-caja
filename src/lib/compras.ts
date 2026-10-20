@@ -7,8 +7,9 @@ import type { EstadoItemPedido, EstadoPedido } from '@/types';
  * Diferencia de una rendición cerrada: > 0 faltó dinero · < 0 Compras puso de su bolsillo.
  * Lo que sigue con Compras para la semana siguiente NO es faltante.
  */
-export function diferenciaDeCierre(monto: number, gastado: number, vueltoRecibido: number | null, saldoContinua: number | null): number {
-  return roundTwo(Number(monto) - gastado - Number(vueltoRecibido ?? 0) - Number(saldoContinua ?? 0));
+export function diferenciaDeCierre(monto: number, gastado: number, vueltoRecibido: number | null, saldoContinua: number | null, devueltoACompras: number | null = 0): number {
+  // Lo que la sede ya le devolvió a Compras (por lo que puso de su bolsillo) salda la diferencia negativa.
+  return roundTwo(Number(monto) - gastado - Number(vueltoRecibido ?? 0) - Number(saldoContinua ?? 0) + Number(devueltoACompras ?? 0));
 }
 
 /** Tope por defecto para compras en efectivo SIN boleta (mercado): cada sede puede tener el suyo (Configuración). */

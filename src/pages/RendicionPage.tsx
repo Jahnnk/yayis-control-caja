@@ -18,6 +18,8 @@ import { CompletarEvidenciaModal } from '@/components/compras/CompletarEvidencia
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { diferenciaDeCierre, fechaCorta } from '@/lib/compras';
+import { ResumenSemanaDinero } from '@/components/gastos/ResumenSemanaDinero';
+import { lunesDe, resumenSemana } from '@/lib/dinero-semana';
 import { ChevronDown, Clock, Wallet } from 'lucide-react';
 
 function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEliminarCompra, onCompletar, seguimiento }: {
@@ -33,7 +35,8 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
 }) {
   const gastado = gastadoDe(entrega);
   const saldo = roundTwo(Number(entrega.monto) - gastado);
-  const [vuelto, setVuelto] = useState(String(Math.max(saldo, 0)));
+  // El vuelto NO viene lleno: Compras dice cuánto entrega EN MANO (antes se anotaba todo el sobrante sin mirar).
+  const [vuelto, setVuelto] = useState(saldo > 0 ? '' : '0');
   const abierta = entrega.estado === 'abierta';
   // No se rinde con fotos pendientes: el administrador no podría cerrar la rendición.
   const fotosPendientes = entrega.compras.filter(c => c.evidencia_pendiente).length;
@@ -73,11 +76,21 @@ function TarjetaEntrega({ entrega, comprasVisibles, puedeRendir, onRendir, onEli
 
         {abierta && puedeRendir && (
           <div className="flex flex-wrap items-end gap-3 border-t pt-3">
-            <div>
-              <label className="text-xs font-medium" htmlFor={`vuelto-${entrega.id}`}>Vuelto que devuelves (S/)</label>
-              <Input id={`vuelto-${entrega.id}`} type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-32" value={vuelto} onChange={e => setVuelto(e.target.value)} />
-            </div>
-            <Button onClick={() => onRendir(entrega, parseFloat(vuelto))} disabled={fotosPendientes > 0}>Rendir cuentas</Button>
+            {saldo > 0 && (
+              <div className="w-full space-y-2">
+                <p className="text-sm font-medium">Te quedan {formatMonto(saldo)}. ¿Cuánto le entregas <strong>en mano</strong> a {entrega.sedes?.nombre}?</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant={vuelto === String(saldo) ? 'default' : 'outline'} onClick={() => setVuelto(String(saldo))}>Le devuelvo todo ({formatMonto(saldo)})</Button>
+                  <Button type="button" size="sm" variant={vuelto === '0' ? 'default' : 'outline'} onClick={() => setVuelto('0')}>No le devuelvo nada: sigue conmigo</Button>
+                </div>
+                <div>
+                  <label className="text-xs font-medium" htmlFor={`vuelto-${entrega.id}`}>U otro monto (S/)</label>
+                  <Input id={`vuelto-${entrega.id}`} type="number" inputMode="decimal" min="0" step="0.01" className="mt-1 w-32" value={vuelto} onChange={e => setVuelto(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <Button onClick={() => onRendir(entrega, parseFloat(vuelto))} disabled={fotosPendientes > 0 || vuelto.trim() === ''}>Rendir cuentas</Button>
+            {saldo > 0 && vuelto.trim() === '' && <p className="text-xs text-muted-foreground">Elige cuánto entregas en mano.</p>}
             {fotosPendientes > 0 && <p className="w-full text-xs text-amber-800">Sube {fotosPendientes === 1 ? 'la foto pendiente' : `las fotos pendientes de ${fotosPendientes} compras`} (botón «Subir foto» en cada compra) antes de rendir cuentas.</p>}
             {saldo < 0 && <p className="w-full text-xs text-red-600">Gastaste {formatMonto(-saldo)} más de lo que recibiste: el administrador de {entrega.sedes?.nombre} te lo devolverá.</p>}
           </div>
@@ -166,6 +179,9 @@ export function RendicionPage() {
   function limpiarFiltros() { setSedeFiltro(''); setDesde(''); setHasta(''); }
   function soloHoy() { const hoy = getTodayLima(); setDesde(hoy); setHasta(hoy); }
 
+  const lunesSemana = lunesDe(getTodayLima());
+  const semana = resumenSemana([...entregas, ...cerradas], lunesSemana);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
@@ -179,6 +195,9 @@ export function RendicionPage() {
           </p>
         )}
       </div>
+
+      {/* Todo lo de la semana junto, por sede (para no sumar entrega por entrega) */}
+      {esCompras && <ResumenSemanaDinero filas={semana} lunes={lunesSemana} mirada="compras" />}
 
       {hayDatos && (
         <div className="space-y-2 rounded-lg border bg-white p-3 shadow-sm">
@@ -252,14 +271,18 @@ export function RendicionPage() {
           </summary>
           <div className="divide-y border-t text-sm">
             {cerradasVisibles.map(e => {
-              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua);
+              const diferencia = diferenciaDeCierre(e.monto, gastadoDe(e), e.vuelto_recibido, e.saldo_continua, e.devuelto_a_compras);
               return (
                 <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
                   <span className="font-medium">{e.sedes?.nombre}</span>
                   <span className="text-muted-foreground">{fechaCorta(e.fecha)}</span>
                   <span>Recibido {formatMonto(Number(e.monto))} · gastado {formatMonto(gastadoDe(e))} · vuelto {formatMonto(Number(e.vuelto_recibido ?? 0))}{Number(e.saldo_continua) > 0 ? ` · sigue contigo ${formatMonto(Number(e.saldo_continua))}` : ''}</span>
                   <span className={`ml-auto text-xs font-bold ${diferencia === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                    {diferencia === 0 ? 'Cuadró' : diferencia > 0 ? `Faltaron ${formatMonto(diferencia)}` : `Sobraron ${formatMonto(-diferencia)}`}
+                    {diferencia === 0
+                      ? (Number(e.devuelto_a_compras ?? 0) > 0 ? `Cuadró · te devolvieron ${formatMonto(Number(e.devuelto_a_compras))}` : 'Cuadró')
+                      : diferencia > 0
+                        ? `Faltaron ${formatMonto(diferencia)}`
+                        : esCompras ? `Te deben ${formatMonto(-diferencia)} (pusiste de tu bolsillo)` : `Se le debe ${formatMonto(-diferencia)} a Compras`}
                   </span>
                   {!esCompras && <SeguimientoMini seguimiento={seguir(e)} />}
                 </div>
@@ -274,7 +297,9 @@ export function RendicionPage() {
         open={porRendir !== null}
         title="¿Rendir cuentas de esta entrega?"
         message={porRendir
-          ? `Informas que devuelves ${formatMonto(porRendir.vuelto)} de vuelto a ${porRendir.entrega.sedes?.nombre}. Después ya no podrás agregar ni cambiar compras de esta entrega.`
+          ? (porRendir.vuelto > 0
+            ? `Le entregas en mano ${formatMonto(porRendir.vuelto)} de vuelto a ${porRendir.entrega.sedes?.nombre}. Hazlo antes de que cierre la rendición. `
+            : `No le entregas vuelto a ${porRendir.entrega.sedes?.nombre}: lo que sobra sigue contigo para la próxima semana. `) + 'Después ya no podrás agregar ni cambiar compras de esta entrega.'
           : ''}
         confirmLabel="Sí, rendir"
         onConfirm={confirmarRendir}

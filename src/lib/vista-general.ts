@@ -165,7 +165,7 @@ export function calcularVistaGeneral(
   // Se traen las entregas hechas en el periodo y las rendidas o cerradas en el periodo.
   const rendiciones: Rendicion[] = entregas.map(e => {
     const gastado = suma(e.compras, c => c.total);
-    return { entrega: e, gastado, diferencia: e.estado === 'cerrada' ? diferenciaDeCierre(e.monto, gastado, e.vuelto_recibido, e.saldo_continua) : null };
+    return { entrega: e, gastado, diferencia: e.estado === 'cerrada' ? diferenciaDeCierre(e.monto, gastado, e.vuelto_recibido, e.saldo_continua, e.devuelto_a_compras) : null };
   });
 
   const pedidos = datos.pedidos.filter(deLaSede);
