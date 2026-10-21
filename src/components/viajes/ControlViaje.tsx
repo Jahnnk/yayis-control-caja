@@ -12,16 +12,31 @@ import { horaCorta } from '@/lib/seguimiento-pedido';
 import { fechaCorta } from '@/lib/compras';
 import { formatMonto, parseNumericInput } from '@/lib/utils';
 import { Bike, Fuel, Loader2 } from 'lucide-react';
-import type { MotivoViaje, TipoViaje } from '@/types';
+import type { MotivoViaje, Moto, TipoViaje } from '@/types';
 
 const formatKm = (n: number) => n.toLocaleString('es-PE', { maximumFractionDigits: 1 });
 
 // Algunos tableros marcan millas y no se pueden cambiar: se anota lo que dice el tablero y se guarda en km.
+// Cada moto dice si marca km o millas, así la conversión no depende de acordarse de una casilla.
 const KM_POR_MILLA = 1.609344;
-const CLAVE_MILLAS = 'yayis:tablero-millas';
 const redondear1 = (n: number) => Math.round(n * 10) / 10;
-function leerMillas(): boolean {
-  try { return localStorage.getItem(CLAVE_MILLAS) === '1'; } catch { return false; }
+
+/** Botones para elegir la moto (se acomodan en varias filas si hay muchas). */
+function ElegirMoto({ motos, valor, onCambiar, onOtra }: { motos: Moto[]; valor: string | null; onCambiar: (id: string) => void; onOtra?: () => void }) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium">¿Con qué moto?</p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Moto">
+        {motos.map(m => (
+          <Button key={m.id} type="button" variant={valor === m.id ? 'default' : 'outline'} aria-pressed={valor === m.id}
+            onClick={() => onCambiar(m.id)} className="h-10 flex-1 px-3 text-sm">
+            {m.nombre} <span className="ml-1 text-xs opacity-80">({m.unidad})</span>
+          </Button>
+        ))}
+        {onOtra && <Button type="button" variant="outline" onClick={onOtra} className="h-10 px-3 text-sm">+ Otra moto</Button>}
+      </div>
+    </div>
+  );
 }
 
 /** Viajes de Compras en su moto: km al salir y al volver, motivo de cada viaje extra y gasolina. */
@@ -30,8 +45,12 @@ export function ControlViaje() {
   const { addToast } = useToast();
   const v = useViajes();
   const [panel, setPanel] = useState<'salir' | 'volver' | 'gasolina' | null>(null);
-  const [millas, setMillas] = useState(leerMillas);
   const [guardando, setGuardando] = useState(false);
+  // Moto: se propone la del último viaje; si cambia de moto, la elige (o la agrega) al salir.
+  const [motoElegida, setMotoElegida] = useState<string | null>(null);
+  const [agregando, setAgregando] = useState(false);
+  const [nombreMoto, setNombreMoto] = useState('');
+  const [unidadMoto, setUnidadMoto] = useState<Moto['unidad']>('km');
   // Salir
   const [tipo, setTipo] = useState<TipoViaje>(tipoSugerido());
   // Si elige un tipo distinto al de la hora (deliverys en la mañana, compras en la tarde), tiene que confirmarlo.
@@ -47,15 +66,29 @@ export function ControlViaje() {
 
   if (v.loading) return null;
 
+  const existe = (id: string | null | undefined) => (id && v.motos.some(m => m.id === id) ? id : null);
+  // El viaje abierto manda (se vuelve en la misma moto con la que se salió).
+  const motoId = existe(v.abierto?.moto_id) ?? existe(motoElegida) ?? existe(v.ultimaMotoId) ?? v.motos[0]?.id ?? null;
+  const moto = v.motos.find(m => m.id === motoId) ?? null;
+  const millas = moto?.unidad === 'millas';
   const unidad = millas ? 'millas' : 'km';
+  const ultimoKm = motoId ? v.ultimoKmPorMoto[motoId] ?? null : null;
   /** Lo que escribe en el tablero → km (lo que se guarda). */
   const aKm = (n: number) => (millas ? redondear1(n * KM_POR_MILLA) : n);
   /** Km guardados → lo que marca su tablero. */
   const deKm = (n: number) => (millas ? redondear1(n / KM_POR_MILLA) : n);
-  function cambiarMillas(valor: boolean) {
-    setMillas(valor);
+  function cambiarMoto(id: string) {
+    setMotoElegida(id);
     setKm(''); setKmGas('');
-    try { localStorage.setItem(CLAVE_MILLAS, valor ? '1' : '0'); } catch { /* sin almacenamiento: queda solo esta sesión */ }
+  }
+  async function guardarMoto() {
+    setGuardando(true);
+    const { error, moto: nueva } = await v.agregarMoto(nombreMoto, unidadMoto);
+    setGuardando(false);
+    if (error || !nueva) return addToast(error ?? 'No se pudo guardar la moto.', 'error');
+    addToast(`Moto «${nueva.nombre}» agregada.`, 'success');
+    cambiarMoto(nueva.id);
+    setAgregando(false); setNombreMoto(''); setUnidadMoto('km');
   }
   const kmNum = aKm(parseNumericInput(km));
   const extra = v.esExtraSiSale(tipo);
@@ -66,6 +99,7 @@ export function ControlViaje() {
   function abrir(p: typeof panel) {
     setPanel(actual => (actual === p ? null : p));
     setKm(''); setMotivo(null); setMotivoSede(''); setMotivoDetalle(''); setMonto(''); setKmGas(''); setFoto(null);
+    setAgregando(false);
     setTipo(tipoSugerido());
     setConfirmaTipo(false);
   }
@@ -73,13 +107,14 @@ export function ControlViaje() {
   // Lo que falta para poder guardar, dicho en palabras.
   const sugerido = tipoSugerido();
   const tipoInusual = tipo !== sugerido;
-  const faltaSalir = !km.trim() ? 'Escribe el km que marca el tablero.'
+  const faltaSalir = !moto ? 'Primero anota con qué moto sales.'
+    : !km.trim() ? 'Escribe el km que marca el tablero.'
     : tipoInusual && !confirmaTipo ? 'Confirma el tipo de viaje.'
     : extra && !motivo ? 'Elige por qué haces otro viaje.'
     : motivo === 'otro' && !motivoDetalle.trim() ? 'Escribe el motivo.'
     : null;
-  const avisoSalir = km.trim() && v.ultimoKm !== null && kmNum < v.ultimoKm
-    ? `Es menor que lo último anotado (${formatKm(deKm(v.ultimoKm))} ${unidad}). Revisa el tablero.` : null;
+  const avisoSalir = km.trim() && ultimoKm !== null && kmNum < ultimoKm
+    ? `Es menor que lo último anotado en ${moto?.nombre ?? 'esta moto'} (${formatKm(deKm(ultimoKm))} ${unidad}). Revisa el tablero.` : null;
 
   const kmSalidaAbierto = v.abierto ? Number(v.abierto.km_salida) : 0;
   const faltaVolver = !km.trim() ? 'Escribe el km que marca el tablero.'
@@ -109,7 +144,7 @@ export function ControlViaje() {
                 <p className="text-sm font-bold text-blue-900">
                   {abiertoDeOtroDia ? `Quedó abierto un viaje del ${fechaCorta(v.abierto.fecha)}` : `Viaje de ${v.abierto.tipo} en curso`}
                 </p>
-                <p className="text-xs text-blue-800">Salió {horaCorta(v.abierto.salida_at, v.hoy)} · tablero {formatKm(deKm(kmSalidaAbierto))} {unidad}</p>
+                <p className="text-xs text-blue-800">Salió {horaCorta(v.abierto.salida_at, v.hoy)}{moto ? ` · ${moto.nombre}` : ''} · tablero {formatKm(deKm(kmSalidaAbierto))} {unidad}</p>
               </>
             ) : (
               <>
@@ -130,6 +165,24 @@ export function ControlViaje() {
         {/* Salir */}
         {panel === 'salir' && !v.abierto && (
           <div className="space-y-3 border-t pt-3">
+            {v.motos.length > 0 && !agregando && (
+              <ElegirMoto motos={v.motos} valor={motoId} onCambiar={cambiarMoto} onOtra={() => setAgregando(true)} />
+            )}
+            {(agregando || v.motos.length === 0) && (
+              <div className="space-y-2 rounded-md border bg-gray-50 p-3">
+                <p className="text-sm font-medium">{v.motos.length === 0 ? 'Primero anota tu moto' : 'Otra moto'}</p>
+                <Input placeholder="Nombre (ej. Moto prestada)" value={nombreMoto} onChange={e => setNombreMoto(e.target.value)} aria-label="Nombre de la moto" />
+                <div>
+                  <p className="mb-1 text-xs font-medium">Su tablero marca</p>
+                  <Segmentado etiqueta="Unidad del tablero" valor={unidadMoto} onCambiar={x => setUnidadMoto(x as Moto['unidad'])}
+                    opciones={[{ valor: 'km', texto: 'Km' }, { valor: 'millas', texto: 'Millas' }]} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" disabled={guardando || !nombreMoto.trim()} onClick={guardarMoto}>Guardar moto</Button>
+                  {v.motos.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => setAgregando(false)}>Cancelar</Button>}
+                </div>
+              </div>
+            )}
             <Segmentado etiqueta="Tipo de viaje" valor={tipo} onCambiar={x => { setTipo(x as TipoViaje); setConfirmaTipo(false); }}
               opciones={[{ valor: 'compras', texto: 'Compras' }, { valor: 'deliverys', texto: 'Deliverys' }]} />
             {tipoInusual && (
@@ -152,7 +205,7 @@ export function ControlViaje() {
             <div>
               <label className="text-xs font-medium" htmlFor="viaje-km-salida">{millas ? 'Millas' : 'Km'} del tablero al salir</label>
               <Input autoFocus id="viaje-km-salida" type="number" inputMode="decimal" min="0" step="0.1" className="mt-1 h-11 text-base"
-                placeholder={v.ultimoKm !== null ? `Último anotado: ${formatKm(deKm(v.ultimoKm))}` : 'Ej. 12345'} value={km} onChange={e => setKm(e.target.value)} />
+                placeholder={ultimoKm !== null ? `Último anotado: ${formatKm(deKm(ultimoKm))}` : 'Ej. 12345'} value={km} onChange={e => setKm(e.target.value)} />
               {avisoSalir && <p className="mt-1 text-xs text-amber-700">{avisoSalir}</p>}
             </div>
             {extra && (
@@ -179,7 +232,7 @@ export function ControlViaje() {
             )}
             <div className="flex flex-wrap items-center gap-3">
               <Button className="h-11 w-full sm:w-auto" disabled={guardando || !!faltaSalir}
-                onClick={() => guardar(() => v.salir({ tipo, km: kmNum, motivo, motivoSedeId: motivoSede || null, motivoDetalle }), '¡Buen viaje! Al volver toca «Volví».')}>
+                onClick={() => guardar(() => v.salir({ tipo, km: kmNum, motoId: moto!.id, motivo, motivoSedeId: motivoSede || null, motivoDetalle }), '¡Buen viaje! Al volver toca «Volví».')}>
                 {guardando && <Loader2 size={14} className="mr-1 animate-spin" />} Salir
               </Button>
               {faltaSalir && <p className="text-xs text-muted-foreground">{faltaSalir}</p>}
@@ -212,12 +265,11 @@ export function ControlViaje() {
           <span className="flex items-center gap-1"><Fuel size={14} /> Gasolina esta semana: <strong className={v.gastadoSemana > GASOLINA_SEMANAL ? 'text-amber-700' : 'text-yayis-dark'}>{formatMonto(v.gastadoSemana)}</strong> de {formatMonto(GASOLINA_SEMANAL)}</span>
           <button type="button" className="font-medium text-yayis-green" onClick={() => abrir('gasolina')} aria-expanded={panel === 'gasolina'}>Cargué gasolina</button>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" checked={millas} onChange={e => cambiarMillas(e.target.checked)} className="h-4 w-4" />
-          <span>Mi tablero marca <strong className="text-yayis-dark">millas</strong> (la app las convierte a km sola)</span>
-        </label>
         {panel === 'gasolina' && (
           <div className="space-y-3">
+            {v.motos.length > 1 && (
+              <ElegirMoto motos={v.motos} valor={motoId} onCambiar={cambiarMoto} />
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium" htmlFor="gas-monto">Cuánto cargaste (S/)</label>
@@ -230,7 +282,7 @@ export function ControlViaje() {
             </div>
             <EvidenciaInput id="gas-foto" label="Foto de la boleta (opcional)" archivo={foto} onChange={setFoto} />
             <Button className="h-11 w-full sm:w-auto" disabled={guardando || parseNumericInput(monto) <= 0}
-              onClick={() => guardar(() => v.cargarGasolina({ monto: parseNumericInput(monto), km: kmGas.trim() ? aKm(parseNumericInput(kmGas)) : null, foto }), 'Gasolina anotada.')}>
+              onClick={() => guardar(() => v.cargarGasolina({ monto: parseNumericInput(monto), km: kmGas.trim() ? aKm(parseNumericInput(kmGas)) : null, motoId, foto }), 'Gasolina anotada.')}>
               {guardando && <Loader2 size={14} className="mr-1 animate-spin" />} Guardar gasolina
             </Button>
           </div>
