@@ -48,7 +48,7 @@ export function ResumenPage() {
   const { reposiciones, saldo, fetchSaldo, createReposicion, deleteReposicion } = useReposiciones();
   const { fetchDesgloseReposicion } = useDesgloseReposicion();
   // Consolidado para reposición (lo del administrador y lo de Fabio); se recalcula cuando cambia la deuda.
-  const { consolidado, sinRendir } = useConsolidadoReposicion(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas));
+  const { consolidado, sinRendir } = useConsolidadoReposicion(saldo.deuda);
   const { gastos: historicoGastos, total: historicoTotal, fetchGastos: fetchHistorico } = useGastos();
   const { valores: valoresRevisados, fetchValoresRevisados, verificarGrupo, reabrirGrupo } = useValoresRevisados();
   const { addToast } = useToast();
@@ -112,7 +112,6 @@ export function ResumenPage() {
 
   // Reposicion form
   const [repoFecha, setRepoFecha] = useState(today);
-  const [repoMetodo, setRepoMetodo] = useState<MetodoPago>('efectivo');
   const [repoMonto, setRepoMonto] = useState('');
   const [repoNotas, setRepoNotas] = useState('');
   const [repoSaving, setRepoSaving] = useState(false);
@@ -526,14 +525,13 @@ export function ResumenPage() {
     setShowCerrar(false);
   }
 
-  // Caja del administrador de la sede
+  // Caja del administrador de la sede. La caja chica es una sola: Gerencia la repone por transferencia,
+  // se haya pagado cada gasto en efectivo o por Yape (el método queda solo como detalle del gasto).
   // Lo repuesto que no alcanzó a marcar un gasto completo se descuenta de lo que falta reponer (solo para Gerencia).
-  const descuentoAFavor = isOwner ? Math.min(totalPendiente, roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas)) : 0;
-  // Deuda con Gerencia por método, ya descontando lo repuesto que está a favor (la caja del administrador no cambia).
-  const deudaNetaEf = Math.max(0, roundTwo(saldo.deudaEfectivo - saldo.sobranteEfectivo));
-  const deudaNetaCt = Math.max(0, roundTwo(saldo.deudaCuentas - saldo.sobranteCuentas));
-  const cajaEfectivo = roundTwo(fondoEf - saldo.deudaEfectivo + saldo.repuestoEfectivo);
-  const cajaCuentas = roundTwo(fondoCt - saldo.deudaCuentas + saldo.repuestoCuentas);
+  const descuentoAFavor = isOwner ? Math.min(totalPendiente, saldo.sobrante) : 0;
+  const deudaNeta = Math.max(0, roundTwo(saldo.deuda - saldo.sobrante));
+  const fondoTotal = roundTwo(fondoEf + fondoCt);
+  const cajaAdmin = roundTwo(fondoTotal - deudaNeta);
 
   // Load historico when opened or filters change
   useEffect(() => {
@@ -667,7 +665,7 @@ export function ResumenPage() {
   async function handleConfirmRepo() {
     setConfirmRepo(false);
     setRepoSaving(true);
-    const { error, warning } = await createReposicion(repoFecha, repoMetodo, parseFloat(repoMonto), repoNotas);
+    const { error, warning } = await createReposicion(repoFecha, parseFloat(repoMonto), repoNotas);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       if (warning) addToast(warning, 'warning');
@@ -790,18 +788,18 @@ export function ResumenPage() {
         </Card>
       </div>
 
-      {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} aFavor={roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas)} />}
+      {isOwner && <ConsolidadoReposicion datos={consolidado} sinRendir={sinRendir} responsable={encargado} aFavor={saldo.sobrante} />}
 
       {/* Lo repuesto que no alcanzó para marcar un gasto completo: se descuenta solo en la próxima reposición */}
-      {isOwner && roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas) > 0 && (
+      {isOwner && saldo.sobrante > 0 && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
           <p>
-            <strong>{formatMonto(roundTwo(saldo.sobranteEfectivo + saldo.sobranteCuentas))} a favor.</strong>{' '}
+            <strong>{formatMonto(saldo.sobrante)} a favor.</strong>{' '}
             Es lo que Gerencia ya repuso pero no alcanzó para marcar un gasto completo (un gasto no se parte). Se suma solo a la próxima reposición.
           </p>
           <p className="mt-1 text-xs">
-            Por reponer en total, descontando eso: <strong>{formatMonto(Math.max(0, roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas - saldo.sobranteEfectivo - saldo.sobranteCuentas)))}</strong>
-            {' '}(de {formatMonto(roundTwo(saldo.deudaEfectivo + saldo.deudaCuentas))} en gastos pendientes).
+            Por reponer en total, descontando eso: <strong>{formatMonto(deudaNeta)}</strong>
+            {' '}(de {formatMonto(saldo.deuda)} en gastos pendientes).
           </p>
         </div>
       )}
@@ -822,35 +820,24 @@ export function ResumenPage() {
         </div>
       </div>
 
-      {/* Reponer + Caja del administrador */}
+      {/* Por reponer + Caja del administrador (una sola caja chica, se repone por transferencia) */}
       {isOwner && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="border-yayis-green/30 bg-yayis-cream">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Reponer en efectivo</span></div>
-              <p className="text-xl font-bold text-yayis-green">{formatMonto(deudaNetaEf)}</p>
-              <p className="text-xs text-muted-foreground">Deuda total en efectivo (todos los meses){saldo.sobranteEfectivo > 0 ? ` · ${formatMonto(saldo.deudaEfectivo)} − ${formatMonto(saldo.sobranteEfectivo)} ya repuestos` : ''}</p>
+              <div className="flex items-center gap-2 mb-1"><Wallet size={16} className="text-yayis-green" /><span className="text-xs font-medium text-yayis-green">Por reponer</span></div>
+              <p className="text-xl font-bold text-yayis-green">{formatMonto(deudaNeta)}</p>
+              <p className="text-xs text-muted-foreground">
+                Todos los gastos pendientes (todos los meses){saldo.sobrante > 0 ? ` · ${formatMonto(saldo.deuda)} − ${formatMonto(saldo.sobrante)} ya repuestos` : ''}
+                {saldo.deudaEfectivo > 0 ? ` · de eso, ${formatMonto(saldo.deudaEfectivo)} se pagó en efectivo` : ''}
+              </p>
             </CardContent>
           </Card>
-          <Card className="border-blue-200 bg-blue-50/50">
+          <Card className={`border-2 ${cajaAdmin >= fondoTotal ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} className="text-blue-600" /><span className="text-xs font-medium text-blue-600">Reponer en cuentas</span></div>
-              <p className="text-xl font-bold text-blue-600">{formatMonto(deudaNetaCt)}</p>
-              <p className="text-xs text-muted-foreground">Deuda total en cuentas (todos los meses){saldo.sobranteCuentas > 0 ? ` · ${formatMonto(saldo.deudaCuentas)} − ${formatMonto(saldo.sobranteCuentas)} ya repuestos` : ''}</p>
-            </CardContent>
-          </Card>
-          <Card className={`border-2 ${cajaEfectivo >= fondoEf ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><Wallet size={16} /><span className="text-xs font-medium">Caja {encargado} Efectivo</span></div>
-              <p className={`text-xl font-bold ${cajaEfectivo >= fondoEf ? 'text-emerald-700' : 'text-amber-700'}`}>{formatMonto(cajaEfectivo)}</p>
-              <p className="text-xs text-muted-foreground">{fondos ? `Fondo: ${formatMonto(fondoEf)}` : 'Fondo sin configurar (ver Configuración)'}</p>
-            </CardContent>
-          </Card>
-          <Card className={`border-2 ${cajaCuentas >= fondoCt ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1"><CreditCard size={16} /><span className="text-xs font-medium">Caja {encargado} Cuentas</span></div>
-              <p className={`text-xl font-bold ${cajaCuentas >= fondoCt ? 'text-emerald-700' : 'text-amber-700'}`}>{formatMonto(cajaCuentas)}</p>
-              <p className="text-xs text-muted-foreground">{fondos ? `Fondo: ${formatMonto(fondoCt)}` : 'Fondo sin configurar (ver Configuración)'}</p>
+              <div className="flex items-center gap-2 mb-1"><Wallet size={16} /><span className="text-xs font-medium">Caja de {encargado}</span></div>
+              <p className={`text-xl font-bold ${cajaAdmin >= fondoTotal ? 'text-emerald-700' : 'text-amber-700'}`}>{fondos ? formatMonto(cajaAdmin) : '—'}</p>
+              <p className="text-xs text-muted-foreground">{fondos ? `Fondo ${formatMonto(fondoTotal)} − lo que falta reponer` : 'Fondo sin configurar (ver Configuración)'}</p>
             </CardContent>
           </Card>
         </div>
@@ -862,37 +849,23 @@ export function ResumenPage() {
           <CardHeader><CardTitle>Reposiciones a {encargado}{sedeActiva ? ` — ${sedeActiva.nombre}` : ''}</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             {/* Saldo */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-red-600 font-medium">Deuda total</p>
-                <p className="text-lg font-bold text-red-700">{formatMonto(roundTwo(deudaNetaEf + deudaNetaCt))}</p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(deudaNetaEf)} | Ct: {formatMonto(deudaNetaCt)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className={`border-2 rounded-lg p-3 text-center ${deudaNeta <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+                <p className="text-xs font-medium">Por reponer</p>
+                <p className={`text-lg font-bold ${deudaNeta <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>{formatMonto(deudaNeta)}</p>
               </div>
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-emerald-600 font-medium">Repuesto total</p>
-                <p className="text-lg font-bold text-emerald-700">{formatMonto(roundTwo(saldo.repuestoEfectivo + saldo.repuestoCuentas))}</p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(saldo.repuestoEfectivo)} | Ct: {formatMonto(saldo.repuestoCuentas)}</p>
-              </div>
-              <div className={`border-2 rounded-lg p-3 text-center ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-                <p className="text-xs font-medium">Saldo por reponer</p>
-                <p className={`text-lg font-bold ${saldo.saldoEfectivo + saldo.saldoCuentas <= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {formatMonto(roundTwo(Math.max(0, saldo.saldoEfectivo) + Math.max(0, saldo.saldoCuentas)))}
-                </p>
-                <p className="text-xs text-muted-foreground">Ef: {formatMonto(Math.max(0, saldo.saldoEfectivo))} | Ct: {formatMonto(Math.max(0, saldo.saldoCuentas))}</p>
+                <p className="text-xs text-emerald-600 font-medium">Repuesto en total</p>
+                <p className="text-lg font-bold text-emerald-700">{formatMonto(saldo.repuesto)}</p>
               </div>
             </div>
 
             {/* Formulario */}
             <div className="border-t pt-4">
               <h4 className="text-sm font-bold mb-1">Registrar reposición</h4>
-              <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}.</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <p className="text-xs text-muted-foreground mb-3">Se registra en la caja de <strong className="text-yayis-dark">{encargado}</strong>{sedeActiva ? <> — sede <strong className="text-yayis-dark">{sedeActiva.nombre}</strong></> : null}. Cubre los gastos pendientes del más antiguo al más nuevo, se hayan pagado en efectivo o por Yape.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><label className="text-xs font-medium">Fecha</label><Input type="date" value={repoFecha} onChange={e => setRepoFecha(e.target.value)} className="mt-1" /></div>
-                <div><label className="text-xs font-medium">Tipo</label>
-                  <Select value={repoMetodo} onChange={e => setRepoMetodo(e.target.value as MetodoPago)} className="mt-1">
-                    <option value="efectivo">Efectivo</option><option value="cuentas">Cuentas</option>
-                  </Select>
-                </div>
                 <div><label className="text-xs font-medium">Monto (S/)</label><Input type="number" step="0.01" min="0.01" placeholder="0.00" value={repoMonto} onChange={e => setRepoMonto(e.target.value)} className="mt-1" /></div>
                 <div><label className="text-xs font-medium">Notas</label><Input placeholder="Opcional..." value={repoNotas} onChange={e => setRepoNotas(e.target.value)} className="mt-1" /></div>
               </div>
@@ -908,12 +881,11 @@ export function ResumenPage() {
                 <h4 className="text-sm font-bold mb-3">Historial de reposiciones</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-left py-2">Tipo</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Acción</th></tr></thead>
+                    <thead><tr className="border-b"><th className="text-left py-2">Fecha</th><th className="text-right py-2">Monto</th><th className="text-left py-2">Notas</th><th className="text-right py-2">Acción</th></tr></thead>
                     <tbody>
                       {reposiciones.map(r => (
                         <tr key={r.id} className="border-b">
                           <td className="py-2 whitespace-nowrap">{r.fecha}</td>
-                          <td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.metodo_pago === 'efectivo' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>{r.metodo_pago === 'efectivo' ? 'Efectivo' : 'Cuentas'}</span></td>
                           <td className="py-2 text-right font-medium whitespace-nowrap">{formatMonto(Number(r.monto))}</td>
                           <td className="py-2 text-xs text-muted-foreground">{r.notas ?? '-'}</td>
                           <td className="py-2 text-right whitespace-nowrap">
@@ -1090,7 +1062,7 @@ export function ResumenPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Wallet size={18} className="text-emerald-600" />
-                    Repuesto Efectivo: {formatMonto(totalEfPagado)}
+                    Repuesto · pagado en efectivo: {formatMonto(totalEfPagado)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1114,7 +1086,7 @@ export function ResumenPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <CreditCard size={18} className="text-emerald-600" />
-                    Repuesto Cuentas: {formatMonto(totalCtPagado)}
+                    Repuesto · pagado por cuentas: {formatMonto(totalCtPagado)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1141,14 +1113,14 @@ export function ResumenPage() {
       {isOwner && (categoriasEfectivo.length > 0 || categoriasCuentas.length > 0) && (
         <div>
           <h3 className="text-base font-bold text-amber-700 mb-1">Desglose de la deuda con {encargado} por categoria</h3>
-          <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses). Los totales cuadran con "Reponer Efectivo/Cuentas".</p>
+          <p className="text-xs text-muted-foreground mb-3">Toda la deuda pendiente por reponer (todos los meses), separada solo como detalle de cómo se pagó cada gasto. Se repone todo junto, por transferencia.</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {categoriasEfectivo.length > 0 && (
               <Card className="border-amber-200 bg-amber-50/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Wallet size={18} className="text-amber-600" />
-                    Pendiente Efectivo: {formatMonto(totalEfPend)}
+                    Pendiente · pagado en efectivo: {formatMonto(totalEfPend)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1172,7 +1144,7 @@ export function ResumenPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <CreditCard size={18} className="text-amber-600" />
-                    Pendiente Cuentas: {formatMonto(totalCtPend)}
+                    Pendiente · pagado por cuentas: {formatMonto(totalCtPend)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1639,7 +1611,7 @@ export function ResumenPage() {
       <ConfirmDialog
         open={confirmRepo}
         title={`¿Reponer ${formatMonto(parseFloat(repoMonto) || 0)} a ${encargado}${sedeActiva ? ` en ${sedeActiva.nombre}` : ''}?`}
-        message={`Se registra en la caja de ${encargado}${sedeActiva ? `, sede ${sedeActiva.nombre}` : ''}, por ${repoMetodo === 'efectivo' ? 'efectivo' : 'cuentas'}, con fecha ${repoFecha}. Revisa que la sede de arriba sea la correcta. Si no calza exacto con los gastos, lo que sobra queda a favor para la próxima reposición: no hace falta eliminarla.`}
+        message={`Se registra en la caja de ${encargado}${sedeActiva ? `, sede ${sedeActiva.nombre}` : ''}, con fecha ${repoFecha}. Cubre los gastos pendientes del más antiguo al más nuevo, en efectivo o por Yape. Revisa que la sede de arriba sea la correcta. Si no calza exacto con los gastos, lo que sobra queda a favor para la próxima reposición: no hace falta eliminarla.`}
         confirmLabel={`Sí, reponer a ${encargado}`}
         onConfirm={handleConfirmRepo}
         onCancel={() => setConfirmRepo(false)}
