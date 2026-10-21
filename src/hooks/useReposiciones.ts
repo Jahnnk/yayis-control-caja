@@ -9,12 +9,7 @@ export function useReposiciones() {
   const { profile } = useAuth();
   const { sedeId: sedeActivaId } = useSedeActiva();
   const [reposiciones, setReposiciones] = useState<Reposicion[]>([]);
-  const [saldo, setSaldo] = useState<SaldoReposicion>({
-    deudaEfectivo: 0, deudaCuentas: 0,
-    repuestoEfectivo: 0, repuestoCuentas: 0,
-    saldoEfectivo: 0, saldoCuentas: 0,
-    sobranteEfectivo: 0, sobranteCuentas: 0,
-  });
+  const [saldo, setSaldo] = useState<SaldoReposicion>({ deuda: 0, deudaEfectivo: 0, repuesto: 0, sobrante: 0 });
   const [loading, setLoading] = useState(false);
   // Si gerencia cambia de sede mientras carga, la respuesta vieja no debe pisar a la nueva.
   const ultimaSedePedida = useRef<string | null>(null);
@@ -23,13 +18,13 @@ export function useReposiciones() {
    * Lo que Gerencia ya repuso pero no alcanzó a marcar un gasto completo (un gasto nunca se parte).
    * = lo registrado en reposiciones con sobrante_activo − lo que esas reposiciones marcaron como pagado.
    * Solo cuentan las reposiciones nuevas; las viejas (del respaldo) no tienen desglose confiable.
+   * La caja chica es una sola: no importa si el gasto se pagó en efectivo o por Yape.
    */
-  const calcularSobrante = useCallback(async (sid: string, metodoPago: 'efectivo' | 'cuentas') => {
+  const calcularSobrante = useCallback(async (sid: string) => {
     const { data: reposActivas } = await supabase
       .from('reposiciones')
       .select('id, monto')
       .eq('sede_id', sid)
-      .eq('metodo_pago', metodoPago)
       .eq('sobrante_activo', true);
     if (!reposActivas || reposActivas.length === 0) return 0;
     const { data: marcados } = await supabase
@@ -48,53 +43,40 @@ export function useReposiciones() {
     ultimaSedePedida.current = sid;
     setLoading(true);
 
-    // 1. Total deuda: suma de gastos PENDIENTES por metodo
+    // 1. Total deuda: suma de gastos PENDIENTES (y, como detalle, cuánto se pagó en efectivo)
     const { data: gastosPendientes } = await supabase
       .from('gastos')
       .select('metodo_pago, monto')
       .eq('sede_id', sid)
       .eq('estado', 'pendiente');
 
-    let deudaEf = 0, deudaCt = 0;
+    let deuda = 0, deudaEf = 0;
     for (const g of gastosPendientes ?? []) {
+      deuda = roundTwo(deuda + Number(g.monto));
       if (g.metodo_pago === 'efectivo') deudaEf = roundTwo(deudaEf + Number(g.monto));
-      else deudaCt = roundTwo(deudaCt + Number(g.monto));
     }
 
-    // 2. Total repuesto: suma de reposiciones por metodo
+    // 2. Total repuesto
     const { data: reposData } = await supabase
       .from('reposiciones')
       .select('*')
       .eq('sede_id', sid)
       .order('fecha', { ascending: false });
 
-    let repEf = 0, repCt = 0;
-    for (const r of reposData ?? []) {
-      if (r.metodo_pago === 'efectivo') repEf = roundTwo(repEf + Number(r.monto));
-      else repCt = roundTwo(repCt + Number(r.monto));
-    }
-
-    const [sobranteEf, sobranteCt] = await Promise.all([calcularSobrante(sid, 'efectivo'), calcularSobrante(sid, 'cuentas')]);
+    const repuesto = (reposData ?? []).reduce((t, r) => roundTwo(t + Number(r.monto)), 0);
+    const sobrante = await calcularSobrante(sid);
 
     if (ultimaSedePedida.current !== sid) return;
     setReposiciones((reposData ?? []) as Reposicion[]);
-    setSaldo({
-      deudaEfectivo: deudaEf,
-      deudaCuentas: deudaCt,
-      repuestoEfectivo: repEf,
-      repuestoCuentas: repCt,
-      saldoEfectivo: roundTwo(deudaEf - repEf),
-      saldoCuentas: roundTwo(deudaCt - repCt),
-      sobranteEfectivo: sobranteEf,
-      sobranteCuentas: sobranteCt,
-    });
+    setSaldo({ deuda, deudaEfectivo: deudaEf, repuesto, sobrante });
 
     setLoading(false);
   }, [sedeActivaId, calcularSobrante]);
 
   /**
-   * Aplica una reposicion marcando como "pagados" los gastos pendientes del
-   * metodo indicado, del mas antiguo al mas nuevo (FIFO), hasta donde alcance
+   * Aplica una reposicion marcando como "pagados" los gastos pendientes (en
+   * efectivo o por cuentas: la caja chica es una sola y se repone por
+   * transferencia), del mas antiguo al mas nuevo (FIFO), hasta donde alcance
    * el monto de la reposicion. NO exige que el monto calce exacto: toma todos
    * los gastos completos que quepan (si uno excede el monto restante lo salta y
    * sigue con el siguiente). Un gasto nunca se paga a medias, asi que puede
@@ -102,17 +84,15 @@ export function useReposiciones() {
    */
   const marcarGastosPagados = useCallback(async (
     sedeId: string,
-    metodoPago: 'efectivo' | 'cuentas',
     montoReposicion: number,
     reposicionId: string,
   ) => {
-    // Obtener gastos pendientes del metodo, ordenados por fecha (mas antiguos primero)
+    // Obtener gastos pendientes, ordenados por fecha (mas antiguos primero)
     const { data: pendientes, error: fetchError } = await supabase
       .from('gastos')
       .select('id, monto')
       .eq('sede_id', sedeId)
       .eq('estado', 'pendiente')
-      .eq('metodo_pago', metodoPago)
       .order('fecha', { ascending: true })
       .order('created_at', { ascending: true });
 
@@ -151,21 +131,21 @@ export function useReposiciones() {
 
   const createReposicion = useCallback(async (
     fecha: string,
-    metodoPago: 'efectivo' | 'cuentas',
     monto: number,
     notas: string,
   ) => {
     if (!profile || !sedeActivaId) return { error: 'Sin sede' };
 
     // Lo que sobró en reposiciones anteriores de esta misma caja se suma a esta.
-    const sobranteAnterior = await calcularSobrante(sedeActivaId, metodoPago);
+    const sobranteAnterior = await calcularSobrante(sedeActivaId);
 
     const { data: nuevaReposicion, error } = await supabase
       .from('reposiciones')
       .insert({
         sede_id: sedeActivaId,
         fecha,
-        metodo_pago: metodoPago,
+        // Gerencia repone siempre por transferencia.
+        metodo_pago: 'cuentas',
         monto,
         notas: notas.trim() || null,
         registrado_por: profile.id,
@@ -179,11 +159,11 @@ export function useReposiciones() {
     // Marcar gastos como pagados si la suma coincide.
     // Si este paso falla, la reposicion YA quedo guardada: avisamos con un
     // warning (no un error) para que el usuario no la registre dos veces.
-    const { error: errorMarcado } = await marcarGastosPagados(sedeActivaId, metodoPago, roundTwo(monto + sobranteAnterior), nuevaReposicion.id);
+    const { error: errorMarcado } = await marcarGastosPagados(sedeActivaId, roundTwo(monto + sobranteAnterior), nuevaReposicion.id);
 
     // Recalcular saldo
     await fetchSaldo(sedeActivaId);
-    const sobranteNuevo = await calcularSobrante(sedeActivaId, metodoPago);
+    const sobranteNuevo = await calcularSobrante(sedeActivaId);
     return {
       error: null,
       warning: errorMarcado

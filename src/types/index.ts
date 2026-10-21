@@ -141,15 +141,14 @@ export type DesgloseCategoria = {
 };
 
 export interface SaldoReposicion {
+  /** Gastos por reponer (todos los meses), se hayan pagado en efectivo o por Yape/transferencia. */
+  deuda: number;
+  /** De esa deuda, lo que se pagó en efectivo (solo como detalle: la caja chica se repone igual, por transferencia). */
   deudaEfectivo: number;
-  deudaCuentas: number;
-  repuestoEfectivo: number;
-  repuestoCuentas: number;
-  saldoEfectivo: number;
-  saldoCuentas: number;
+  /** Todo lo que Gerencia registró como reposición. */
+  repuesto: number;
   /** Reposiciones que no alcanzaron para marcar un gasto completo: quedan a favor y se suman a la próxima. */
-  sobranteEfectivo: number;
-  sobranteCuentas: number;
+  sobrante: number;
 }
 
 export interface GastoFormData {

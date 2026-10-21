@@ -142,11 +142,11 @@ La seguridad (RLS) filtra por `sede_id`: admin/viewer solo su sede; owner todas.
 ### Concepto clave: qué es la "deuda con Luis"
 - **`estado='pendiente'`** = gasto que Luis pagó y Jahnn **aún NO le ha repuesto**.
 - **`estado='pagado'`** = gasto que Jahnn **ya le repuso** a Luis.
-- **La deuda con Luis = suma de gastos con `estado='pendiente'`** (por método de pago). Es lo que muestra "Reponer Efectivo/Cuentas".
+- **La deuda con el administrador = suma de gastos con `estado='pendiente'`**, sin separar por método (decisión de Gerencia, 21-oct-2026): la caja chica es **una sola** y Gerencia la repone siempre por transferencia. Que un gasto se pagara en efectivo o por Yape es solo un detalle del gasto. Es lo que muestra la tarjeta «Por reponer»; «Caja de X» = fondo (efectivo + cuentas) − lo que falta reponer.
 - Cuando Jahnn registra una reposición, la lógica marca gastos pendientes como `pagado` hasta cubrir el monto (ver abajo).
 
 ### Lógica crítica: `marcarGastosPagados` (en `src/hooks/useReposiciones.ts`)
-Al crear una reposición, marca gastos pendientes del método como `pagado`, **del más antiguo al más nuevo (FIFO)**, tomando gastos completos que quepan en el monto. **NO exige que el monto calce exacto** (pago progresivo). **Un gasto nunca se paga a medias**, así que puede quedar un pequeño resto de la reposición sin aplicar si ningún gasto restante cabe. También guarda el `reposicion_id` en cada gasto marcado.
+Al crear una reposición (siempre se guarda con `metodo_pago='cuentas'`), marca gastos pendientes de cualquier método como `pagado`, **del más antiguo al más nuevo (FIFO)**, tomando gastos completos que quepan en el monto. **NO exige que el monto calce exacto** (pago progresivo). **Un gasto nunca se paga a medias**, así que puede quedar un pequeño resto de la reposición sin aplicar si ningún gasto restante cabe. También guarda el `reposicion_id` en cada gasto marcado.
 
 Borrar una reposición (`deleteReposicion`) **revierte** sus gastos a `pendiente` (y limpia `reposicion_id`), para no descuadrar el saldo.
 
