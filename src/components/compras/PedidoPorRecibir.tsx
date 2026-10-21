@@ -1,11 +1,32 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CantidadCelda, EntregaCelda, PrecioPagadoCelda, type DatosProblema } from '@/components/compras/EntregaProducto';
 import { Button } from '@/components/ui/button';
-import { ESTADO_PEDIDO, fechaCorta, fechaLarga } from '@/lib/compras';
+import { ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad } from '@/lib/compras';
 import { formatMonto, roundTwo } from '@/lib/utils';
-import type { PrecioPagado } from '@/hooks/usePreciosPagados';
+import type { PagoFueraDeLista, PrecioPagado } from '@/hooks/usePreciosPagados';
 import type { PedidoConItems } from '@/types';
 import { useState } from 'react';
+
+/** Lo que Compras compró para la sede sin estar en la lista (ej. una bolsa): se ve y se suma al pagado. */
+function FilasFueraDeLista({ extras }: { extras: PagoFueraDeLista[] }) {
+  if (extras.length === 0) return null;
+  return (
+    <>
+      <tr><td colSpan={5} className="pt-3 pb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Fuera de la lista</td></tr>
+      {extras.map((x, n) => (
+        <tr key={n} className="border-b last:border-b-0">
+          <td className="py-2 pr-2 font-medium">{x.producto}</td>
+          <td className="py-2 pr-2 text-xs">{formatCantidad(x.cantidad)} {x.unidad}</td>
+          <td className="py-2 pr-2 text-xs">—</td>
+          <td className="py-2 pr-2 text-right text-xs font-medium tabular-nums">{formatMonto(x.total)}</td>
+          <td className="py-2 pl-3 text-xs text-muted-foreground">Comprado aparte</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+const sumaExtras = (extras: PagoFueraDeLista[]) => extras.reduce((t, x) => roundTwo(t + x.total), 0);
 import { useToast } from '@/components/ui/toast';
 import { AlertTriangle, Check, ChevronDown, PackageCheck } from 'lucide-react';
 
@@ -13,9 +34,10 @@ import { AlertTriangle, Check, ChevronDown, PackageCheck } from 'lucide-react';
  * Lista ya comprada por Compras: el administrador confirma producto por producto lo que llegó
  * a su sede. Cuando todo lo comprado está entregado, la lista pasa sola a «Recibido».
  */
-export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTodoConforme, onVolverAPedir, children, seguimiento }: {
+export function PedidoPorRecibir({ pedido, pagos, fueraDeLista = [], onEntregado, onProblema, onTodoConforme, onVolverAPedir, children, seguimiento }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
+  fueraDeLista?: PagoFueraDeLista[];
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
   onProblema?: (itemId: string, datos: DatosProblema) => Promise<{ error: string | null }>;
   /** «Marcar todo conforme»: deja conforme lo que aún no se revisó. */
@@ -41,7 +63,7 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
     if (error) addToast(error, 'error');
   }
   const noHabia = items.filter(i => i.estado === 'no_habia').length;
-  const pagado = comprados.reduce((t, i) => roundTwo(t + (pagos.get(i.id)?.total ?? 0)), 0);
+  const pagado = roundTwo(comprados.reduce((t, i) => roundTwo(t + (pagos.get(i.id)?.total ?? 0)), 0) + sumaExtras(fueraDeLista));
 
   return (
     <Card className="border-emerald-200">
@@ -86,13 +108,14 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
                   <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} /></td>
                 </tr>
               ))}
+              <FilasFueraDeLista extras={fueraDeLista} />
             </tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
           <span className="text-xs text-muted-foreground">Revisa cada producto cuando llegue: «Conforme» si está bien, «Problema» si llegó incompleto, no llegó o llegó mal (con una nota). Cuando todos estén revisados, la lista pasa a «Recibida».</span>
           <span className="flex flex-wrap items-center gap-3">
-            <span>Pagado en esta lista: <strong className="text-yayis-dark">{formatMonto(pagado)}</strong></span>
+            <span>Pagado en esta lista: <strong className="text-yayis-dark">{formatMonto(pagado)}</strong>{fueraDeLista.length > 0 && <span className="text-xs text-muted-foreground"> (incluye {formatMonto(sumaExtras(fueraDeLista))} fuera de la lista)</span>}</span>
             {onTodoConforme && sinRevisar > 0 && (
               <Button size="sm" onClick={todoConforme} disabled={trabajando}>
                 <Check size={14} className="mr-1" /> Marcar todo conforme ({sinRevisar})
@@ -110,9 +133,10 @@ export function PedidoPorRecibir({ pedido, pagos, onEntregado, onProblema, onTod
  * Lista ya recibida (todo lo comprado llegó a la sede), en una línea con su resumen y el detalle plegado.
  * Se ve unos días para poder cuadrar con Compras; después pasa a «Pedidos anteriores».
  */
-export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onProblema, onVolverAPedir }: {
+export function PedidoRecibidoResumen({ pedido, pagos, fueraDeLista = [], onEntregado, onProblema, onVolverAPedir }: {
   pedido: PedidoConItems;
   pagos: Map<string, PrecioPagado>;
+  fueraDeLista?: PagoFueraDeLista[];
   onEntregado: (itemId: string, entregado: boolean) => Promise<{ error: string | null }>;
   onProblema?: (itemId: string, datos: DatosProblema) => Promise<{ error: string | null }>;
   onVolverAPedir?: (itemId: string) => Promise<{ error: string | null }>;
@@ -120,7 +144,7 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onProblema, 
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const comprados = items.filter(i => i.estado === 'comprado');
   const noHabia = items.filter(i => i.estado === 'no_habia').length;
-  const pagado = comprados.reduce((t, i) => roundTwo(t + (pagos.get(i.id)?.total ?? 0)), 0);
+  const pagado = roundTwo(comprados.reduce((t, i) => roundTwo(t + (pagos.get(i.id)?.total ?? 0)), 0) + sumaExtras(fueraDeLista));
 
   return (
     <details className="group rounded-lg border bg-white shadow-sm">
@@ -155,6 +179,7 @@ export function PedidoRecibidoResumen({ pedido, pagos, onEntregado, onProblema, 
                 <td className="py-2 pl-3"><EntregaCelda item={i} puedeMarcar onCambiar={onEntregado} onProblema={onProblema} onVolverAPedir={onVolverAPedir} /></td>
               </tr>
             ))}
+            <FilasFueraDeLista extras={fueraDeLista} />
           </tbody>
         </table>
       </div>

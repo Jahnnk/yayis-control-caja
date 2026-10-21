@@ -61,7 +61,7 @@ export function PedidosPage() {
   const recibidasRecientes = pedidos.filter(p => p.estado === 'recibido' && diaRecibida(p) >= sumarDias(hoy, -7));
   const historial = pedidos.filter(p => p.estado !== 'borrador' && p.estado !== 'enviado' && p.estado !== 'comprado' && !recibidasRecientes.includes(p));
   // Lo que se pagó por cada producto comprado (se vuelve a leer cuando Compras compra algo).
-  const pagos = usePreciosPagados(
+  const { porItem: pagos, fueraDeLista } = usePreciosPagados(
     pedidos.filter(p => p.estado !== 'borrador').map(p => p.id),
     pedidos.map(p => `${p.id}:${p.estado}:${p.pedido_items.filter(i => i.estado === 'comprado').length}`).join('|'),
   );
@@ -183,7 +183,7 @@ export function PedidosPage() {
       ))}
 
       {/* Compradas: el administrador confirma lo que fue llegando a su sede */}
-      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme} onVolverAPedir={volverAPedir} seguimiento={seguimiento(p)} />)}
+      {porRecibir.map(p => <PedidoPorRecibir key={p.id} pedido={p} pagos={pagos} fueraDeLista={fueraDeLista.get(p.id)} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onTodoConforme={marcarTodoConforme} onVolverAPedir={volverAPedir} seguimiento={seguimiento(p)} />)}
 
       {/* Nueva lista / pedido urgente */}
       <Card>
@@ -243,7 +243,7 @@ export function PedidosPage() {
       {recibidasRecientes.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-yayis-dark">Recibidas esta semana ({recibidasRecientes.length})</h2>
-          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onVolverAPedir={volverAPedir} />)}
+          {recibidasRecientes.map(p => <PedidoRecibidoResumen key={p.id} pedido={p} pagos={pagos} fueraDeLista={fueraDeLista.get(p.id)} onEntregado={marcarEntregado} onProblema={registrarRecepcion} onVolverAPedir={volverAPedir} />)}
         </div>
       )}
 
