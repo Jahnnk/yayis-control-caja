@@ -7,6 +7,10 @@ import { useToast } from '@/components/ui/toast';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
 import { mesDe, pasaElTope } from '@/lib/presupuesto';
+import { lunesDe } from '@/lib/dinero-semana';
+import { notaSemana, pasaCajaSemana } from '@/lib/caja-semana';
+import { useCajaSemana } from '@/hooks/useCajaSemana';
+import { BarraCajaSemana } from '@/components/presupuesto/BarraCajaSemana';
 import { formatMonto } from '@/lib/utils';
 import { getTodayLima } from '@/lib/dates';
 import { Button } from '@/components/ui/button';
@@ -134,15 +138,24 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
     ? parseFloat(editData.monto) || 0 : 0;
   const montoExtra = Math.max(0, (parseFloat(form.monto) || 0) - yaContado);
   const chequeoTope = pasaElTope(usoCategoria, montoExtra);
-  const pideMotivo = !!chequeoTope?.pasa && montoExtra > 0;
+  const pasaCategoria = !!chequeoTope?.pasa && montoExtra > 0;
+  // La caja chica de la semana (S/ 700 o S/ 1,000): al editar, el gasto ya está contado si es de la misma semana.
+  const { caja: cajaSemana, recargar: recargarSemana } = useCajaSemana(sedeId, form.fecha || today);
+  const yaContadoSemana = editData && lunesDe(editData.fecha) === lunesDe(form.fecha || today)
+    ? parseFloat(editData.monto) || 0 : 0;
+  const montoExtraSemana = Math.max(0, (parseFloat(form.monto) || 0) - yaContadoSemana);
+  const pasaSemana = !!pasaCajaSemana(cajaSemana, montoExtraSemana)?.pasa;
+  const pideMotivo = pasaCategoria || pasaSemana;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.descripcion.trim()) return addToast('Escribe en qué se gastó', 'error');
     if (!form.categoria_id) return addToast('Elige una categoría', 'error');
     if (!form.monto || parseFloat(form.monto) <= 0) return addToast('El monto debe ser mayor a 0', 'error');
-    if (pideMotivo && !motivoTope.trim()) return addToast('Este gasto pasa el tope del presupuesto: escribe por qué', 'error');
-    const datos: GastoFormData = { ...form, motivo_sobre_tope: pideMotivo ? motivoTope.trim() : undefined };
+    if (pideMotivo && !motivoTope.trim()) return addToast(pasaSemana && !pasaCategoria ? 'Este gasto pasa la caja chica de la semana: escribe por qué' : 'Este gasto pasa el tope del presupuesto: escribe por qué', 'error');
+    // A Finanzas le llega el motivo; si es por la caja de la semana, se le agrega con cuánto va.
+    const motivo = pideMotivo ? [motivoTope.trim(), pasaSemana && cajaSemana ? `(${notaSemana(cajaSemana, montoExtraSemana)})` : ''].filter(Boolean).join(' ') : undefined;
+    const datos: GastoFormData = { ...form, motivo_sobre_tope: motivo };
 
     setSaving(true);
 
@@ -162,6 +175,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         addToast('Gasto actualizado', 'success');
         setMotivoTope('');
         recargarPresupuesto();
+        recargarSemana();
         onCancelEdit?.();
         onSaved();
       }
@@ -187,6 +201,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         clearConstancia();
         setMotivoTope('');
         recargarPresupuesto();
+        recargarSemana();
         onSaved();
         // Reload daily summary
         const reloader = (window as unknown as Record<string, unknown>).__reloadResumenDiario;
@@ -257,14 +272,18 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         </label>
       )}
 
-      {/* Presupuesto de la categoría (los topes los aprueba Gerencia en Cash Control) */}
-      {usoCategoria?.tope && (
-        <div className={`rounded-lg border p-3 ${pideMotivo ? 'border-red-300 bg-red-50/60' : 'bg-yayis-cream'}`}>
-          <BarraPresupuesto uso={usoCategoria} extra={montoExtra} etiquetaExtra="este gasto" />
+      {/* Caja chica de la semana (fondo de la sede) y presupuesto de la categoría (los topes los aprueba Gerencia en Cash Control) */}
+      {(usoCategoria?.tope || cajaSemana?.tope) && (
+        <div className={`space-y-3 rounded-lg border p-3 ${pideMotivo ? 'border-red-300 bg-red-50/60' : 'bg-yayis-cream'}`}>
+          {cajaSemana?.tope && <BarraCajaSemana caja={cajaSemana} extra={montoExtraSemana} etiquetaExtra="este gasto" />}
+          {usoCategoria?.tope && <BarraPresupuesto uso={usoCategoria} extra={montoExtra} etiquetaExtra="este gasto" />}
           {pideMotivo && (
             <div className="mt-3">
               <label className="text-sm font-medium text-red-800" htmlFor="motivo-tope">
-                Este gasto pasa el tope de {formatMonto(usoCategoria.tope)}. ¿Por qué es necesario? *
+                {pasaSemana && pasaCategoria
+                  ? 'Este gasto pasa la caja chica de la semana y el tope de su categoría.'
+                  : pasaSemana ? `Este gasto pasa la caja chica de la semana (${formatMonto(cajaSemana!.tope!)}).`
+                  : `Este gasto pasa el tope de ${formatMonto(usoCategoria!.tope!)}.`} ¿Por qué es necesario? *
               </label>
               <Input id="motivo-tope" placeholder="Ej: se malogró la licuadora y no se puede esperar al próximo mes" value={motivoTope}
                 onChange={e => setMotivoTope(e.target.value)} className="mt-1 bg-white" />

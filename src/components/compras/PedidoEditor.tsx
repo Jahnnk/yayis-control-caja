@@ -9,6 +9,9 @@ import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizar
 import { AlertTriangle, BadgeCheck, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
+import { BarraCajaSemana } from '@/components/presupuesto/BarraCajaSemana';
+import { useCajaSemana } from '@/hooks/useCajaSemana';
+import { notaSemana, pasaCajaSemana } from '@/lib/caja-semana';
 import { CATEGORIAS_DEL_ADMIN, CATEGORIAS_PRESUPUESTO, estimarLineasPedido, estimarPorCategoria, mesDe, nombreCategoria, type UsoCategoria } from '@/lib/presupuesto';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import type { PrecioHabitual } from '@/lib/precios';
@@ -111,6 +114,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     return { uso: u, esta, otros, extra: roundTwo(esta + otros) };
   }).sort((a, b) => (b.uso.tope ? (b.uso.gastado + b.extra) / b.uso.tope : -1) - (a.uso.tope ? (a.uso.gastado + a.extra) / a.uso.tope : -1));
   const excedidas = barras.filter(b => b.uso.tope && b.uso.gastado + b.extra > b.uso.tope);
+  // La caja chica de la semana de la compra (S/ 700 o S/ 1,000): lo ya gastado esa semana + lo que costaría esta lista.
+  const { caja: cajaSemana } = useCajaSemana(pedido.sede_id, pedido.fecha_compra);
+  const pasaSemana = pedido.estado === 'borrador' && !!pasaCajaSemana(cajaSemana, totalEstimado)?.pasa;
+  const hayExceso = excedidas.length > 0 || pasaSemana;
+  const queSePasa = [pasaSemana ? 'la caja chica de la semana' : '', excedidas.length > 0 ? `el tope de ${excedidas.map(b => nombreCategoria(b.uso.categoria)).join(', ')}` : ''].filter(Boolean).join(' y ');
 
   function handleNombre(texto: string) {
     const valor = texto.toLocaleUpperCase('es-PE'); // los productos se escriben en MAYÚSCULAS
@@ -259,12 +267,14 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
 
   async function handleEnviar() {
     // Si la lista pasa el tope de alguna categoría, primero se pide el motivo (le llega a Finanzas).
-    if (excedidas.length > 0 && !pidiendoMotivo) {
+    if (hayExceso && !pidiendoMotivo) {
       setPidiendoMotivo(true);
       return;
     }
-    if (excedidas.length > 0 && !motivoTope.trim()) return addToast('Escribe por qué la lista pasa el tope', 'error');
-    const { error } = await onEnviar(pedido.id, excedidas.length > 0 ? motivoTope : undefined);
+    if (hayExceso && !motivoTope.trim()) return addToast(`Escribe por qué la lista pasa ${queSePasa}`, 'error');
+    // A Finanzas le llega el motivo; si es por la caja de la semana, con cuánto quedaría.
+    const motivo = hayExceso ? [motivoTope.trim(), pasaSemana && cajaSemana ? `(${notaSemana(cajaSemana, totalEstimado)}, estimado)` : ''].filter(Boolean).join(' ') : undefined;
+    const { error } = await onEnviar(pedido.id, motivo);
     if (error) addToast(`Error: ${error}`, 'error');
     else {
       addToast('Lista enviada a Compras', 'success');
@@ -521,16 +531,17 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
 
         {/* Presupuesto: el costo estimado siempre a la vista; las barras, plegadas salvo que algo pase el tope */}
         {lineasEstimadas.length > 0 && (
-          <details className="group rounded-lg border bg-yayis-cream" open={excedidas.length > 0}>
+          <details className="group rounded-lg border bg-yayis-cream" open={hayExceso}>
             <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 p-3 text-sm font-medium text-yayis-dark">
               <Gauge size={16} className="shrink-0" /> <span>{totalEstimado > 0 ? <>Esta lista cuesta unos <strong>{formatMonto(totalEstimado)}</strong></> : 'Costo de la lista: todavía sin precios conocidos'}</span>
-              {excedidas.length > 0
-                ? <span className="text-xs font-semibold text-red-700">· pasa el tope de {excedidas.map(b => nombreCategoria(b.uso.categoria)).join(', ')}</span>
-                : hayTopes && <span className="text-xs font-normal text-emerald-700">· dentro del presupuesto</span>}
+              {hayExceso
+                ? <span className="text-xs font-semibold text-red-700">· pasa {queSePasa}</span>
+                : (hayTopes || cajaSemana?.tope) && <span className="text-xs font-normal text-emerald-700">· dentro del presupuesto</span>}
               <ChevronDown size={15} className="ml-auto transition-transform group-open:rotate-180" />
             </summary>
             <div className="space-y-3 px-3 pb-3">
               <p className="text-xs text-muted-foreground">Con tu precio de referencia o, si no hay, con el precio habitual de cada producto.</p>
+              {cajaSemana?.tope && <BarraCajaSemana caja={cajaSemana} extra={pedido.estado === 'borrador' ? totalEstimado : 0} etiquetaExtra="esta lista (estimado)" />}
               {hayTopes ? (
                 barras.filter(b => b.uso.tope).map(b => (
                   <BarraPresupuesto key={b.uso.categoria} uso={b.uso} extra={b.extra}
@@ -554,10 +565,10 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
           </details>
         )}
 
-        {pidiendoMotivo && excedidas.length > 0 && pedido.estado === 'borrador' && (
+        {pidiendoMotivo && hayExceso && pedido.estado === 'borrador' && (
           <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3">
             <p className="text-sm font-medium text-red-800">
-              Esta lista pasa el tope de {excedidas.map(b => nombreCategoria(b.uso.categoria)).join(', ')}. ¿Por qué es necesaria igual?
+              Esta lista pasa {queSePasa}. ¿Por qué es necesaria igual?
             </p>
             <Input
               placeholder="Ej: viene un pedido grande de tortas para el fin de semana"

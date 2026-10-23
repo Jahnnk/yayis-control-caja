@@ -7,6 +7,7 @@ import { usePedidos } from '@/hooks/usePedidos';
 import { useEntregas, gastadoDe } from '@/hooks/useEntregas';
 import { useDeliverys } from '@/hooks/useDeliverys';
 import { useSaldoSemanal } from '@/hooks/useSaldoSemanal';
+import { useCajaSemana } from '@/hooks/useCajaSemana';
 import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
 import { useRutaCompras } from '@/hooks/useRutaCompras';
 import { useFinanzas } from '@/hooks/useFinanzas';
@@ -148,11 +149,13 @@ function Hoy({ subtitulo, tareas, listo, datos, atajos }: {
 
 function HoyAdministrador() {
   const hoy = getTodayLima();
-  const { sedeActiva } = useSedeActiva();
+  const { sedeActiva, sedeId } = useSedeActiva();
   const { pedidos, loading: l1 } = usePedidos();
   const { entregas, loading: l2 } = useEntregas('sede');
   const { deliverys, loading: l3 } = useDeliverys('sede');
   const saldo = useSaldoSemanal();
+  // La caja chica de la semana: todo lo que sale de la caja de la sede (sus gastos + compras de Fabio al contado).
+  const { caja } = useCajaSemana(sedeId, hoy);
   const { consolidado } = useConsolidadoReposicion();
   const listo = useListo(l1 || l2 || l3);
 
@@ -168,6 +171,11 @@ function HoyAdministrador() {
       tareas={tareas}
       listo={listo}
       datos={<>
+        {caja?.tope ? (
+          <Dato etiqueta="Caja chica de la semana" valor={formatMonto(caja.gastado)}
+            nota={caja.gastado <= caja.tope ? `de ${formatMonto(caja.tope)} · quedan ${formatMonto(roundTwo(caja.tope - caja.gastado))}` : `de ${formatMonto(caja.tope)} · te pasaste ${formatMonto(roundTwo(caja.gastado - caja.tope))}`}
+            alerta={caja.gastado > caja.tope} />
+        ) : null}
         <Dato etiqueta="Te queda del monto semanal" valor={formatMonto(saldo.queda)} nota={saldo.montoSemanal > 0 ? `de ${formatMonto(saldo.montoSemanal)}` : 'Sin monto semanal'} alerta={saldo.queda < 0} />
         <Dato etiqueta="Compras tiene de tu sede" valor={formatMonto(enManos)} nota="por gastar o devolver" />
         <Dato etiqueta="Gerencia te debe reponer" valor={formatMonto(consolidado.total.total)} nota={`${consolidado.total.cantidad} gasto(s) pendiente(s)`} />
