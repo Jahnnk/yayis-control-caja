@@ -9,6 +9,7 @@ import { useDesgloseReposicion } from '@/hooks/useDesgloseReposicion';
 import { useConsolidadoReposicion } from '@/hooks/useConsolidadoReposicion';
 import { CabeceraGerencia } from '@/components/layout/CabeceraGerencia';
 import { Desplegable } from '@/components/ui/desplegable';
+import { RecorridoCompras } from '@/components/viajes/RecorridoCompras';
 import { ConsolidadoReposicion } from '@/components/gastos/ConsolidadoReposicion';
 import { exportarGastosExcel, exportarGastosPDF, type ExportCategoria } from '@/lib/exportGastos';
 import { useToast } from '@/components/ui/toast';
@@ -1047,6 +1048,9 @@ export function ResumenPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Km de Compras por día y semana (las 3 sedes) y si alcanzan los S/ 20 de gasolina */}
+      {isOwner && <RecorridoCompras hoy={today} />}
 
       {/* Análisis del periodo: plegado, con su resumen a la vista */}
       {isOwner && (
