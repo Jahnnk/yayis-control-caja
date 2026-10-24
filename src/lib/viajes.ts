@@ -180,3 +180,63 @@ export function calcularIndicadoresViajes(
     detalle: detalle.reverse(),
   };
 }
+
+// ====== Recorrido de la semana (Resumen de Gerencia) ======
+
+export interface DiaRecorrido {
+  fecha: string;
+  viajes: number;
+  kmCompras: number;
+  kmDeliverys: number;
+  km: number;
+}
+
+export interface RecorridoSemana {
+  dias: DiaRecorrido[];
+  km: number;
+  kmCompras: number;
+  kmDeliverys: number;
+  /** Lo que cargó de gasolina esta semana. */
+  gasolinaCargada: number;
+  /** Costo por km con las últimas semanas (una sola carga no dice cuánto se gastó: a veces llena el tanque). */
+  costoPorKm: number | null;
+  semanasDelCosto: number;
+  /** Gasolina que necesitaron los km de esta semana, al costo por km de las últimas semanas. */
+  gasolinaNecesaria: number | null;
+}
+
+/**
+ * Km por día de la semana que empieza en `lunes` y si alcanzan los S/ 20 de gasolina.
+ * `viajes` y `cargas` deben traer también las semanas anteriores (desde `desdeCosto`) para el costo por km.
+ */
+export function recorridoSemana(viajes: Viaje[], cargas: CargaCombustible[], lunes: string, desdeCosto: string): RecorridoSemana {
+  const domingo = sumarDias(lunes, 6);
+  const cerrados = viajes.filter(v => v.km_regreso !== null);
+  const dias: DiaRecorrido[] = [];
+  for (let f = lunes; f <= domingo; f = sumarDias(f, 1)) {
+    const delDia = cerrados.filter(v => v.fecha === f);
+    const kmTipo = (t: TipoViaje) => delDia.filter(v => v.tipo === t).reduce((s, v) => roundTwo(s + (kmRecorridos(v) ?? 0)), 0);
+    const kmCompras = kmTipo('compras');
+    const kmDeliverys = kmTipo('deliverys');
+    dias.push({ fecha: f, viajes: delDia.length, kmCompras, kmDeliverys, km: roundTwo(kmCompras + kmDeliverys) });
+  }
+  const suma = (xs: number[]) => xs.reduce((s, x) => roundTwo(s + x), 0);
+  const km = suma(dias.map(d => d.km));
+
+  // Costo por km: toda la gasolina y todos los km desde `desdeCosto` hasta el domingo.
+  const enRango = (fecha: string) => fecha >= desdeCosto && fecha <= domingo;
+  const kmRango = suma(cerrados.filter(v => enRango(v.fecha)).map(v => kmRecorridos(v) ?? 0));
+  const gasRango = suma(cargas.filter(c => enRango(c.fecha)).map(c => Number(c.monto)));
+  const costoPorKm = kmRango > 0 && gasRango > 0 ? Math.round((gasRango / kmRango) * 1000) / 1000 : null;
+
+  return {
+    dias,
+    km,
+    kmCompras: suma(dias.map(d => d.kmCompras)),
+    kmDeliverys: suma(dias.map(d => d.kmDeliverys)),
+    gasolinaCargada: suma(cargas.filter(c => c.fecha >= lunes && c.fecha <= domingo).map(c => Number(c.monto))),
+    costoPorKm,
+    semanasDelCosto: Math.round((Date.parse(domingo) - Date.parse(desdeCosto)) / (7 * 86400000)),
+    gasolinaNecesaria: costoPorKm === null ? null : roundTwo(km * costoPorKm),
+  };
+}
