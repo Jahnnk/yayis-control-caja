@@ -387,6 +387,16 @@ export interface LiquidacionDelivery {
 export type TipoViaje = 'compras' | 'deliverys';
 export type MotivoViaje = 'lista_tardia' | 'no_habia' | 'no_cabia' | 'olvido' | 'otro';
 
+/** Una moto que usa Compras: su tablero marca km o millas (los viajes se guardan siempre en km). */
+export interface Moto {
+  id: string;
+  conductor: string;
+  nombre: string;
+  unidad: 'km' | 'millas';
+  activa: boolean;
+  created_at: string;
+}
+
 export interface Viaje {
   id: string;
   conductor: string;
@@ -401,6 +411,8 @@ export interface Viaje {
   motivo: MotivoViaje | null;
   motivo_sede_id: string | null;
   motivo_detalle: string | null;
+  /** En qué moto fue (null en viajes anteriores a la lista de motos). */
+  moto_id: string | null;
   created_at: string;
 }
 
@@ -412,5 +424,6 @@ export interface CargaCombustible {
   km: number | null;
   foto_path: string | null;
   nota: string | null;
+  moto_id: string | null;
   created_at: string;
 }
