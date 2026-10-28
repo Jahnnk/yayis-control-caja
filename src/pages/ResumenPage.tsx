@@ -39,6 +39,32 @@ interface SemanaRow {
   porCategoria: Record<string, number>;
 }
 
+type DetalleCompra = { proveedor: string; tipo: string; numero: string | null; productos: string };
+
+/** Qué se compró y con qué comprobante, para los gastos que vienen de Compras (de 100 en 100). */
+async function cargarComprasPorGasto(ids: string[]): Promise<Map<string, DetalleCompra>> {
+  const mapa = new Map<string, DetalleCompra>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await supabase
+      .from('compras')
+      .select('gasto_id, tipo_comprobante, numero_comprobante, proveedores(nombre), compra_items(cantidad, unidad, productos(nombre))')
+      .in('gasto_id', ids.slice(i, i + 100));
+    for (const c of (data ?? []) as unknown as Array<{
+      gasto_id: string; tipo_comprobante: string; numero_comprobante: string | null;
+      proveedores: { nombre: string } | null;
+      compra_items: Array<{ cantidad: number; unidad: string; productos: { nombre: string } | null }>;
+    }>) {
+      mapa.set(c.gasto_id, {
+        proveedor: c.proveedores?.nombre ?? '',
+        tipo: c.tipo_comprobante,
+        numero: c.numero_comprobante,
+        productos: c.compra_items.map(ci => `${ci.productos?.nombre ?? 'Producto'} (${Number(ci.cantidad)} ${ci.unidad})`).join(', '),
+      });
+    }
+  }
+  return mapa;
+}
+
 export function ResumenPage() {
   const { profile } = useAuth();
   const { sedeId, sedeActiva, responsable } = useSedeActiva();
@@ -89,6 +115,9 @@ export function ResumenPage() {
   // TODOS los gastos pendientes del periodo agrupados por categoria (sin recorte top 5).
   // Se usa para exportar a Excel/PDF, independiente del toggle de pantalla.
   const [pendientesCompletos, setPendientesCompletos] = useState<ExportCategoria[]>([]);
+  // Todos los gastos del periodo (por reponer y repuestos), para descargar «todo lo rendido».
+  const [todosLosGastos, setTodosLosGastos] = useState<Array<{ categoria: string; items: Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null }> }>>([]);
+  const [exportandoTodo, setExportandoTodo] = useState(false);
   const [valoresRevisar, setValoresRevisar] = useState<Array<{
     tipo: 'duplicado' | 'monto-similar';
     severidad: 'alta' | 'media';
@@ -160,7 +189,7 @@ export function ResumenPage() {
     for (let desde = 0; ; desde += PAGE_SIZE) {
       let query = supabase
         .from('gastos')
-        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, origen, categorias(nombre)')
+        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, origen, reposicion_id, categorias(nombre)')
         .eq('sede_id', sedeId)
         .order('fecha', { ascending: true })
         .order('id', { ascending: true })
@@ -191,7 +220,7 @@ export function ResumenPage() {
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
-    const itemsByCategoria = new Map<string, Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string }>>();
+    const itemsByCategoria = new Map<string, Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null }>>();
     const catEfectivoMap = new Map<string, number>();
     const catCuentasMap = new Map<string, number>();
     const catEfPagadoMap = new Map<string, number>();
@@ -262,8 +291,11 @@ export function ResumenPage() {
         fecha: g.fecha as string,
         metodo,
         estado,
+        reposicionId: (g.reposicion_id as string | null) ?? null,
       });
     }
+    // Todos los gastos del periodo (por reponer y ya repuestos), para la descarga «todo lo rendido».
+    setTodosLosGastos(Array.from(itemsByCategoria.entries()).map(([categoria, items]) => ({ categoria, items })));
 
     const allPeriods = Array.from(periodMap.values());
     setSemanasData(isAnual ? allPeriods.filter(p => p.totalGastado > 0) : allPeriods);
@@ -284,7 +316,7 @@ export function ResumenPage() {
     // Filtramos a estado='pendiente', calculamos un total de pendientes por categoria,
     // ordenamos por ese total y tomamos las top 5 categorias que tengan al menos 1 pendiente.
     // El slice a 5/10/todos ocurre al renderizar segun topItemsCount.
-    type ItemDetalle = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string };
+    type ItemDetalle = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null };
     const pendientesPorCategoria = new Map<string, { items: ItemDetalle[]; total: number }>();
     for (const [cat, items] of itemsByCategoria) {
       const soloPendientes = items.filter(it => it.estado === 'pendiente');
@@ -301,25 +333,7 @@ export function ResumenPage() {
     })));
     // Para Kelly: de cada gasto de Compras, qué se compró y con qué comprobante (para pedir las boletas y facturas).
     const idsPendientes = allPendientesSorted.flatMap(([, { items }]) => items.filter(it => it.origen === 'compras').map(it => it.id));
-    const comprasPorGasto = new Map<string, { proveedor: string; tipo: string; numero: string | null; productos: string }>();
-    for (let i = 0; i < idsPendientes.length; i += 100) {
-      const { data: comprasData } = await supabase
-        .from('compras')
-        .select('gasto_id, tipo_comprobante, numero_comprobante, proveedores(nombre), compra_items(cantidad, unidad, productos(nombre))')
-        .in('gasto_id', idsPendientes.slice(i, i + 100));
-      for (const c of (comprasData ?? []) as unknown as Array<{
-        gasto_id: string; tipo_comprobante: string; numero_comprobante: string | null;
-        proveedores: { nombre: string } | null;
-        compra_items: Array<{ cantidad: number; unidad: string; productos: { nombre: string } | null }>;
-      }>) {
-        comprasPorGasto.set(c.gasto_id, {
-          proveedor: c.proveedores?.nombre ?? '',
-          tipo: c.tipo_comprobante,
-          numero: c.numero_comprobante,
-          productos: c.compra_items.map(ci => `${ci.productos?.nombre ?? 'Producto'} (${Number(ci.cantidad)} ${ci.unidad})`).join(', '),
-        });
-      }
-    }
+    const comprasPorGasto = await cargarComprasPorGasto(idsPendientes);
     if (cargaId !== ultimaCarga.current) return;
     // Set completo (todas las categorias, todos los items) para exportar
     setPendientesCompletos(allPendientesSorted.map(([nombre, { items, total }]) => ({
@@ -715,6 +729,48 @@ export function ResumenPage() {
     }
   }
 
+  /** Excel con TODO lo del periodo, también lo que ya se repuso (el otro solo trae lo que falta reponer). */
+  async function handleExportTodo() {
+    if (todosLosGastos.length === 0) {
+      addToast('No hay gastos en este periodo', 'warning');
+      return;
+    }
+    setExportandoTodo(true);
+    try {
+      const idsCompras = todosLosGastos.flatMap(c => c.items.filter(it => it.origen === 'compras').map(it => it.id));
+      const compras = await cargarComprasPorGasto(idsCompras);
+      const fechaRepo = new Map(reposiciones.map(r => [r.id, r.fecha as string]));
+      const corta = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`;
+      const categorias: ExportCategoria[] = todosLosGastos.map(({ categoria, items }) => {
+        const ordenados = items.slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+        return {
+          categoria,
+          total: ordenados.reduce((t, it) => roundTwo(t + it.monto), 0),
+          items: ordenados.map(it => {
+            const compra = compras.get(it.id);
+            const cuando = it.reposicionId ? fechaRepo.get(it.reposicionId) : null;
+            return {
+              descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo,
+              origen: it.origen === 'compras' ? 'Compras' : 'Administrador',
+              productos: compra?.productos ?? '',
+              comprobante: compra ? (compra.tipo === 'boleta' ? 'Boleta' : compra.tipo === 'factura' ? 'Factura' : 'Sin comprobante') : '',
+              numeroComprobante: compra?.numero ?? '',
+              estado: it.estado === 'pagado' ? (cuando ? `Repuesto el ${corta(cuando)}` : 'Repuesto') : 'Por reponer',
+            };
+          }),
+        };
+      }).sort((a, b) => b.total - a.total);
+      await exportarGastosExcel(categorias, {
+        periodoLabel, fechaGeneracion: getTodayLima(),
+        titulo: 'Gastos rendidos del periodo (repuestos y por reponer)', archivo: `Gastos-Rendidos-${sedeActiva?.nombre ?? 'Sede'}`,
+      });
+    } catch {
+      addToast('No se pudo generar el Excel', 'error');
+    } finally {
+      setExportandoTodo(false);
+    }
+  }
+
   async function handleExportPDF() {
     if (pendientesCompletos.length === 0) {
       addToast('No hay gastos pendientes para exportar', 'warning');
@@ -820,6 +876,19 @@ export function ResumenPage() {
           </Button>
         </div>
       </div>
+
+      {/* Todo lo rendido del periodo: también lo que ya se repuso */}
+      {isOwner && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3">
+          <div>
+            <p className="text-sm font-bold text-yayis-dark">Descargar todo lo rendido del periodo</p>
+            <p className="text-xs text-muted-foreground">{periodoLabel} · lo que falta reponer y lo que ya se repuso, con su estado y la fecha de la reposición.</p>
+          </div>
+          <Button size="sm" variant="outline" disabled={todosLosGastos.length === 0 || exportandoTodo} onClick={handleExportTodo} className="border-yayis-green/40 text-yayis-green hover:bg-yayis-green/10">
+            {exportandoTodo ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <FileSpreadsheet size={14} className="mr-1.5" />} Excel
+          </Button>
+        </div>
+      )}
 
       {/* Por reponer + Caja del administrador (una sola caja chica, se repone por transferencia) */}
       {isOwner && (
