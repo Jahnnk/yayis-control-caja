@@ -16,6 +16,8 @@ export type ExportGastoItem = {
   /** «Boleta», «Factura» o «Sin comprobante» (vacío si el gasto no viene de una compra). */
   comprobante?: string;
   numeroComprobante?: string;
+  /** Solo en la descarga de todo el periodo: «Por reponer» o «Repuesto el 26/10». */
+  estado?: string;
 };
 
 export type ExportCategoria = {
@@ -27,6 +29,11 @@ export type ExportCategoria = {
 export type ExportMeta = {
   periodoLabel: string;     // ej. "Mayo 2026 - Semana 5"
   fechaGeneracion: string;  // YYYY-MM-DD (Lima)
+  /** Título del reporte (por defecto «Gastos Pendientes por Reponer»). */
+  titulo?: string;
+  /** Inicio del nombre del archivo (por defecto «Gastos-Pendientes-Yayis»). */
+  archivo?: string;
+  sede?: string;
 };
 
 const NOMBRE_EMPRESA = "Yayi's";
@@ -40,8 +47,8 @@ function metodoLabel(metodo: string): string {
   return metodo === 'efectivo' ? 'Efectivo' : 'Cuentas';
 }
 
-function nombreArchivo(fecha: string, ext: 'xlsx' | 'pdf'): string {
-  return `Gastos-Pendientes-Yayis-${fecha}.${ext}`;
+function nombreArchivo(fecha: string, ext: 'xlsx' | 'pdf', archivo = 'Gastos-Pendientes-Yayis'): string {
+  return `${archivo}-${fecha}.${ext}`;
 }
 
 function totalGeneral(categorias: ExportCategoria[]): number {
@@ -63,9 +70,12 @@ function descargarBlob(blob: Blob, nombre: string) {
 export async function exportarGastosExcel(categorias: ExportCategoria[], meta: ExportMeta) {
   const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Gastos Pendientes');
+  const ws = wb.addWorksheet(meta.titulo ? 'Gastos del periodo' : 'Gastos Pendientes');
+  // La descarga de todo el periodo agrega una columna «Estado» (por reponer / repuesto).
+  const conEstado = categorias.some(c => c.items.some(i => i.estado));
+  const colMonto = conEstado ? 11 : 10;
 
-  // Anchos de columna: N°, Categoria, Fecha, Origen, Descripcion, Productos, Comprobante, N° comprobante, Metodo, Monto
+  // Anchos de columna: N°, Categoria, Fecha, Origen, Descripcion, Productos, Comprobante, N° comprobante, Metodo, [Estado], Monto
   ws.columns = [
     { width: 6 },
     { width: 22 },
@@ -76,20 +86,22 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
     { width: 16 },
     { width: 16 },
     { width: 14 },
+    ...(conEstado ? [{ width: 18 }] : []),
     { width: 14 },
   ];
 
   // --- Encabezado del documento ---
   const rEmpresa = ws.addRow([NOMBRE_EMPRESA]);
   rEmpresa.font = { bold: true, size: 16, color: { argb: `FF${YAYIS_DARK}` } };
-  const rTitulo = ws.addRow([TITULO_REPORTE]);
+  const rTitulo = ws.addRow([meta.titulo ?? TITULO_REPORTE]);
   rTitulo.font = { bold: true, size: 12 };
+  if (meta.sede) ws.addRow([`Sede: ${meta.sede}`]);
   ws.addRow([`Periodo: ${meta.periodoLabel}`]);
   ws.addRow([`Generado: ${meta.fechaGeneracion}`]);
   ws.addRow([]); // fila en blanco
 
   // --- Encabezados de la tabla ---
-  const headerRow = ws.addRow(['N°', 'Categoría', 'Fecha', 'Origen', 'Descripción', 'Productos comprados', 'Comprobante', 'N° de comprobante', 'Método de pago', 'Monto']);
+  const headerRow = ws.addRow(['N°', 'Categoría', 'Fecha', 'Origen', 'Descripción', 'Productos comprados', 'Comprobante', 'N° de comprobante', 'Método de pago', ...(conEstado ? ['Estado'] : []), 'Monto']);
   headerRow.eachCell(cell => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${YAYIS_GREEN}` } };
@@ -103,34 +115,34 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
 
     // Filas de gastos
     cat.items.forEach((it, i) => {
-      const row = ws.addRow([i + 1, cat.categoria, it.fecha, it.origen ?? '', it.descripcion, it.productos ?? '', it.comprobante ?? '', it.numeroComprobante ?? '', metodoLabel(it.metodo), it.monto]);
+      const row = ws.addRow([i + 1, cat.categoria, it.fecha, it.origen ?? '', it.descripcion, it.productos ?? '', it.comprobante ?? '', it.numeroComprobante ?? '', metodoLabel(it.metodo), ...(conEstado ? [it.estado ?? ''] : []), it.monto]);
       row.getCell(6).alignment = { wrapText: true, vertical: 'top' };
       if (it.comprobante === 'Sin comprobante') row.getCell(7).font = { color: { argb: 'FFC0392B' }, bold: true };
-      row.getCell(10).numFmt = '#,##0.00';
+      row.getCell(colMonto).numFmt = '#,##0.00';
     });
 
     // Subtotal de la categoria (en negrita)
-    const subtotalRow = ws.addRow(['', '', '', '', '', '', '', '', `Subtotal ${cat.categoria}`, cat.total]);
+    const subtotalRow = ws.addRow(['', '', '', '', '', '', '', '', ...(conEstado ? [''] : []), `Subtotal ${cat.categoria}`, cat.total]);
     subtotalRow.font = { bold: true };
-    subtotalRow.getCell(10).numFmt = '#,##0.00';
-    subtotalRow.getCell(10).font = { bold: true };
+    subtotalRow.getCell(colMonto).numFmt = '#,##0.00';
+    subtotalRow.getCell(colMonto).font = { bold: true };
   }
 
   // --- Total general (en negrita) ---
   ws.addRow([]);
-  const totalRow = ws.addRow(['', '', '', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral(categorias)]);
+  const totalRow = ws.addRow(['', '', '', '', '', '', '', '', ...(conEstado ? [''] : []), 'TOTAL GENERAL', totalGeneral(categorias)]);
   totalRow.font = { bold: true };
   totalRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${YAYIS_DARK}` } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   });
-  totalRow.getCell(10).numFmt = '#,##0.00';
+  totalRow.getCell(colMonto).numFmt = '#,##0.00';
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
-  descargarBlob(blob, nombreArchivo(meta.fechaGeneracion, 'xlsx'));
+  descargarBlob(blob, nombreArchivo(meta.fechaGeneracion, 'xlsx', meta.archivo));
 }
 
 // ====== Exportar a PDF (jsPDF + autotable) ======
