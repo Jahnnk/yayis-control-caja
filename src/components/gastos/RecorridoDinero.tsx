@@ -11,12 +11,12 @@ interface Tramo { clave: string; etiqueta: string; monto: number; clase: string;
  */
 export function RecorridoDinero({ saldo }: { saldo: SaldoSemanal }) {
   if (saldo.montoSemanal <= 0) return null;
-  const { montoSemanal, entregado, pagadoDirecto, sinMarcar, registradoCompras } = saldo;
+  const { montoSemanal, entregado, pagadoDirecto, sinMarcar, registradoCompras, comprasPorReponer } = saldo;
 
   const registrado = Math.min(registradoCompras, entregado);
   const faltaJustificar = roundTwo(Math.max(entregado - registradoCompras, 0));
   const comprasPusoPropio = roundTwo(Math.max(registradoCompras - entregado, 0));
-  const usado = roundTwo(pagadoDirecto + sinMarcar.total + entregado);
+  const usado = roundTwo(pagadoDirecto + sinMarcar.total + entregado + comprasPorReponer);
   const libre = roundTwo(Math.max(montoSemanal - usado, 0));
   const excede = roundTwo(Math.max(usado - montoSemanal, 0));
   const base = Math.max(montoSemanal, usado) || 1;
@@ -25,6 +25,7 @@ export function RecorridoDinero({ saldo }: { saldo: SaldoSemanal }) {
     { clave: 'directo', etiqueta: 'Pagado por ti (marcado)', monto: pagadoDirecto, clase: 'bg-blue-600' },
     { clave: 'sin-marcar', etiqueta: 'Otros gastos tuyos sin marcar', monto: sinMarcar.total, clase: 'bg-blue-300', ayuda: 'Si los pagaste con el monto semanal, márcalos al editarlos.' },
     { clave: 'registrado', etiqueta: 'Compras ya registró', monto: registrado, clase: 'bg-violet-500' },
+    { clave: 'antes', etiqueta: 'Compras de antes por reponer', monto: comprasPorReponer, clase: 'bg-violet-300', ayuda: 'Gastos de Compras de semanas anteriores (y faltantes) que Gerencia todavía no repone.' },
     { clave: 'justificar', etiqueta: 'Compras falta justificar', monto: faltaJustificar, clase: 'bg-amber-400', ayuda: 'Entregado a Compras que aún no está registrado en compras (o que debe devolver como vuelto).' },
     { clave: 'libre', etiqueta: 'Te queda', monto: libre, clase: 'bg-emerald-300' },
   ];
