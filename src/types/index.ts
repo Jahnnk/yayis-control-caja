@@ -60,6 +60,8 @@ export interface Gasto {
   origen?: 'administrador' | 'compras';
   /** Por qué se registró aunque pasaba el tope del presupuesto (le llega a Finanzas). */
   motivo_sobre_tope?: string | null;
+  /** A quién se le compró (opcional; en los gastos de Compras sale de la compra). */
+  proveedor_id?: string | null;
   constancia_path: string | null;
   created_at: string;
   updated_at: string;
@@ -161,6 +163,8 @@ export interface GastoFormData {
   notas: string;
   /** El administrador lo pagó con el monto semanal de compras: resta de ese saldo y se repone igual. */
   con_monto_semanal: boolean;
+  /** Proveedor elegido (opcional): '' = sin proveedor. */
+  proveedor_id: string;
   /** Motivo obligatorio cuando el gasto pasa el tope de su categoría. */
   motivo_sobre_tope?: string;
 }

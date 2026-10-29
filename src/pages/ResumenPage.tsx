@@ -39,6 +39,14 @@ interface SemanaRow {
   porCategoria: Record<string, number>;
 }
 
+/**
+ * Las dos columnas del Excel: Proveedor (el de la compra, o el que eligió el administrador) y
+ * Productos comprados (los de la compra, o lo que el administrador escribió en «¿En qué se gastó?»).
+ */
+function proveedorYProductos(it: { proveedor: string; descripcion: string }, compra?: { proveedor: string; productos: string }) {
+  return { proveedor: compra?.proveedor || it.proveedor, productos: compra?.productos || it.descripcion };
+}
+
 type DetalleCompra = { proveedor: string; tipo: string; numero: string | null; productos: string };
 
 /** Qué se compró y con qué comprobante, para los gastos que vienen de Compras (de 100 en 100). */
@@ -116,7 +124,7 @@ export function ResumenPage() {
   // Se usa para exportar a Excel/PDF, independiente del toggle de pantalla.
   const [pendientesCompletos, setPendientesCompletos] = useState<ExportCategoria[]>([]);
   // Todos los gastos del periodo (por reponer y repuestos), para descargar «todo lo rendido».
-  const [todosLosGastos, setTodosLosGastos] = useState<Array<{ categoria: string; items: Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null }> }>>([]);
+  const [todosLosGastos, setTodosLosGastos] = useState<Array<{ categoria: string; items: Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null; proveedor: string }> }>>([]);
   const [exportandoTodo, setExportandoTodo] = useState(false);
   const [valoresRevisar, setValoresRevisar] = useState<Array<{
     tipo: 'duplicado' | 'monto-similar';
@@ -189,7 +197,7 @@ export function ResumenPage() {
     for (let desde = 0; ; desde += PAGE_SIZE) {
       let query = supabase
         .from('gastos')
-        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, origen, reposicion_id, categorias(nombre)')
+        .select('id, fecha, descripcion, monto, metodo_pago, estado, semana, origen, reposicion_id, proveedores(nombre), categorias(nombre)')
         .eq('sede_id', sedeId)
         .order('fecha', { ascending: true })
         .order('id', { ascending: true })
@@ -220,7 +228,7 @@ export function ResumenPage() {
     // Build period map (by semana or by month)
     const periodMap = new Map<number, SemanaRow>();
     const catTotalMap = new Map<string, number>();
-    const itemsByCategoria = new Map<string, Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null }>>();
+    const itemsByCategoria = new Map<string, Array<{ id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null; proveedor: string }>>();
     const catEfectivoMap = new Map<string, number>();
     const catCuentasMap = new Map<string, number>();
     const catEfPagadoMap = new Map<string, number>();
@@ -292,6 +300,7 @@ export function ResumenPage() {
         metodo,
         estado,
         reposicionId: (g.reposicion_id as string | null) ?? null,
+        proveedor: ((g.proveedores as { nombre: string } | null)?.nombre) ?? '',
       });
     }
     // Todos los gastos del periodo (por reponer y ya repuestos), para la descarga «todo lo rendido».
@@ -316,7 +325,7 @@ export function ResumenPage() {
     // Filtramos a estado='pendiente', calculamos un total de pendientes por categoria,
     // ordenamos por ese total y tomamos las top 5 categorias que tengan al menos 1 pendiente.
     // El slice a 5/10/todos ocurre al renderizar segun topItemsCount.
-    type ItemDetalle = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null };
+    type ItemDetalle = { id: string; descripcion: string; monto: number; fecha: string; metodo: string; estado: string; origen: string; reposicionId: string | null; proveedor: string };
     const pendientesPorCategoria = new Map<string, { items: ItemDetalle[]; total: number }>();
     for (const [cat, items] of itemsByCategoria) {
       const soloPendientes = items.filter(it => it.estado === 'pendiente');
@@ -347,7 +356,7 @@ export function ResumenPage() {
           return {
             descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo,
             origen: it.origen === 'compras' ? 'Compras' : 'Administrador',
-            productos: compra?.productos ?? '',
+            ...proveedorYProductos(it, compra),
             comprobante: compra ? (compra.tipo === 'boleta' ? 'Boleta' : compra.tipo === 'factura' ? 'Factura' : 'Sin comprobante') : '',
             numeroComprobante: compra?.numero ?? '',
           };
@@ -752,7 +761,7 @@ export function ResumenPage() {
             return {
               descripcion: it.descripcion, monto: it.monto, fecha: it.fecha, metodo: it.metodo,
               origen: it.origen === 'compras' ? 'Compras' : 'Administrador',
-              productos: compra?.productos ?? '',
+              ...proveedorYProductos(it, compra),
               comprobante: compra ? (compra.tipo === 'boleta' ? 'Boleta' : compra.tipo === 'factura' ? 'Factura' : 'Sin comprobante') : '',
               numeroComprobante: compra?.numero ?? '',
               estado: it.estado === 'pagado' ? (cuando ? `Repuesto el ${corta(cuando)}` : 'Repuesto') : 'Por reponer',
