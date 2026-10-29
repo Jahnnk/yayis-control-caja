@@ -11,13 +11,14 @@ export function SaldoMontoSemanal({ saldo, children }: { saldo: SaldoSemanal; ch
         <span>Monto semanal: <strong>{formatMonto(saldo.montoSemanal)}</strong></span>
         <span>− Entregado a Compras: <strong>{formatMonto(saldo.entregado)}</strong></span>
         <span>− Pagado por ti: <strong>{formatMonto(saldo.pagadoDirecto)}</strong></span>
+        {saldo.comprasPorReponer > 0 && <span>− Compras de antes por reponer: <strong>{formatMonto(saldo.comprasPorReponer)}</strong></span>}
         <span className={saldo.queda < 0 ? 'font-bold text-red-600' : 'text-yayis-dark'}>
           = Te queda: <strong className="text-base">{formatMonto(saldo.queda)}</strong>
         </span>
         {children}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        De lunes a hoy (y lo marcado antes que sigue sin reponer). «Pagado por ti» son los gastos que marcas como «Lo pagué con el monto semanal»; igual se reponen.
+        De lunes a hoy (y lo marcado antes que sigue sin reponer). «Pagado por ti» son los gastos que marcas como «Lo pagué con el monto semanal»; igual se reponen. «Compras de antes por reponer» es lo que Compras gastó (o no rindió) de entregas de semanas anteriores y Gerencia todavía no repone.
         {saldo.queda < 0 && <span className="font-medium text-red-600"> Ya te pasaste del monto semanal.</span>}
       </p>
     </div>
