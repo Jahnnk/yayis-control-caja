@@ -5,13 +5,16 @@ import { formatMonto, roundTwo } from '@/lib/utils';
 
 // ====== Tipos del reporte ======
 export type ExportGastoItem = {
+  /** Lo que se anotó en el gasto (ya no sale en las columnas: el Excel muestra Proveedor y Productos comprados). */
   descripcion: string;
+  /** A quién se le compró: el de la compra (Compras) o el que eligió el administrador. Vacío si no hay. */
+  proveedor?: string;
   monto: number;
   fecha: string;
   metodo: string; // 'efectivo' | 'cuentas'
   /** Quién lo originó: «Administrador» o «Compras». */
   origen?: string;
-  /** Solo en compras de Compras: los productos comprados. */
+  /** Qué se compró: los productos de la compra (Compras) o lo que el administrador escribió. */
   productos?: string;
   /** «Boleta», «Factura» o «Sin comprobante» (vacío si el gasto no viene de una compra). */
   comprobante?: string;
@@ -75,7 +78,7 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
   const conEstado = categorias.some(c => c.items.some(i => i.estado));
   const colMonto = conEstado ? 11 : 10;
 
-  // Anchos de columna: N°, Categoria, Fecha, Origen, Descripcion, Productos, Comprobante, N° comprobante, Metodo, [Estado], Monto
+  // Anchos de columna: N°, Categoria, Fecha, Origen, Proveedor, Productos, Comprobante, N° comprobante, Metodo, [Estado], Monto
   ws.columns = [
     { width: 6 },
     { width: 22 },
@@ -101,7 +104,7 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
   ws.addRow([]); // fila en blanco
 
   // --- Encabezados de la tabla ---
-  const headerRow = ws.addRow(['N°', 'Categoría', 'Fecha', 'Origen', 'Descripción', 'Productos comprados', 'Comprobante', 'N° de comprobante', 'Método de pago', ...(conEstado ? ['Estado'] : []), 'Monto']);
+  const headerRow = ws.addRow(['N°', 'Categoría', 'Fecha', 'Origen', 'Proveedor', 'Productos comprados', 'Comprobante', 'N° de comprobante', 'Método de pago', ...(conEstado ? ['Estado'] : []), 'Monto']);
   headerRow.eachCell(cell => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${YAYIS_GREEN}` } };
@@ -115,7 +118,7 @@ export async function exportarGastosExcel(categorias: ExportCategoria[], meta: E
 
     // Filas de gastos
     cat.items.forEach((it, i) => {
-      const row = ws.addRow([i + 1, cat.categoria, it.fecha, it.origen ?? '', it.descripcion, it.productos ?? '', it.comprobante ?? '', it.numeroComprobante ?? '', metodoLabel(it.metodo), ...(conEstado ? [it.estado ?? ''] : []), it.monto]);
+      const row = ws.addRow([i + 1, cat.categoria, it.fecha, it.origen ?? '', it.proveedor ?? '', it.productos ?? '', it.comprobante ?? '', it.numeroComprobante ?? '', metodoLabel(it.metodo), ...(conEstado ? [it.estado ?? ''] : []), it.monto]);
       row.getCell(6).alignment = { wrapText: true, vertical: 'top' };
       if (it.comprobante === 'Sin comprobante') row.getCell(7).font = { color: { argb: 'FFC0392B' }, bold: true };
       row.getCell(colMonto).numFmt = '#,##0.00';
@@ -186,7 +189,7 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
       body.push([
         String(i + 1),
         it.fecha,
-        it.descripcion,
+        it.proveedor ?? '',
         it.productos ?? '',
         [it.comprobante, it.numeroComprobante].filter(Boolean).join(' '),
         metodoLabel(it.metodo),
@@ -215,7 +218,7 @@ export async function exportarGastosPDF(categorias: ExportCategoria[], meta: Exp
 
   autoTable(doc, {
     startY: 39,
-    head: [['N°', 'Fecha', 'Descripción', 'Productos comprados', 'Comprobante', 'Método', 'Monto']],
+    head: [['N°', 'Fecha', 'Proveedor', 'Productos comprados', 'Comprobante', 'Método', 'Monto']],
     body: body as never,
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [0, 76, 64], textColor: 255, fontStyle: 'bold' },

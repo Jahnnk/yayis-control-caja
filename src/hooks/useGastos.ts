@@ -138,6 +138,8 @@ export function useGastos() {
       ...(formData.con_monto_semanal ? { con_monto_semanal: true } : {}),
       // Pasó el tope de su categoría: el motivo le llega a Finanzas. (La columna solo se envía si hay motivo.)
       ...(formData.motivo_sobre_tope?.trim() ? { motivo_sobre_tope: formData.motivo_sobre_tope.trim() } : {}),
+      // Proveedor opcional: la columna solo se envía si se eligió uno.
+      ...(formData.proveedor_id ? { proveedor_id: formData.proveedor_id } : {}),
       notas: formData.notas.trim() || null,
       semana,
       mes,
@@ -171,6 +173,7 @@ export function useGastos() {
     if (formData.con_monto_semanal !== undefined) updates.con_monto_semanal = formData.con_monto_semanal;
     if (formData.notas !== undefined) updates.notas = formData.notas.trim() || null;
     if (formData.motivo_sobre_tope?.trim()) updates.motivo_sobre_tope = formData.motivo_sobre_tope.trim();
+    if (formData.proveedor_id !== undefined) updates.proveedor_id = formData.proveedor_id || null;
 
     if (formData.fecha !== undefined) {
       updates.fecha = formData.fecha;

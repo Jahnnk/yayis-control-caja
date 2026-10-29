@@ -95,6 +95,7 @@ export function RegistroGastosPage() {
       estado: g.estado,
       notas: g.notas ?? '',
       con_monto_semanal: g.con_monto_semanal === true,
+      proveedor_id: g.proveedor_id ?? '',
       constancia_path: g.constancia_path,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });

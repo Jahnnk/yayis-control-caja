@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGastos, validarConstancia } from '@/hooks/useGastos';
 import { useCategorias } from '@/hooks/useCategorias';
+import { useProveedores } from '@/hooks/useProveedores';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { useToast } from '@/components/ui/toast';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
@@ -32,6 +33,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
   const { profile } = useAuth();
   const { createGasto, updateGasto } = useGastos();
   const { categorias } = useCategorias();
+  const { proveedores } = useProveedores();
   const { addToast } = useToast();
 
   const isOwner = profile?.rol === 'owner';
@@ -47,6 +49,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
     estado: 'pendiente',
     notas: editData?.notas ?? '',
     con_monto_semanal: editData?.con_monto_semanal ?? false,
+    proveedor_id: editData?.proveedor_id ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [motivoTope, setMotivoTope] = useState('');
@@ -81,6 +84,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         estado: editData.estado,
         notas: editData.notas,
         con_monto_semanal: editData.con_monto_semanal,
+        proveedor_id: editData.proveedor_id ?? '',
       });
     } else {
       setForm({
@@ -92,6 +96,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         estado: 'pagado',
         notas: '',
         con_monto_semanal: false,
+        proveedor_id: '',
       });
     }
     setConstanciaFile(null);
@@ -197,6 +202,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
           estado: 'pagado',
           notas: '',
           con_monto_semanal: false,
+          proveedor_id: '',
         }));
         clearConstancia();
         setMotivoTope('');
@@ -235,6 +241,15 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
           <Input id="descripcion-gasto" placeholder="Ej: gas para el horno" value={form.descripcion}
             onChange={e => updateField('descripcion', e.target.value)} required className="mt-1 h-11" />
         </div>
+      </div>
+
+      {/* Proveedor (opcional): a quién se le compró */}
+      <div>
+        <label className="text-sm font-medium" htmlFor="proveedor-gasto">Proveedor <span className="font-normal text-muted-foreground">(opcional)</span></label>
+        <Select id="proveedor-gasto" value={form.proveedor_id} onChange={e => updateField('proveedor_id', e.target.value)} className="mt-1 h-11">
+          <option value="">Sin proveedor</option>
+          {proveedores.filter(p => p.activo || p.id === form.proveedor_id).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </Select>
       </div>
 
       {/* Categoría: las de siempre a un toque */}
