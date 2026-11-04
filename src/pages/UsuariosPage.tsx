@@ -22,7 +22,7 @@ const ROL_AYUDA: Partial<Record<Rol, string>> = {
 
 export function UsuariosPage() {
   const { profile } = useAuth();
-  const { usuarios, loading, fetchUsuarios, createUsuario, updateUsuario } = useUsuarios();
+  const { usuarios, loading, fetchUsuarios, createUsuario, updateUsuario, cambiarEstadoUsuario } = useUsuarios();
   const { sedes } = useSedes();
   const { addToast } = useToast();
 
@@ -100,9 +100,10 @@ export function UsuariosPage() {
   }
 
   async function handleToggleActivo(id: string, activo: boolean) {
-    const { error } = await updateUsuario(id, { activo: !activo });
+    if (activo && !window.confirm('¿Desactivar a este usuario? Ya no podrá entrar a la app. Su historial se conserva y lo puedes volver a activar.')) return;
+    const { error } = await cambiarEstadoUsuario(id, !activo);
     if (error) addToast(`Error: ${error}`, 'error');
-    else addToast(activo ? 'Usuario desactivado' : 'Usuario activado', 'success');
+    else addToast(activo ? 'Usuario desactivado: ya no puede entrar' : 'Usuario activado', 'success');
   }
 
   if (loading) return <Loading />;

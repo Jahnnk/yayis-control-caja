@@ -71,7 +71,7 @@ export function useUsuarios() {
     return { error: null, userId: newUserId };
   }, []);
 
-  const updateUsuario = useCallback(async (id: string, updates: { nombre?: string; rol?: Rol; sede_id?: string | null; activo?: boolean }) => {
+  const updateUsuario = useCallback(async (id: string, updates: { nombre?: string; rol?: Rol; sede_id?: string | null }) => {
     const { error } = await supabase
       .from('profiles')
       .update(updates)
@@ -82,5 +82,13 @@ export function useUsuarios() {
     return { error: null };
   }, [fetchUsuarios]);
 
-  return { usuarios, loading, fetchUsuarios, createUsuario, updateUsuario };
+  /** Activa o desactiva a alguien: además de la marca, la base le bloquea (o le devuelve) el ingreso. */
+  const cambiarEstadoUsuario = useCallback(async (id: string, activo: boolean) => {
+    const { error } = await supabase.rpc('cambiar_estado_usuario', { p_usuario: id, p_activo: activo });
+    if (error) return { error: error.message };
+    await fetchUsuarios();
+    return { error: null };
+  }, [fetchUsuarios]);
+
+  return { usuarios, loading, fetchUsuarios, createUsuario, updateUsuario, cambiarEstadoUsuario };
 }

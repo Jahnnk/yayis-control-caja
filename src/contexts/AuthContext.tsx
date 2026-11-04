@@ -11,7 +11,9 @@ interface AuthState {
   loading: boolean;
   profileError: string | null;
   authError: string | null;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** true cuando se cerró la sesión porque Gerencia desactivó este usuario. */
+  cuentaDesactivada: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; desactivada?: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [cuentaDesactivada, setCuentaDesactivada] = useState(false);
 
   async function fetchProfile(userId: string) {
     const { data, error } = await supabase
@@ -36,6 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('Error fetching profile:', error);
       setProfileError(`No se pudo cargar el perfil: ${error.message}`);
+      return;
+    }
+
+    if (data && data.activo === false) {
+      // Gerencia desactivó este usuario: se cierra su sesión y el login se lo explica.
+      setCuentaDesactivada(true);
+      await supabase.auth.signOut();
       return;
     }
 
@@ -107,8 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signIn(email: string, password: string) {
+    setCuentaDesactivada(false);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    if (error) return { error: error.message, desactivada: /banned/i.test(error.message) };
     return { error: null };
   }
 
@@ -119,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, sede, loading, profileError, authError, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, sede, loading, profileError, authError, cuentaDesactivada, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
