@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 
 export function LoginPage() {
-  const { user, loading: authLoading, signIn } = useAuth();
+  const { user, loading: authLoading, signIn, cuentaDesactivada } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +20,9 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     const result = await signIn(email, password);
-    if (result.error) {
+    if (result.desactivada) {
+      setError('Tu usuario está desactivado. Habla con Gerencia.');
+    } else if (result.error) {
       setError('Credenciales incorrectas. Verifica tu email y contrasena.');
     }
     setLoading(false);
@@ -68,6 +70,9 @@ export function LoginPage() {
             />
           </div>
 
+          {!error && cuentaDesactivada && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-md p-2">Tu usuario está desactivado. Habla con Gerencia.</p>
+          )}
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded-md p-2">{error}</p>
           )}
