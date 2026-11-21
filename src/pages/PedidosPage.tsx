@@ -18,6 +18,8 @@ import { seguimientoDePedido } from '@/lib/seguimiento-pedido';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PedidoConItems } from '@/types';
 import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
+import { useHistorialPrecios } from '@/hooks/useHistorialPrecios';
+import { DIAS_MEJOR_PROVEEDOR, ofertasPorProveedor, type OfertaProveedor } from '@/lib/precios';
 import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, DIAS_SEMANA } from '@/lib/dates';
@@ -41,6 +43,17 @@ export function PedidosPage() {
   // Presupuesto: precio habitual de lo que hay en las listas abiertas, y lo estimado de cada lista
   // por categoría (cada lista ve también lo que ocupan las OTRAS del mismo mes que no se compran aún).
   const habituales = usePreciosHabituales(abiertos.flatMap(p => p.pedido_items.map(i => i.producto_id)));
+  // Mejor proveedor de cada producto (clave producto|unidad): el último precio más bajo en 90 días, si hay 2 o más para comparar.
+  const historialPrecios = useHistorialPrecios();
+  const mejores = useMemo(() => {
+    const desde = sumarDias(getTodayLima(), -DIAS_MEJOR_PROVEEDOR);
+    const m = new Map<string, OfertaProveedor>();
+    for (const [k, compras] of historialPrecios) {
+      const ofertas = ofertasPorProveedor(compras, desde);
+      if (ofertas.length >= 2 && ofertas[0]!.proveedor_id) m.set(k, ofertas[0]!);
+    }
+    return m;
+  }, [historialPrecios]);
   const estimadoDe = useMemo(() => {
     const categoriaDe = (id: string) => productos.find(p => p.id === id)?.categoria_presupuesto;
     return new Map(abiertos.map(p => [p.id, estimarPorCategoria(estimarLineasPedido(p.pedido_items, categoriaDe, habituales)).porCategoria]));
@@ -169,6 +182,7 @@ export function PedidosPage() {
           onRecordarUnidad={recordarUnidad}
           onRecordarCategoria={recordarCategoria}
           habituales={habituales}
+          mejores={mejores}
           otrosPorCategoria={otrosPorCategoria(p.id, mesDe(p.fecha_compra))}
           obtenerOCrear={obtenerOCrear}
           onAgregar={agregarItem}

@@ -5,6 +5,7 @@ import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
+import { ResumenAhorro } from '@/components/precios/ResumenAhorro';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { estadoBarra, nombreCategoria, ordenarUso, SIN_CATEGORIA, SIN_EMPAREJAR, UMBRAL_OJO } from '@/lib/presupuesto';
@@ -113,6 +114,7 @@ export function PresupuestoPage() {
         </div>
       </div>
       {lista.map(s => <PresupuestoSede key={s.id} sede={s} mes={mes} responsable={esGerencia ? null : responsable} />)}
+      {!esGerencia && <ResumenAhorro sedeId={sedeActiva?.id} />}
     </div>
   );
 }

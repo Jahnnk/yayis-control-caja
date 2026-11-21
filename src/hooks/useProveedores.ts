@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { CondicionPago, Proveedor } from '@/types';
 
@@ -10,15 +10,25 @@ export interface ProveedorInput {
   dias_credito?: number;
   notas?: string | null;
   activo?: boolean;
+  tipo?: 'proveedor' | 'tecnico';
+  oficio?: string | null;
 }
 
+export const esTecnico = (p: Pick<Proveedor, 'tipo'>) => p.tipo === 'tecnico';
+
 function mensajeError(message: string): string {
-  if (message.includes('proveedores_nombre_unico')) return 'Ya existe un proveedor con ese nombre';
+  if (message.includes('proveedores_nombre_unico')) return 'Ya existe un contacto con ese nombre';
+  if (/column .*(tipo|oficio)/i.test(message)) return 'Falta activar los técnicos: hay que correr supabase/tecnicos.sql en Supabase.';
   return message;
 }
 
-export function useProveedores() {
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+/**
+ * Proveedores para compras, listas y precios. Los técnicos (electricista, gasfitero…) quedan fuera,
+ * salvo con `incluirTecnicos` (pantalla Proveedores y el proveedor opcional de un gasto).
+ */
+export function useProveedores({ incluirTecnicos = false }: { incluirTecnicos?: boolean } = {}) {
+  const [todos, setProveedores] = useState<Proveedor[]>([]);
+  const proveedores = useMemo(() => (incluirTecnicos ? todos : todos.filter(p => !esTecnico(p))), [todos, incluirTecnicos]);
   const [loading, setLoading] = useState(false);
 
   const fetchProveedores = useCallback(async () => {

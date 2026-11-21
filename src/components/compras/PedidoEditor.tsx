@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, UNIDAD_SOLES, claveNombre, cruzaSoles, esUnidadValida, fechaLarga, formatCantidad } from '@/lib/compras';
+import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, UNIDAD_SOLES, claveNombre, cruzaSoles, esUnidadValida, fechaCorta, fechaLarga, formatCantidad } from '@/lib/compras';
+import type { OfertaProveedor } from '@/lib/precios';
 import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
 import { AvisoParecido, faltaResponderParecido } from '@/components/compras/AvisoParecido';
 import { AlertTriangle, BadgeCheck, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
@@ -20,7 +21,7 @@ import type { PrecioHabitual } from '@/lib/precios';
 import type { PedidoConItems, Producto, Proveedor } from '@/types';
 import type { NuevoItem } from '@/hooks/usePedidos';
 import type { PrecioPagado } from '@/hooks/usePreciosPagados';
-import { baseDePrecio, referenciaPorUnidadLinea } from '@/lib/precio-linea';
+import { baseDePrecio, precioMostrado, referenciaPorUnidadLinea } from '@/lib/precio-linea';
 import { CantidadCelda, EntregaCelda, PrecioPagadoCelda, type DatosProblema } from '@/components/compras/EntregaProducto';
 
 const OTRAS_CATEGORIAS = CATEGORIAS_PRESUPUESTO.filter(c => !(CATEGORIAS_DEL_ADMIN as readonly string[]).includes(c));
@@ -51,6 +52,8 @@ interface Props {
   /** Lo estimado de las OTRAS listas de la sede del mismo mes que todavía no se compran, por categoría. */
   otrosPorCategoria: Map<string, number>;
   obtenerOCrear: (nombre: string, unidad: string) => Promise<{ producto: Producto | null; error: string | null }>;
+  /** Mejor proveedor reciente de cada producto (clave producto|unidad), para sugerirlo (no es obligatorio). */
+  mejores?: Map<string, OfertaProveedor>;
   onAgregar: (pedidoId: string, item: NuevoItem) => Promise<{ error: string | null }>;
   onActualizar: (itemId: string, cambios: { cantidad?: number; unidad?: string; proveedor_id?: string | null; urgente?: boolean; precio_referencia?: number | null; pagado_directo?: boolean }) => Promise<{ error: string | null }>;
   onEliminar: (itemId: string) => Promise<{ error: string | null }>;
@@ -68,7 +71,7 @@ interface Props {
   seguimiento?: React.ReactNode;
 }
 
-export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onProblema, onVolverAPedir, onEnviar, onCancelar, seguimiento }: Props) {
+export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveedor, onRecordarUnidad, onRecordarCategoria, habituales, mejores, otrosPorCategoria, obtenerOCrear, onAgregar, onActualizar, onEliminar, pagos, onEntregado, onProblema, onVolverAPedir, onEnviar, onCancelar, seguimiento }: Props) {
   const { addToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -501,6 +504,17 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                     )}
                     {precio && <span className="ml-auto text-right text-xs tabular-nums text-muted-foreground">{precio}</span>}
                   </div>
+                  {editable(i) && (() => {
+                    const mejor = mejores?.get(`${i.producto_id}|${i.unidad}`);
+                    if (!mejor?.proveedor_id || mejor.proveedor_id === i.proveedor_id || !proveedoresActivos.some(p => p.id === mejor.proveedor_id)) return null;
+                    const m = precioMostrado(mejor.unitario, i.unidad);
+                    return (
+                      <p className="flex flex-wrap items-center gap-x-2 text-xs text-emerald-800">
+                        💡 Mejor precio reciente: <strong>{mejor.proveedor}</strong> ({formatMonto(m.valor)} por {m.etiqueta}, {fechaCorta(mejor.fecha)})
+                        <button type="button" onClick={() => handleProveedor(i.id, mejor.proveedor_id!)} className="font-semibold text-yayis-green underline">Usar</button>
+                      </p>
+                    );
+                  })()}
                   {editable(i) ? (
                     <details className="group text-xs">
                       <summary className="flex cursor-pointer list-none items-center gap-1 text-muted-foreground">
