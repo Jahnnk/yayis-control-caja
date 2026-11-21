@@ -21,7 +21,7 @@ import { usePreciosHabituales } from '@/hooks/usePreciosHabituales';
 import { estimarLineasPedido, estimarPorCategoria, mesDe } from '@/lib/presupuesto';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { getTodayLima, DIAS_SEMANA } from '@/lib/dates';
-import { ESTADO_ITEM, ESTADO_PEDIDO, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra, sumarDias } from '@/lib/compras';
+import { ESTADO_ITEM, ESTADO_PEDIDO, esUnidadValida, fechaCorta, fechaLarga, formatCantidad, proximasFechasCompra, sumarDias } from '@/lib/compras';
 
 import { AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Loader2 } from 'lucide-react';
 
@@ -105,6 +105,8 @@ export function PedidosPage() {
   async function volverAPedir(itemId: string): Promise<{ error: string | null }> {
     const item = pedidos.flatMap(p => p.pedido_items).find(i => i.id === itemId);
     if (!item) return { error: 'No se encontró el producto. Recarga la pantalla.' };
+    // Una línea vieja «en soles» no se copia: ya no se pide por monto sino por cantidad real.
+    if (!esUnidadValida(item.unidad)) return { error: `Esa línea estaba en «${item.unidad}». Agrégala a tu lista con su cantidad real (atado, kg, unidad…).` };
     let destino = pedidos.filter(p => p.estado === 'borrador' && !p.urgente).sort((a, b) => a.fecha_compra.localeCompare(b.fecha_compra))[0];
     let fechaDestino = destino?.fecha_compra;
     let idDestino = destino?.id;

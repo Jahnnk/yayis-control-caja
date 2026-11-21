@@ -20,7 +20,9 @@ import { repartirTotal } from '@/lib/reparto-total';
 import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, referenciaPorUnidadLinea, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { RANURAS_PAGO_EXTRA } from '@/lib/borradores';
-import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, normalizarUnidad, sumarDias, unidadesSugeridas } from '@/lib/compras';
+import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, claveNombre, esUnidadValida, sumarDias } from '@/lib/compras';
+import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
+import { AvisoParecido, faltaResponderParecido } from '@/components/compras/AvisoParecido';
 import { getTodayLima } from '@/lib/dates';
 import {
   borrarBorrador, claveBorrador, guardarBorrador, guardarFoto, leerBorrador, leerFotos, limpiarBorradoresViejos, limpiarCompraAbierta,
@@ -59,11 +61,15 @@ interface EstadoLinea extends CamposPrecio {
   /** El precio salió solo (de la referencia de la lista o de la última compra) y Fabio todavía no lo tocó. */
   sugerido?: boolean;
   origenSugerido?: 'referencia' | 'ultimo';
+  /** Unidad real elegida por Compras cuando la lista traía una que ya no existe (por ejemplo «sol»). */
+  unidad?: string;
 }
 
 interface LineaExtra extends CamposPrecio {
   nombre: string;
   unidad: string;
+  /** Compras respondió «No, es otro producto» al «¿Quisiste decir…?» para este nombre. */
+  noEsParecido?: string;
 }
 
 /** Precio de una línea: por unidad o total; al escribir uno, el otro se calcula solo. */
@@ -254,7 +260,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   }, [candidatas, lineas, extras, soloTotal, totalTexto]);
 
   // Precio habitual de lo que está en la lista y de lo agregado que ya existe en el catálogo.
-  const productoDeExtra = (nombre: string) => productos.find(p => p.nombre.toLowerCase() === nombre.trim().toLowerCase());
+  const productoDeExtra = (nombre: string) => productos.find(p => claveNombre(p.nombre) === claveNombre(nombre));
   const habituales = usePreciosHabituales(open ? [
     ...candidatas.map(c => c.producto_id),
     ...extras.map(e => productoDeExtra(e.nombre)?.id).filter((id): id is string => !!id),
@@ -294,13 +300,10 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       ...candidatas.filter(c => lineas[c.pedido_item_id]?.incluir && !c.pagado_directo).map(c => ({
         clave: `L:${c.pedido_item_id}`,
         estimado: (() => { const h = habituales.get(claveProducto(c.producto_id, c.unidad)); const q = parseFloat(lineas[c.pedido_item_id]?.cantidad ?? ''); return h && q > 0 ? h.unitario * q : null; })(),
-        // Unidad «sol»: el monto es la cantidad (2 sol = S/ 2), no se reparte.
-        fijo: c.unidad === 'sol' ? parseFloat(lineas[c.pedido_item_id]?.cantidad ?? '') || null : null,
       })),
       ...extras.map((e, i) => ({ e, i })).filter(x => x.e.nombre.trim()).map(({ e, i }) => ({
         clave: `E:${i}`,
         estimado: (() => { const p = productoDeExtra(e.nombre); const h = p ? habituales.get(claveProducto(p.id, e.unidad)) : undefined; const q = parseFloat(e.cantidad); return h && q > 0 ? h.unitario * q : null; })(),
-        fijo: e.unidad === 'sol' ? parseFloat(e.cantidad) || null : null,
       })),
     ];
     return repartirTotal(total, lista);
@@ -365,9 +368,10 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             pedido_item_id: c.pedido_item_id,
             producto_id: c.producto_id,
             cantidad: parseFloat(l.cantidad) || 0,
-            unidad: c.unidad,
+            unidad: l.unidad ?? c.unidad,
             nombre: c.nombre,
-            cantidad_pedida: c.cantidad,
+            // Si Compras cambió la unidad (la lista venía «en soles»), no se puede comparar con lo pedido: no se divide la línea.
+            cantidad_pedida: l.unidad && l.unidad !== c.unidad ? undefined : c.cantidad,
             resto: l.resto ?? 'pendiente',
             precio_total: soloTotal ? (c.pagado_directo ? 0 : repartido.get(`L:${c.pedido_item_id}`) ?? NaN) : l.precio === '' ? NaN : parseFloat(l.precio),
             precio_repartido: soloTotal && !esRecojo,
@@ -387,15 +391,28 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   /** Línea de un producto agregado (no estaba en la lista). */
   function lineaExtra(e: LineaExtra, i: number, productoId: string) {
     return {
-      pedido_item_id: null, producto_id: productoId, cantidad: parseFloat(e.cantidad) || 0, unidad: normalizarUnidad(e.unidad) || 'unidad', nombre: e.nombre,
+      pedido_item_id: null, producto_id: productoId, cantidad: parseFloat(e.cantidad) || 0, unidad: e.unidad, nombre: e.nombre,
       precio_total: soloTotal ? (repartido.get(`E:${i}`) ?? NaN) : parseFloat(e.precio),
       precio_repartido: soloTotal && !esRecojo,
     };
   }
 
+  /** Unidad de la lista en cada línea y «¿Quisiste decir…?» respondido en los productos nuevos. */
+  function revisarUnidadesYNombres(): string | null {
+    const sinUnidad = lineasIncluidas.find(c => !esUnidadValida(lineas[c.pedido_item_id]!.unidad ?? c.unidad));
+    if (sinUnidad) return `Elige la unidad real de ${sinUnidad.nombre} (kg, atado, unidad…)${/^sol(es)?$/i.test(sinUnidad.unidad.trim()) ? ': ya no se anota «en soles»' : ''}.`;
+    const extraSinUnidad = extrasConNombre.find(e => !esUnidadValida(e.unidad));
+    if (extraSinUnidad) return `Elige la unidad de ${extraSinUnidad.nombre}.`;
+    const pregunta = extrasConNombre.map(e => faltaResponderParecido(e.nombre, productos, e.noEsParecido === e.nombre)).find(Boolean);
+    if (pregunta) return pregunta;
+    return null;
+  }
+
   // Qué impide guardar ahora mismo (las mismas reglas que se revisan al guardar), para decirlo antes de pulsar.
   const bloqueo: string | null = (() => {
     if (!hayLineas) return 'Marca al menos un producto.';
+    const unidadOParecido = revisarUnidadesYNombres();
+    if (unidadOParecido) return unidadOParecido;
     if (soloTotal && totalTexto.trim() === '') return 'Escribe el total de la compra.';
     if (requiereCuadre && diferencia === null) return 'Escribe cuánto pagaste en total para comprobar los precios.';
     if (requiereCuadre && !cuadra) return 'Los precios no cuadran con lo que pagaste: corrige el que cambió.';
@@ -411,6 +428,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
 
   async function handleGuardar() {
     if (!profile) return;
+    const unidadOParecido = revisarUnidadesYNombres();
+    if (unidadOParecido) return addToast(unidadOParecido, 'error');
     if (requiereCuadre) {
       if (diferencia === null) return addToast('Escribe cuánto pagaste en total para comprobar que los precios cuadran.', 'error');
       if (!cuadra) return addToast(`Los productos suman ${formatMonto(total)} pero dices que pagaste ${formatMonto(pagado)}: algún precio cambió. Corrige el que cambió.`, 'error');
@@ -421,7 +440,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
     const lineasExtra = [];
     for (const [i, e] of extras.entries()) {
       if (!e.nombre.trim()) continue;
-      const { producto, error } = await obtenerOCrear(e.nombre, normalizarUnidad(e.unidad) || 'unidad');
+      const { producto, error } = await obtenerOCrear(e.nombre, e.unidad);
       if (error || !producto) {
         setGuardando(false);
         return addToast(`Error con "${e.nombre}": ${error ?? 'no se pudo guardar'}`, 'error');
@@ -500,6 +519,8 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             {candidatas.map(c => {
               const l = lineas[c.pedido_item_id];
               if (!l) return null;
+              // La unidad con la que se compra: la de la lista, o la real que eligió Compras si la lista traía «sol».
+              const u = l.unidad ?? c.unidad;
               return (
                 <div key={c.pedido_item_id} className={`space-y-2 px-3 py-3 text-sm ${l.incluir ? '' : 'bg-gray-50 opacity-60'}`}>
                   <label className="flex cursor-pointer items-center gap-2">
@@ -514,21 +535,24 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                         Compraste
                         <span className="mt-0.5 flex items-center gap-1 text-sm text-foreground">
                           <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-9 w-20" value={l.cantidad}
-                            onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value, baseDePrecio(c.unidad).factor))} aria-label={`Cantidad comprada de ${c.nombre}`} />
-                          <span className="text-xs text-muted-foreground">{c.unidad}</span>
+                            onChange={e => cambiarLinea(c.pedido_item_id, alCambiarCantidad(l, e.target.value, baseDePrecio(u).factor))} aria-label={`Cantidad comprada de ${c.nombre}`} />
+                          {esUnidadValida(c.unidad)
+                            ? <span className="text-xs text-muted-foreground">{u}</span>
+                            : <SelectorUnidad value={u} onChange={v => cambiarLinea(c.pedido_item_id, { ...alCambiarUnidad(l, baseDePrecio(v).factor), unidad: v })}
+                                className="h-9 w-40 px-2 text-xs" ariaLabel={`Unidad real de ${c.nombre}`} />}
                         </span>
                       </label>
                       {soloTotal ? (
                         <span className="pb-2 text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`L:${c.pedido_item_id}`) ?? 0)}</strong></span>
                       ) : (
-                        <CamposDePrecio campos={l} unidad={c.unidad} nombre={c.nombre} permitirSinCosto={l.sugerido}
+                        <CamposDePrecio campos={l} unidad={u} nombre={c.nombre} permitirSinCosto={l.sugerido}
                           onChange={n => cambiarLinea(c.pedido_item_id, { ...n, sugerido: false })} />
                       )}
                     </div>
                   )}
-                  {l.incluir && parseFloat(l.cantidad) > 0 && parseFloat(l.cantidad) < c.cantidad - 0.005 && (
+                  {l.incluir && u === c.unidad && parseFloat(l.cantidad) > 0 && parseFloat(l.cantidad) < c.cantidad - 0.005 && (
                     <div className="ml-7 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
-                      <span>Compraste menos de lo pedido: faltan <strong>{formatCantidad(roundTwo(c.cantidad - parseFloat(l.cantidad)))} {c.unidad}</strong>.</span>
+                      <span>Compraste menos de lo pedido: faltan <strong>{formatCantidad(roundTwo(c.cantidad - parseFloat(l.cantidad)))} {u}</strong>.</span>
                       <Select className="h-8 w-52 text-xs" value={l.resto ?? 'pendiente'} onChange={e => cambiarLinea(c.pedido_item_id, { resto: e.target.value as 'pendiente' | 'no_habia' })} aria-label={`Qué pasa con lo que falta de ${c.nombre}`}>
                         <option value="pendiente">Lo compro otro día</option>
                         <option value="no_habia">Ya no se compra (no había)</option>
@@ -539,11 +563,11 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     <p className="pl-7 text-xs text-blue-700">
                       {l.origenSugerido === 'referencia'
                         ? 'Sugerido: el precio de referencia de la sede. Cámbialo si hoy costó distinto.'
-                        : `Sugerido: tu última compra a este proveedor${ultimos.get(claveProducto(c.producto_id, c.unidad))?.fecha ? ` (${fechaCorta(ultimos.get(claveProducto(c.producto_id, c.unidad))!.fecha)})` : ''}. Cámbialo si hoy costó distinto.`}
+                        : `Sugerido: tu última compra a este proveedor${ultimos.get(claveProducto(c.producto_id, u))?.fecha ? ` (${fechaCorta(ultimos.get(claveProducto(c.producto_id, u))!.fecha)})` : ''}. Cámbialo si hoy costó distinto.`}
                     </p>
                   )}
                   {!soloTotal && l.incluir && !l.sugerido && parseFloat(l.precio) !== 0 && (
-                    <div className="pl-7"><AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, c.unidad))} referencia={referenciaPorUnidadLinea(c.precio_referencia, c.unidad)} cantidad={l.cantidad} precio={l.precio} unidad={c.unidad} /></div>
+                    <div className="pl-7"><AvisoPrecio habitual={habituales.get(claveProducto(c.producto_id, u))} referencia={referenciaPorUnidadLinea(c.precio_referencia, u)} cantidad={l.cantidad} precio={l.precio} unidad={u} /></div>
                   )}
                 </div>
               );
@@ -555,11 +579,14 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                     onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value.toLocaleUpperCase('es-PE') } : x))} aria-label="Producto adicional" />
                   <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="p-2 text-red-500"><Trash2 size={16} /></button>
                 </div>
+                <AvisoParecido nombre={e.nombre} productos={productos} descartado={e.noEsParecido === e.nombre}
+                  onUsar={n => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: n, ...(() => { const p = productos.find(q => q.nombre === n); return p && esUnidadValida(p.unidad) ? { ...alCambiarUnidad(x, baseDePrecio(p.unidad).factor), unidad: p.unidad } : {}; })() } : x))}
+                  onDescartar={() => setExtras(prev => prev.map((x, j) => j === i ? { ...x, noEsParecido: x.nombre } : x))} />
                 <div className="flex flex-wrap items-end gap-2">
                   <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-9 w-20" value={e.cantidad}
                     onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value, baseDePrecio(x.unidad).factor) } : x))} aria-label="Cantidad" />
-                  <Input list="unidades-compra" className="h-9 w-24 text-xs" value={e.unidad} autoComplete="off" placeholder="unidad"
-                    onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(ev.target.value).factor), unidad: ev.target.value } : x))} aria-label="Unidad" />
+                  <SelectorUnidad className="h-9 w-24 px-2 text-xs" value={e.unidad} ariaLabel="Unidad"
+                    onChange={v => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(v).factor), unidad: v } : x))} />
                   {soloTotal ? (
                     e.nombre.trim() && <span className="pb-2 text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`E:${i}`) ?? 0)}</strong></span>
                   ) : (
@@ -574,7 +601,6 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
             ))}
           </div>
           <datalist id="catalogo-compra">{productos.map(p => <option key={p.id} value={p.nombre} />)}</datalist>
-          <datalist id="unidades-compra">{unidadesSugeridas(productos).map(x => <option key={x} value={x} />)}</datalist>
           <Button type="button" variant="ghost" size="sm" onClick={() => setExtras(prev => [...prev, { nombre: '', cantidad: '', unidad: 'kg', precio: '', unit: '', ultimo: null }])}>
             <Plus size={14} className="mr-1" /> Agregar algo que no estaba en la lista
           </Button>

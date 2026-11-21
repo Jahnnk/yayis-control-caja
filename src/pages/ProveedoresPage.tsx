@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { Loading } from '@/components/ui/loading';
-import { UNIDADES, fechaCorta, sumarDias } from '@/lib/compras';
+import { fechaCorta, sumarDias } from '@/lib/compras';
+import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
 import { precioMostrado } from '@/lib/precio-linea';
@@ -269,10 +270,7 @@ export function ProveedoresPage() {
                     <tr key={prod.id} className="border-b align-top last:border-b-0">
                       <td className="py-2 pr-2 font-medium">{prod.nombre}</td>
                       <td className="py-2 pr-2">
-                        <Select className="h-8 w-28 text-xs" value={prod.unidad} onChange={e => handleProducto(prod.id, { unidad: e.target.value })} aria-label={`Unidad de ${prod.nombre}`}>
-                          {!UNIDADES.includes(prod.unidad as typeof UNIDADES[number]) && <option value={prod.unidad}>{prod.unidad}</option>}
-                          {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                        </Select>
+                        <SelectorUnidad className="h-8 w-28 px-2 text-xs" value={prod.unidad} onChange={v => handleProducto(prod.id, { unidad: v })} ariaLabel={`Unidad de ${prod.nombre}`} />
                       </td>
                       <td className="py-2">
                         <Select
