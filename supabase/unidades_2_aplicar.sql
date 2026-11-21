@@ -1,7 +1,8 @@
 -- =============================================================
 -- Unidades y productos únicos — PASO 2: APLICAR (pedido de Jahnn, 21-nov-2026)
 -- Ejecutar SOLO después de revisar el PASO 1 (unidades_1_ver_cambios.sql) y dar el OK.
--- Pegar TODO en el SQL Editor de Supabase y pulsar «Run». Si algo falla, no se cambia nada.
+-- Pegar TODO en el SQL Editor de Supabase y pulsar «Run». Es seguro volver a correrlo si algo falla.
+-- (Arreglo 21-nov-2026: ya no usa tablas temporales; el editor las borraba antes de tiempo.)
 --
 -- Qué hace:
 --   1. Une las unidades a UNA sola lista (la misma de Cash Control):
@@ -54,15 +55,14 @@ RETURNS TEXT AS $$
 $$ LANGUAGE sql IMMUTABLE;
 
 -- 2. La unidad de cada producto decidida por Jahnn (21-nov-2026): hierbas y flores en soles, lo demás por cantidad.
-CREATE TEMP TABLE propuesta_sol(clave TEXT PRIMARY KEY, unidad TEXT) ON COMMIT DROP;
-INSERT INTO propuesta_sol VALUES
+-- (Sin tablas temporales: el SQL Editor de Supabase las borra antes de tiempo.)
+UPDATE productos p SET unidad = ps.unidad
+FROM (VALUES
   ('albahaca', 'sol'), ('apio', 'sol'), ('perejil', 'sol'), ('culantro', 'sol'), ('poro', 'sol'),
   ('flores astromelias rosadas', 'sol'), ('flores astromelias fucsias', 'sol'),
   ('espinaca', 'kg'), ('aguaymanto con cascara', 'kg'), ('ajo molido', 'kg'), ('maracuya', 'unidad'),
-  ('kion', 'kg'), ('zanahoria', 'kg'), ('limon', 'kg'), ('aji limo', 'kg');
-
-UPDATE productos p SET unidad = ps.unidad
-FROM propuesta_sol ps
+  ('kion', 'kg'), ('zanahoria', 'kg'), ('limon', 'kg'), ('aji limo', 'kg')
+) AS ps(clave, unidad)
 WHERE ps.clave = clave_producto(p.nombre) AND p.unidad <> ps.unidad;
 
 -- 3. Unidades escritas de otra forma → la de la lista («soles» → sol, «und» → unidad…).
@@ -80,43 +80,47 @@ WHERE p.id = pi.producto_id AND pi.estado = 'pendiente'
 
 -- 4. Fusión de productos repetidos por tildes. Se queda el nombre CON tilde (el bien escrito);
 --    si empatan, el más usado. Todo lo que apuntaba al repetido pasa al que se queda.
-CREATE TEMP TABLE fusion ON COMMIT DROP AS
-WITH uso AS (
-  SELECT producto_id, count(*) AS n FROM (SELECT producto_id FROM pedido_items UNION ALL SELECT producto_id FROM compra_items) x GROUP BY producto_id
-), g AS (
-  SELECT p.id, clave_producto(p.nombre) AS clave,
-         row_number() OVER (PARTITION BY clave_producto(p.nombre)
-           ORDER BY (p.nombre <> translate(p.nombre, 'ÁÉÍÓÚÜÑ', 'AEIOUUN')) DESC, COALESCE(uso.n, 0) DESC, p.created_at) AS orden
-  FROM productos p LEFT JOIN uso ON uso.producto_id = p.id
-)
-SELECT d.id AS repetido, k.id AS queda
-FROM g d JOIN g k ON k.clave = d.clave AND k.orden = 1
-WHERE d.orden > 1;
-
--- Pasa TODAS las referencias (listas, compras y cualquier otra tabla que apunte a productos).
+--    Todo en un solo bloque, producto por producto (sin tablas temporales).
 DO $$
-DECLARE r RECORD;
+DECLARE
+  f RECORD;
+  r RECORD;
 BEGIN
-  FOR r IN
-    SELECT cl.relname AS tabla, a.attname AS columna
-    FROM pg_constraint c
-    JOIN pg_class cl ON cl.oid = c.conrelid
-    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
-    WHERE c.contype = 'f' AND c.confrelid = 'public.productos'::regclass AND array_length(c.conkey, 1) = 1
+  FOR f IN
+    WITH uso AS (
+      SELECT producto_id, count(*) AS n FROM (SELECT producto_id FROM pedido_items UNION ALL SELECT producto_id FROM compra_items) x GROUP BY producto_id
+    ), g AS (
+      SELECT p.id, clave_producto(p.nombre) AS clave,
+             row_number() OVER (PARTITION BY clave_producto(p.nombre)
+               ORDER BY (p.nombre <> translate(p.nombre, 'ÁÉÍÓÚÜÑ', 'AEIOUUN')) DESC, COALESCE(uso.n, 0) DESC, p.created_at) AS orden
+      FROM productos p LEFT JOIN uso ON uso.producto_id = p.id
+    )
+    SELECT d.id AS repetido, k.id AS queda
+    FROM g d JOIN g k ON k.clave = d.clave AND k.orden = 1
+    WHERE d.orden > 1
   LOOP
-    EXECUTE format('UPDATE public.%I t SET %I = f.queda FROM fusion f WHERE t.%I = f.repetido', r.tabla, r.columna, r.columna);
+    -- Pasa TODAS las referencias (listas, compras y cualquier otra tabla que apunte a productos).
+    FOR r IN
+      SELECT cl.relname AS tabla, a.attname AS columna
+      FROM pg_constraint c
+      JOIN pg_class cl ON cl.oid = c.conrelid
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+      WHERE c.contype = 'f' AND c.confrelid = 'public.productos'::regclass AND array_length(c.conkey, 1) = 1
+    LOOP
+      EXECUTE format('UPDATE public.%I SET %I = $1 WHERE %I = $2', r.tabla, r.columna, r.columna) USING f.queda, f.repetido;
+    END LOOP;
+
+    -- El que se queda hereda proveedor y categoría si no los tenía.
+    UPDATE productos k SET
+      proveedor_id = COALESCE(k.proveedor_id, d.proveedor_id),
+      categoria_presupuesto = COALESCE(k.categoria_presupuesto, d.categoria_presupuesto)
+    FROM productos d
+    WHERE k.id = f.queda AND d.id = f.repetido;
+
+    -- Solo se borra el PRODUCTO repetido (ya no lo usa ninguna lista ni compra).
+    DELETE FROM productos WHERE id = f.repetido;
   END LOOP;
 END $$;
-
--- El que se queda hereda proveedor y categoría si no los tenía.
-UPDATE productos k SET
-  proveedor_id = COALESCE(k.proveedor_id, d.proveedor_id),
-  categoria_presupuesto = COALESCE(k.categoria_presupuesto, d.categoria_presupuesto)
-FROM fusion f JOIN productos d ON d.id = f.repetido
-WHERE k.id = f.queda;
-
--- Solo se borra el PRODUCTO repetido (ya no lo usa ninguna lista ni compra).
-DELETE FROM productos WHERE id IN (SELECT repetido FROM fusion);
 
 -- 5. Desde ahora: nunca dos productos con el mismo nombre sin tildes.
 CREATE UNIQUE INDEX IF NOT EXISTS productos_clave_unica ON productos (clave_producto(nombre));
