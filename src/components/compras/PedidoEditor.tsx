@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, fechaLarga, formatCantidad, normalizarUnidad, unidadesSugeridas } from '@/lib/compras';
+import { ESTADO_PEDIDO, claveNombre, esUnidadValida, fechaLarga, formatCantidad } from '@/lib/compras';
+import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
+import { AvisoParecido, faltaResponderParecido } from '@/components/compras/AvisoParecido';
 import { AlertTriangle, BadgeCheck, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { usePresupuestoCaja } from '@/hooks/usePresupuestoCaja';
 import { BarraPresupuesto } from '@/components/presupuesto/BarraPresupuesto';
@@ -89,8 +91,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   const items = pedido.pedido_items.slice().sort((a, b) => (a.productos?.nombre ?? '').localeCompare(b.productos?.nombre ?? ''));
   const datalistId = `productos-${pedido.id}`;
   const proveedoresActivos = proveedores.filter(p => p.activo);
-  const sugeridas = unidadesSugeridas(productos);
-  const datalistUnidades = `unidades-${pedido.id}`;
+  // «No, es otro producto»: se recuerda para ESE nombre (si se cambia el nombre, se vuelve a revisar).
+  const [noEsParecido, setNoEsParecido] = useState('');
   const urgentes = items.filter(i => i.estado === 'pendiente' && i.urgente).length;
   const sinProveedor = items.filter(i => i.estado === 'pendiente' && !i.proveedor_id).length;
   // Productos de la lista sin proveedor que el sistema ya sabe a quién se le compran.
@@ -123,9 +125,9 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   function handleNombre(texto: string) {
     const valor = texto.toLocaleUpperCase('es-PE'); // los productos se escriben en MAYÚSCULAS
     setNombre(valor);
-    const conocido = productos.find(p => p.nombre.toLowerCase() === valor.trim().toLowerCase());
+    const conocido = productos.find(p => claveNombre(p.nombre) === claveNombre(valor));
     if (conocido) {
-      setUnidad(conocido.unidad);
+      setUnidad(esUnidadValida(conocido.unidad) ? conocido.unidad : ''); // dato viejo («sol»): que elija la real
       setProveedorId(conocido.proveedor_id ?? '');
       setCategoriaNueva(conocido.categoria_presupuesto ?? '');
     }
@@ -136,9 +138,11 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     if (!nombre.trim()) return addToast('Escribe el producto', 'error');
     if (!cant || cant <= 0) return addToast('La cantidad debe ser mayor a 0', 'error');
 
+    const unidadFinal = unidad;
+    if (!esUnidadValida(unidadFinal)) return addToast('Elige la unidad de la lista (kg, unidad, atado…)', 'error');
+    const pregunta = faltaResponderParecido(nombre, productos, noEsParecido === nombre);
+    if (pregunta) return addToast(pregunta, 'warning');
     setGuardando(true);
-    const unidadFinal = normalizarUnidad(unidad);
-    if (!unidadFinal) return addToast('Escribe la unidad (kg, unidad, sol…)', 'error');
     const { producto, error } = await obtenerOCrear(nombre, unidadFinal);
     if (error || !producto) {
       setGuardando(false);
@@ -219,8 +223,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
 
   async function handleUnidad(itemId: string, valor: string) {
     const item = items.find(i => i.id === itemId);
-    const nueva = normalizarUnidad(valor);
-    if (!item || !nueva || nueva === item.unidad) return;
+    const nueva = valor;
+    if (!item || !esUnidadValida(nueva) || nueva === item.unidad) return;
     const { error } = await onActualizar(itemId, { unidad: nueva });
     if (error) return addToast(`Error: ${error}`, 'error');
     const catalogo = productos.find(p => p.id === item.producto_id)?.unidad;
@@ -291,7 +295,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
   }
 
   // Lo que el sistema ya recuerda del producto que se está escribiendo (se usa si no se abre «Más opciones»).
-  const conocido = productos.find(p => p.nombre.toLowerCase() === nombre.trim().toLowerCase());
+  const conocido = productos.find(p => claveNombre(p.nombre) === claveNombre(nombre));
   const nombreProveedor = (id: string | null | undefined) => proveedores.find(p => p.id === id)?.nombre;
   const resumenNuevo = [
     proveedorId ? `a ${nombreProveedor(proveedorId) ?? 'proveedor'}` : null,
@@ -356,11 +360,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             </div>
             <div>
               <label className="text-xs font-medium" htmlFor={`uni-${pedido.id}`}>Unidad</label>
-              <Input id={`uni-${pedido.id}`} list={datalistUnidades} value={unidad} onChange={e => setUnidad(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 h-10 bg-white" autoComplete="off" placeholder="kg, sol…" />
-              <datalist id={datalistUnidades}>
-                {sugeridas.map(u => <option key={u} value={u} />)}
-              </datalist>
+              <SelectorUnidad id={`uni-${pedido.id}`} value={unidad} onChange={setUnidad}
+                onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 h-10 bg-white px-2" />
             </div>
             <div className="flex items-end">
               <Button onClick={handleAgregar} disabled={guardando} className="h-10 w-full px-3 sm:w-auto">
@@ -380,7 +381,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             {!masOpciones && (resumenNuevo
               ? <span className="text-muted-foreground">{resumenNuevo}</span>
               : nombre.trim() && !conocido && <span className="text-muted-foreground">Producto nuevo: elige su proveedor y categoría aquí o después en la lista.</span>)}
-            {unidad.trim().toLowerCase() === 'sol' && <span className="w-full text-muted-foreground">💡 {AYUDA_UNIDAD_SOL}</span>}
+            <AvisoParecido nombre={nombre} productos={productos} descartado={noEsParecido === nombre}
+              onUsar={handleNombre} onDescartar={() => setNoEsParecido(nombre)} />
           </div>
 
           {masOpciones && (
@@ -474,10 +476,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                       <span className="inline-flex items-center gap-1">
                         <Input type="number" inputMode="decimal" min="0" step="0.01" defaultValue={Number(i.cantidad)}
                           onBlur={e => handleCantidad(i.id, i.cantidad, e.target.value)} className="h-9 w-20" aria-label={`Cantidad de ${nombreItem}`} />
-                        <Input key={`${i.id}-${i.unidad}`} list={datalistUnidades} defaultValue={i.unidad}
-                          onBlur={e => { handleUnidad(i.id, e.target.value); if (!e.target.value.trim()) e.target.value = i.unidad; }}
-                          onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                          className="h-9 w-20 text-xs" autoComplete="off" aria-label={`Unidad de ${nombreItem}`} />
+                        <SelectorUnidad value={i.unidad} onChange={v => handleUnidad(i.id, v)}
+                          className="h-9 w-24 px-2 text-xs" ariaLabel={`Unidad de ${nombreItem}`} />
                       </span>
                     ) : (
                       <CantidadCelda item={i} pago={pagos.get(i.id)} />

@@ -38,25 +38,53 @@ export const NOMBRE_FOTO: Record<RanuraEvidencia, string> = {
   pago: 'captura del Yape o transferencia',
 };
 
-export const UNIDADES = [
-  'kg', 'g', 'L', 'ml', 'unidad', 'docena', 'paquete', 'bolsa', 'saco', 'caja', 'lata', 'botella', 'atado', 'rollo', 'manojo', 'sol',
-] as const;
-
 /**
- * «sol» sirve para lo que el mercado vende por monto: 2 sol de albahaca = lo que se compra con S/ 2.
- * Las unidades son libres: se sugieren las de la lista y las que ya usa algún producto del catálogo.
+ * Lista ÚNICA de unidades (pedido de Jahnn, 21-nov-2026). Es la misma con la que Cash Control compara precios
+ * (yayis-cash-control/src/lib/proveedores.ts → unidadCanonica). Nunca texto libre: así el catálogo no se fragmenta
+ * («und», «unidades», «pqte», «litros»…). Ya no existe «sol»: se anota la cantidad real (atado, kg, unidad).
+ * La base de datos también la hace cumplir (supabase/unidades_y_productos_unicos.sql).
  */
-export const AYUDA_UNIDAD_SOL = 'Si se vende por monto (por ejemplo albahaca a S/ 1 o S/ 2), usa la unidad «sol»: 2 sol = S/ 2.';
+export const UNIDADES = [
+  'unidad', 'kg', 'g', 'litro', 'ml', 'paquete', 'galón', 'caja', 'frasco', 'bolsa', 'atado', 'juego', 'balde', 'ciento', 'arroba', 'docena', 'rollo',
+] as const;
+export type Unidad = typeof UNIDADES[number];
 
-/** Mismo formato siempre (sin espacios de más y en minúsculas, salvo «L») para no repetir unidades. */
-export function normalizarUnidad(u: string): string {
-  const t = u.trim().replace(/\s+/g, ' ');
-  return t.toLowerCase() === 'l' ? 'L' : t.toLowerCase();
+export function esUnidadValida(u: string | null | undefined): u is Unidad {
+  return !!u && (UNIDADES as readonly string[]).includes(u);
 }
 
-/** Unidades para sugerir: las de la lista y las que ya usa algún producto. */
-export function unidadesSugeridas(productos: { unidad: string }[]): string[] {
-  return Array.from(new Set([...UNIDADES, ...productos.map(p => p.unidad).filter(Boolean)]));
+/** Formas viejas o mal escritas → la unidad de la lista. «sol/soles» → null (no dice cuánto se compró). */
+const VARIANTES: [RegExp, Unidad | null][] = [
+  [/^(sol|soles|s\/\.?)$/, null],
+  [/^(u|und|unds|unid|unids|unidad|unidades)$/, 'unidad'],
+  [/^(kg|kgs|kilo|kilos|kilogramo|kilogramos)$/, 'kg'],
+  [/^(g|gr|grs|gramo|gramos)$/, 'g'],
+  [/^(l|lt|lts|litro|litros)$/, 'litro'],
+  [/^(ml|mililitro|mililitros)$/, 'ml'],
+  [/^(paquete|paquetes|pqte|pqtes|paq|paqs)$/, 'paquete'],
+  [/^(galon|galones)$/, 'galón'],
+  [/^(caja|cajas)$/, 'caja'],
+  [/^(frasco|frascos)$/, 'frasco'],
+  [/^(bolsa|bolsas)$/, 'bolsa'],
+  [/^(atado|atados|manojo|manojos)$/, 'atado'],
+  [/^(juego|juegos)$/, 'juego'],
+  [/^(balde|baldes)$/, 'balde'],
+  [/^(ciento|cientos)$/, 'ciento'],
+  [/^(arroba|arrobas)$/, 'arroba'],
+  [/^(docena|docenas)$/, 'docena'],
+  [/^(rollo|rollos)$/, 'rollo'],
+];
+
+/** La unidad de la lista que corresponde a lo escrito (datos viejos), o null si no hay una clara (p. ej. «sol»). */
+export function unidadDeLista(u: string | null | undefined): Unidad | null {
+  const t = claveNombre(u ?? '');
+  for (const [re, canon] of VARIANTES) if (re.test(t)) return canon;
+  return null;
+}
+
+/** Clave para reconocer el mismo nombre escrito distinto: sin tildes, sin mayúsculas, sin espacios dobles. */
+export function claveNombre(nombre: string): string {
+  return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 export const ESTADO_PEDIDO: Record<EstadoPedido, { label: string; clase: string }> = {

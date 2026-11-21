@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Producto } from '@/types';
+import { claveNombre, esUnidadValida } from '@/lib/compras';
 
 /** Nombre de producto como se guarda: sin espacios de más y en MAYÚSCULAS. */
 export function nombreDeProducto(nombre: string): string {
@@ -22,14 +23,15 @@ export function useProductos() {
   useEffect(() => { fetchProductos(); }, [fetchProductos]);
 
   /**
-   * Devuelve el producto del catalogo con ese nombre (sin importar mayusculas),
-   * y si no existe lo crea. Asi el catalogo se arma solo a medida que se pide.
+   * Devuelve el producto del catalogo con ese nombre (sin importar mayusculas NI tildes: «LIMON» = «LIMÓN»),
+   * y si no existe lo crea. Asi el catalogo se arma solo a medida que se pide, sin duplicados.
    */
   const obtenerOCrear = useCallback(async (nombre: string, unidad: string) => {
     // Los nombres del catálogo van siempre en MAYÚSCULAS (la base también lo hace cumplir).
     const limpio = nombreDeProducto(nombre);
-    const existente = productos.find(p => p.nombre.toLowerCase() === limpio.toLowerCase());
+    const existente = productos.find(p => claveNombre(p.nombre) === claveNombre(limpio));
     if (existente) return { producto: existente, error: null };
+    if (!esUnidadValida(unidad)) return { producto: null, error: 'Elige la unidad de la lista (kg, unidad, atado…).' };
 
     const { data: auth } = await supabase.auth.getUser();
     const { data, error } = await supabase
@@ -40,11 +42,12 @@ export function useProductos() {
 
     if (error) {
       // Otro usuario lo pudo crear hace un momento: se busca y se reutiliza.
-      if (error.message.includes('productos_nombre_unico')) {
-        const { data: ya } = await supabase.from('productos').select('*').ilike('nombre', limpio).maybeSingle();
+      if (error.message.includes('productos_nombre_unico') || error.message.includes('productos_clave_unica')) {
+        const { data: todos } = await supabase.from('productos').select('*');
+        const ya = ((todos ?? []) as Producto[]).find(p => claveNombre(p.nombre) === claveNombre(limpio));
         if (ya) {
           await fetchProductos();
-          return { producto: ya as Producto, error: null };
+          return { producto: ya, error: null };
         }
       }
       return { producto: null, error: error.message };
@@ -54,9 +57,10 @@ export function useProductos() {
   }, [productos, fetchProductos]);
 
   const actualizarProducto = useCallback(async (id: string, cambios: { unidad?: string; proveedor_id?: string | null; nombre?: string; activo?: boolean }) => {
+    if (cambios.unidad !== undefined && !esUnidadValida(cambios.unidad)) return { error: 'Elige la unidad de la lista.' };
     const { error } = await supabase.from('productos')
       .update(cambios.nombre !== undefined ? { ...cambios, nombre: nombreDeProducto(cambios.nombre) } : cambios).eq('id', id);
-    if (error) return { error: error.message.includes('productos_nombre_unico') ? 'Ya existe un producto con ese nombre' : error.message };
+    if (error) return { error: error.message.includes('productos_nombre_unico') || error.message.includes('productos_clave_unica') ? 'Ya existe un producto con ese nombre (aunque esté escrito con o sin tildes)' : error.message };
     await fetchProductos();
     return { error: null };
   }, [fetchProductos]);
@@ -74,6 +78,7 @@ export function useProductos() {
 
   /** Recuerda la unidad habitual de un producto (administradores, Compras y Gerencia). */
   const recordarUnidad = useCallback(async (productoId: string, unidad: string) => {
+    if (!esUnidadValida(unidad)) return { error: 'Elige la unidad de la lista.' };
     const { error } = await supabase.rpc('recordar_unidad_producto', { p_producto: productoId, p_unidad: unidad });
     if (error) return { error: error.message };
     setProductos(prev => prev.map(p => (p.id === productoId ? { ...p, unidad } : p)));

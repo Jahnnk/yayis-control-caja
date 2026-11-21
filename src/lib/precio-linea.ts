@@ -23,7 +23,7 @@ export interface CamposPrecio {
 export function baseDePrecio(unidad: string): { factor: number; etiqueta: string } {
   const u = unidad.trim().toLowerCase();
   if (u === 'g') return { factor: 1000, etiqueta: 'kg' };
-  if (u === 'ml') return { factor: 1000, etiqueta: 'L' };
+  if (u === 'ml') return { factor: 1000, etiqueta: 'litro' };
   return { factor: 1, etiqueta: unidad };
 }
 
