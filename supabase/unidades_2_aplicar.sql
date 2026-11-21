@@ -6,13 +6,16 @@
 -- Qué hace:
 --   1. Une las unidades a UNA sola lista (la misma de Cash Control):
 --      unidad, kg, g, litro, ml, paquete, galón, caja, frasco, bolsa, atado, juego, balde,
---      ciento, arroba, docena, rollo.  («und» → unidad, «L» → litro, «pqte» → paquete…)
---   2. Los productos que se pedían «en soles» pasan a su unidad real (atado, kg, unidad).
+--      ciento, arroba, docena, rollo  + «sol» (lo que se compra por monto en el mercado).
+--      («und» → unidad, «L» → litro, «pqte» → paquete, «soles» → sol…)
+--   2. Cada producto queda o «en soles» (hierbas y flores) o «por cantidad» (lo demás), nunca las dos.
 --   3. Fusiona productos repetidos por tildes (LIMON + LIMÓN → LIMÓN). Sus listas y compras
 --      pasan al que se queda. NO se borra ninguna compra ni ninguna lista: solo el producto repetido.
---   4. Desde ahora la base RECHAZA unidades fuera de la lista y nombres repetidos sin tildes.
+--   4. Desde ahora la base RECHAZA unidades fuera de la lista, nombres repetidos sin tildes y
+--      líneas en soles de un producto que va por cantidad (o al revés). Solo Gerencia cambia
+--      un producto de «en soles» a «por cantidad».
 --
--- Las compras viejas anotadas «en soles» se quedan como están (no se sabe cuánto se compró).
+-- Las compras viejas «en soles» de productos que ahora van por cantidad se quedan como están.
 -- =============================================================
 
 BEGIN;
@@ -21,6 +24,7 @@ BEGIN;
 CREATE OR REPLACE FUNCTION public.unidad_de_lista(p TEXT)
 RETURNS TEXT AS $$
   SELECT CASE
+    WHEN t ~ '^(sol|soles|s/\.?)$' THEN 'sol'
     WHEN t ~ '^(u|und|unds|unid|unids|unidad|unidades)$' THEN 'unidad'
     WHEN t ~ '^(kg|kgs|kilo|kilos|kilogramo|kilogramos)$' THEN 'kg'
     WHEN t ~ '^(g|gr|grs|gramo|gramos)$' THEN 'g'
@@ -38,7 +42,7 @@ RETURNS TEXT AS $$
     WHEN t ~ '^(arroba|arrobas)$' THEN 'arroba'
     WHEN t ~ '^(docena|docenas)$' THEN 'docena'
     WHEN t ~ '^(rollo|rollos)$' THEN 'rollo'
-    ELSE NULL  -- «sol», «soles» o algo desconocido: no hay unidad clara
+    ELSE NULL  -- algo desconocido: no hay unidad clara
   END
   FROM (SELECT lower(translate(trim(COALESCE(p, '')), 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) AS t) x;
 $$ LANGUAGE sql IMMUTABLE;
@@ -49,27 +53,30 @@ RETURNS TEXT AS $$
   SELECT lower(translate(regexp_replace(trim(p), '\s+', ' ', 'g'), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNaeiouun'));
 $$ LANGUAGE sql IMMUTABLE;
 
--- 2. Productos «en soles» → su unidad real (la lista aprobada por Jahnn).
+-- 2. La unidad de cada producto decidida por Jahnn (21-nov-2026): hierbas y flores en soles, lo demás por cantidad.
 CREATE TEMP TABLE propuesta_sol(clave TEXT PRIMARY KEY, unidad TEXT) ON COMMIT DROP;
 INSERT INTO propuesta_sol VALUES
-  ('albahaca', 'atado'), ('apio', 'atado'), ('perejil', 'atado'), ('culantro', 'atado'), ('poro', 'atado'),
+  ('albahaca', 'sol'), ('apio', 'sol'), ('perejil', 'sol'), ('culantro', 'sol'), ('poro', 'sol'),
+  ('flores astromelias rosadas', 'sol'), ('flores astromelias fucsias', 'sol'),
   ('espinaca', 'kg'), ('aguaymanto con cascara', 'kg'), ('ajo molido', 'kg'), ('maracuya', 'unidad'),
-  ('flores astromelias rosadas', 'atado'), ('flores astromelias fucsias', 'atado'),
   ('kion', 'kg'), ('zanahoria', 'kg'), ('limon', 'kg'), ('aji limo', 'kg');
 
--- Líneas de listas todavía por comprar en soles → la unidad real (la cantidad se queda igual).
-UPDATE pedido_items pi SET unidad = COALESCE(ps.unidad, 'unidad')
-FROM productos p LEFT JOIN propuesta_sol ps ON ps.clave = clave_producto(p.nombre)
-WHERE p.id = pi.producto_id AND pi.estado = 'pendiente' AND lower(trim(pi.unidad)) IN ('sol', 'soles', 's/', 's/.');
+UPDATE productos p SET unidad = ps.unidad
+FROM propuesta_sol ps
+WHERE ps.clave = clave_producto(p.nombre) AND p.unidad <> ps.unidad;
 
-UPDATE productos p SET unidad = COALESCE(ps.unidad, 'unidad')
-FROM (SELECT id, clave_producto(nombre) AS clave FROM productos) c LEFT JOIN propuesta_sol ps ON ps.clave = c.clave
-WHERE c.id = p.id AND lower(trim(p.unidad)) IN ('sol', 'soles', 's/', 's/.');
-
--- 3. Unidades escritas de otra forma → la de la lista. Las compras viejas «en soles» no se tocan.
+-- 3. Unidades escritas de otra forma → la de la lista («soles» → sol, «und» → unidad…).
 UPDATE productos    SET unidad = unidad_de_lista(unidad) WHERE unidad_de_lista(unidad) IS NOT NULL AND unidad <> unidad_de_lista(unidad);
 UPDATE pedido_items SET unidad = unidad_de_lista(unidad) WHERE unidad_de_lista(unidad) IS NOT NULL AND unidad <> unidad_de_lista(unidad);
 UPDATE compra_items SET unidad = unidad_de_lista(unidad) WHERE unidad_de_lista(unidad) IS NOT NULL AND unidad <> unidad_de_lista(unidad);
+
+-- Líneas todavía por comprar que no calzan con su producto (en soles vs. por cantidad) → la unidad del producto.
+-- La cantidad se queda igual (revisarla en la lista).
+UPDATE pedido_items pi SET unidad = p.unidad
+FROM productos p
+WHERE p.id = pi.producto_id AND pi.estado = 'pendiente'
+  AND unidad_de_lista(p.unidad) IS NOT NULL
+  AND (pi.unidad = 'sol') <> (p.unidad = 'sol');
 
 -- 4. Fusión de productos repetidos por tildes. Se queda el nombre CON tilde (el bien escrito);
 --    si empatan, el más usado. Todo lo que apuntaba al repetido pasa al que se queda.
@@ -115,17 +122,36 @@ DELETE FROM productos WHERE id IN (SELECT repetido FROM fusion);
 CREATE UNIQUE INDEX IF NOT EXISTS productos_clave_unica ON productos (clave_producto(nombre));
 
 -- 6. Desde ahora: la base solo acepta unidades de la lista (y corrige «und» → unidad sola).
+--    Un producto en soles solo se pide/compra en soles; uno por cantidad, nunca en soles.
+--    Pasar un producto de soles a cantidad (o al revés) solo lo hace Gerencia (o este SQL Editor).
 CREATE OR REPLACE FUNCTION public.exigir_unidad_de_lista()
 RETURNS TRIGGER AS $$
-DECLARE v TEXT := unidad_de_lista(NEW.unidad);
+DECLARE
+  v TEXT := unidad_de_lista(NEW.unidad);
+  v_prod productos%ROWTYPE;
 BEGIN
   IF v IS NULL THEN
-    RAISE EXCEPTION 'La unidad «%» no está en la lista. Elige: unidad, kg, g, litro, ml, paquete, galón, caja, frasco, bolsa, atado, juego, balde, ciento, arroba, docena o rollo.', NEW.unidad;
+    RAISE EXCEPTION 'La unidad «%» no está en la lista. Elige: unidad, kg, g, litro, ml, paquete, galón, caja, frasco, bolsa, atado, juego, balde, ciento, arroba, docena, rollo o soles.', NEW.unidad;
   END IF;
   NEW.unidad := v;
+  IF TG_TABLE_NAME = 'productos' THEN
+    IF TG_OP = 'UPDATE' AND (OLD.unidad = 'sol') <> (v = 'sol') AND auth.uid() IS NOT NULL
+       AND COALESCE(get_user_rol()::TEXT, '') <> 'owner' THEN
+      RAISE EXCEPTION 'Solo Gerencia puede pasar % entre «soles» y cantidad.', OLD.nombre;
+    END IF;
+  ELSE
+    SELECT * INTO v_prod FROM productos WHERE id = NEW.producto_id;
+    IF FOUND AND unidad_de_lista(v_prod.unidad) IS NOT NULL AND (v_prod.unidad = 'sol') <> (v = 'sol') THEN
+      IF v_prod.unidad = 'sol' THEN
+        RAISE EXCEPTION '% se compra en soles.', v_prod.nombre;
+      ELSE
+        RAISE EXCEPTION '% se compra por cantidad (%), no en soles.', v_prod.nombre, v_prod.unidad;
+      END IF;
+    END IF;
+  END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_unidad_de_lista ON productos;
 CREATE TRIGGER trg_unidad_de_lista BEFORE INSERT OR UPDATE OF unidad ON productos
@@ -149,15 +175,17 @@ BEGIN
   IF v_unidad IS NULL THEN
     RAISE EXCEPTION 'Elige una unidad de la lista (kg, unidad, atado…).';
   END IF;
+  -- Entre «soles» y cantidad solo cambia Gerencia (el disparador de productos lo revisa con su rol).
   UPDATE productos SET unidad = v_unidad WHERE id = p_producto;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 COMMIT;
 
--- Verificación: las 3 primeras cifras deben ser 0. La 4.ª son las compras viejas «en soles» (se quedan).
+-- Verificación: las 3 primeras cifras deben ser 0. La 4.ª son las compras viejas «en soles» de productos
+-- que ahora van por cantidad (se quedan como estaban).
 SELECT
   (SELECT count(*) FROM productos WHERE unidad_de_lista(unidad) IS DISTINCT FROM unidad) AS productos_fuera_de_lista,
   (SELECT count(*) FROM pedido_items WHERE estado = 'pendiente' AND unidad_de_lista(unidad) IS DISTINCT FROM unidad) AS lineas_pendientes_fuera_de_lista,
   (SELECT count(*) FROM (SELECT clave_producto(nombre) FROM productos GROUP BY 1 HAVING count(*) > 1) x) AS nombres_repetidos,
-  (SELECT count(*) FROM compra_items WHERE unidad_de_lista(unidad) IS NULL) AS compras_viejas_en_soles;
+  (SELECT count(*) FROM compra_items ci JOIN productos p ON p.id = ci.producto_id WHERE ci.unidad = 'sol' AND p.unidad <> 'sol') AS compras_viejas_en_soles;

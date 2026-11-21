@@ -20,7 +20,7 @@ import { repartirTotal } from '@/lib/reparto-total';
 import { alCambiarCantidad, alCambiarUnidad, alEscribirTotal, alEscribirUnitario, baseDePrecio, referenciaPorUnidadLinea, type CamposPrecio } from '@/lib/precio-linea';
 import { formatMonto, roundTwo } from '@/lib/utils';
 import { RANURAS_PAGO_EXTRA } from '@/lib/borradores';
-import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, claveNombre, esUnidadValida, sumarDias } from '@/lib/compras';
+import { NOMBRE_FOTO, TOPE_SIN_COMPROBANTE_EFECTIVO, fechaCorta, formatCantidad, fotosExigidas, UNIDAD_SOLES, claveNombre, cruzaSoles, esUnidadValida, sumarDias } from '@/lib/compras';
 import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
 import { AvisoParecido, faltaResponderParecido } from '@/components/compras/AvisoParecido';
 import { getTodayLima } from '@/lib/dates';
@@ -300,10 +300,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
       ...candidatas.filter(c => lineas[c.pedido_item_id]?.incluir && !c.pagado_directo).map(c => ({
         clave: `L:${c.pedido_item_id}`,
         estimado: (() => { const h = habituales.get(claveProducto(c.producto_id, c.unidad)); const q = parseFloat(lineas[c.pedido_item_id]?.cantidad ?? ''); return h && q > 0 ? h.unitario * q : null; })(),
+        // En soles el monto es la cantidad (2 soles = S/ 2): no se reparte.
+        fijo: (lineas[c.pedido_item_id]?.unidad ?? c.unidad) === UNIDAD_SOLES ? parseFloat(lineas[c.pedido_item_id]?.cantidad ?? '') || null : null,
       })),
       ...extras.map((e, i) => ({ e, i })).filter(x => x.e.nombre.trim()).map(({ e, i }) => ({
         clave: `E:${i}`,
         estimado: (() => { const p = productoDeExtra(e.nombre); const h = p ? habituales.get(claveProducto(p.id, e.unidad)) : undefined; const q = parseFloat(e.cantidad); return h && q > 0 ? h.unitario * q : null; })(),
+        fijo: e.unidad === UNIDAD_SOLES ? parseFloat(e.cantidad) || null : null,
       })),
     ];
     return repartirTotal(total, lista);
@@ -400,9 +403,12 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
   /** Unidad de la lista en cada línea y «¿Quisiste decir…?» respondido en los productos nuevos. */
   function revisarUnidadesYNombres(): string | null {
     const sinUnidad = lineasIncluidas.find(c => !esUnidadValida(lineas[c.pedido_item_id]!.unidad ?? c.unidad));
-    if (sinUnidad) return `Elige la unidad real de ${sinUnidad.nombre} (kg, atado, unidad…)${/^sol(es)?$/i.test(sinUnidad.unidad.trim()) ? ': ya no se anota «en soles»' : ''}.`;
+    if (sinUnidad) return `Elige la unidad real de ${sinUnidad.nombre} (kg, atado, unidad…).`;
     const extraSinUnidad = extrasConNombre.find(e => !esUnidadValida(e.unidad));
     if (extraSinUnidad) return `Elige la unidad de ${extraSinUnidad.nombre}.`;
+    const extraCruzado = extrasConNombre.find(e => { const p = productoDeExtra(e.nombre); return p && esUnidadValida(p.unidad) && cruzaSoles(p.unidad, e.unidad); });
+    if (extraCruzado) return productoDeExtra(extraCruzado.nombre)!.unidad === UNIDAD_SOLES
+      ? `${extraCruzado.nombre} se compra en soles.` : `${extraCruzado.nombre} se compra por cantidad, no en soles.`;
     const pregunta = extrasConNombre.map(e => faltaResponderParecido(e.nombre, productos, e.noEsParecido === e.nombre)).find(Boolean);
     if (pregunta) return pregunta;
     return null;
@@ -539,7 +545,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                           {esUnidadValida(c.unidad)
                             ? <span className="text-xs text-muted-foreground">{u}</span>
                             : <SelectorUnidad value={u} onChange={v => cambiarLinea(c.pedido_item_id, { ...alCambiarUnidad(l, baseDePrecio(v).factor), unidad: v })}
-                                className="h-9 w-40 px-2 text-xs" ariaLabel={`Unidad real de ${c.nombre}`} />}
+                                className="h-9 w-40 px-2 text-xs" ariaLabel={`Unidad real de ${c.nombre}`} delProducto={productos.find(p => p.id === c.producto_id)?.unidad} />}
                         </span>
                       </label>
                       {soloTotal ? (
@@ -576,7 +582,13 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
               <div key={i} className="space-y-2 bg-yayis-cream/40 px-3 py-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Input list="catalogo-compra" placeholder="Producto que no estaba en la lista" className="h-9 min-w-0 flex-1" value={e.nombre}
-                    onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, nombre: ev.target.value.toLocaleUpperCase('es-PE') } : x))} aria-label="Producto adicional" />
+                    onChange={ev => setExtras(prev => prev.map((x, j) => {
+                      if (j !== i) return x;
+                      // Si ya está en el catálogo, sale con su unidad (en soles o por cantidad).
+                      const nombre = ev.target.value.toLocaleUpperCase('es-PE');
+                      const p = productoDeExtra(nombre);
+                      return p && esUnidadValida(p.unidad) && p.unidad !== x.unidad ? { ...x, nombre, ...alCambiarUnidad(x, baseDePrecio(p.unidad).factor), unidad: p.unidad } : { ...x, nombre };
+                    }))} aria-label="Producto adicional" />
                   <button type="button" onClick={() => setExtras(prev => prev.filter((_, j) => j !== i))} aria-label="Quitar producto" className="p-2 text-red-500"><Trash2 size={16} /></button>
                 </div>
                 <AvisoParecido nombre={e.nombre} productos={productos} descartado={e.noEsParecido === e.nombre}
@@ -585,7 +597,7 @@ export function RegistrarCompraModal({ open, onClose, onGuardado, sedeId, sedeNo
                 <div className="flex flex-wrap items-end gap-2">
                   <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Cant." className="h-9 w-20" value={e.cantidad}
                     onChange={ev => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarCantidad(x, ev.target.value, baseDePrecio(x.unidad).factor) } : x))} aria-label="Cantidad" />
-                  <SelectorUnidad className="h-9 w-24 px-2 text-xs" value={e.unidad} ariaLabel="Unidad"
+                  <SelectorUnidad className="h-9 w-24 px-2 text-xs" value={e.unidad} ariaLabel="Unidad" delProducto={productoDeExtra(e.nombre)?.unidad}
                     onChange={v => setExtras(prev => prev.map((x, j) => j === i ? { ...x, ...alCambiarUnidad(x, baseDePrecio(v).factor), unidad: v } : x))} />
                   {soloTotal ? (
                     e.nombre.trim() && <span className="pb-2 text-sm text-muted-foreground">Repartido: <strong className="text-yayis-dark">≈ {formatMonto(repartido.get(`E:${i}`) ?? 0)}</strong></span>

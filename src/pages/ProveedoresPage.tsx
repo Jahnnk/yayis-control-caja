@@ -270,7 +270,8 @@ export function ProveedoresPage() {
                     <tr key={prod.id} className="border-b align-top last:border-b-0">
                       <td className="py-2 pr-2 font-medium">{prod.nombre}</td>
                       <td className="py-2 pr-2">
-                        <SelectorUnidad className="h-8 w-28 px-2 text-xs" value={prod.unidad} onChange={v => handleProducto(prod.id, { unidad: v })} ariaLabel={`Unidad de ${prod.nombre}`} />
+                        <SelectorUnidad className="h-8 w-28 px-2 text-xs" value={prod.unidad} onChange={v => handleProducto(prod.id, { unidad: v })} ariaLabel={`Unidad de ${prod.nombre}`}
+                          delProducto={prod.unidad} libre={esGerencia} />
                       </td>
                       <td className="py-2">
                         <Select

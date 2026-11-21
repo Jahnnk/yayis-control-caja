@@ -4,7 +4,7 @@
 -- la lista de cambios que hará el PASO 2 (unidades_2_aplicar.sql).
 --
 -- Sale UNA tabla con estas columnas:
---   que      → tipo de cambio (unidad, producto en soles, fusión, línea pendiente en soles, sin regla)
+--   que      → tipo de cambio (unidad, producto que deja los soles, fusión, línea pendiente, sin regla)
 --   donde    → tabla o producto
 --   antes    → cómo está hoy
 --   despues  → cómo quedará
@@ -12,7 +12,7 @@
 -- =============================================================
 
 WITH variantes(patron, unidad) AS (VALUES
-  ('^(sol|soles|s/\.?)$', NULL),
+  ('^(sol|soles|s/\.?)$', 'sol'),
   ('^(u|und|unds|unid|unids|unidad|unidades)$', 'unidad'),
   ('^(kg|kgs|kilo|kilos|kilogramo|kilogramos)$', 'kg'),
   ('^(g|gr|grs|gramo|gramos)$', 'g'),
@@ -31,11 +31,12 @@ WITH variantes(patron, unidad) AS (VALUES
   ('^(docena|docenas)$', 'docena'),
   ('^(rollo|rollos)$', 'rollo')
 ),
--- Unidad propuesta para los productos que hoy se piden «en soles» (Jahnn la confirma).
+-- Unidad de cada producto que hoy está «en soles» o mezclado (decisión de Jahnn, 21-nov-2026).
+-- Hierbas y flores se compran en soles en el mercado de Cajamarca; lo demás, por cantidad.
 propuesta_sol(clave, unidad) AS (VALUES
-  ('albahaca', 'atado'), ('apio', 'atado'), ('perejil', 'atado'), ('culantro', 'atado'), ('poro', 'atado'),
+  ('albahaca', 'sol'), ('apio', 'sol'), ('perejil', 'sol'), ('culantro', 'sol'), ('poro', 'sol'),
+  ('flores astromelias rosadas', 'sol'), ('flores astromelias fucsias', 'sol'),
   ('espinaca', 'kg'), ('aguaymanto con cascara', 'kg'), ('ajo molido', 'kg'), ('maracuya', 'unidad'),
-  ('flores astromelias rosadas', 'atado'), ('flores astromelias fucsias', 'atado'),
   ('kion', 'kg'), ('zanahoria', 'kg'), ('limon', 'kg'), ('aji limo', 'kg')
 ),
 clave_prod AS (
@@ -70,12 +71,11 @@ grupos AS (
 SELECT '1. Unidad' AS que, tabla AS donde, unidad AS antes, nueva AS despues, n AS lineas
 FROM mapeo WHERE conocida AND nueva IS NOT NULL AND nueva <> unidad
 
--- 2. Productos que hoy se piden «en soles» → su unidad real.
+-- 2. Productos con unidad decidida por Jahnn (en soles o por cantidad), si hoy tienen otra.
 UNION ALL
-SELECT '2. Producto en soles', c.nombre, c.unidad,
-       COALESCE(ps.unidad, '(sin propuesta: unidad)'), 1
-FROM clave_prod c LEFT JOIN propuesta_sol ps ON ps.clave = c.clave
-WHERE lower(trim(c.unidad)) IN ('sol', 'soles', 's/', 's/.')
+SELECT '2. Unidad del producto', c.nombre, c.unidad, ps.unidad, 1
+FROM clave_prod c JOIN propuesta_sol ps ON ps.clave = c.clave
+WHERE c.unidad <> ps.unidad
 
 -- 3. Productos duplicados (mismo nombre sin tildes): se quedan con el nombre con tilde; sus listas y compras pasan a él.
 UNION ALL
@@ -84,23 +84,24 @@ SELECT '3. Fusión', d.nombre, d.nombre || ' (' || d.usos || ' líneas)',
 FROM grupos d JOIN grupos k ON k.clave = d.clave AND k.orden = 1
 WHERE d.tamano > 1 AND d.orden > 1
 
--- 4. Líneas de listas TODAVÍA POR COMPRAR anotadas en soles: pasan a la unidad real del producto (la cantidad no cambia: revisarla).
+-- 4. Líneas de listas TODAVÍA POR COMPRAR que no calzan con su producto (en soles y el producto va por cantidad,
+--    o al revés): pasan a la unidad del producto. La cantidad no cambia: revisarla.
 UNION ALL
-SELECT '4. Línea pendiente en soles', p.nombre || ' · lista del ' || to_char(pe.fecha_compra, 'DD/MM'),
-       pi.cantidad || ' ' || pi.unidad, pi.cantidad || ' ' || COALESCE(ps.unidad, 'unidad'), 1
+SELECT '4. Línea pendiente cambia', p.nombre || ' · lista del ' || to_char(pe.fecha_compra, 'DD/MM'),
+       pi.cantidad || ' ' || pi.unidad, pi.cantidad || ' ' || COALESCE(ps.unidad, p.unidad), 1
 FROM pedido_items pi
 JOIN pedidos pe ON pe.id = pi.pedido_id
 JOIN clave_prod p ON p.id = pi.producto_id
 LEFT JOIN propuesta_sol ps ON ps.clave = p.clave
-WHERE pi.estado = 'pendiente' AND lower(trim(pi.unidad)) IN ('sol', 'soles', 's/', 's/.')
+WHERE pi.estado = 'pendiente'
+  AND (lower(trim(pi.unidad)) IN ('sol', 'soles', 's/', 's/.')) <> (lower(trim(COALESCE(ps.unidad, p.unidad))) IN ('sol', 'soles', 's/', 's/.'))
 
--- 5. Compras ya hechas «en soles»: NO se tocan (no se sabe cuánto se compró). Solo para que lo sepas.
+-- 5. Compras ya hechas «en soles» de productos que ahora van por cantidad (limón, zanahoria…): NO se tocan.
 UNION ALL
-SELECT '5. Compra vieja en soles (se queda igual)', 'compra_items', unidad, unidad, count(*)
-FROM compra_items WHERE lower(trim(unidad)) IN ('sol', 'soles', 's/', 's/.') GROUP BY unidad
-UNION ALL
-SELECT '5. Compra vieja en soles (se queda igual)', 'pedido_items (ya comprados / no había)', unidad, unidad, count(*)
-FROM pedido_items WHERE estado <> 'pendiente' AND lower(trim(unidad)) IN ('sol', 'soles', 's/', 's/.') GROUP BY unidad
+SELECT '5. Compra vieja en soles (se queda igual)', p.nombre, ci.unidad, ci.unidad, count(*)
+FROM compra_items ci JOIN clave_prod p ON p.id = ci.producto_id LEFT JOIN propuesta_sol ps ON ps.clave = p.clave
+WHERE lower(trim(ci.unidad)) IN ('sol', 'soles', 's/', 's/.') AND COALESCE(ps.unidad, p.unidad) NOT IN ('sol', 'soles')
+GROUP BY p.nombre, ci.unidad
 
 -- 6. Unidades que no están en ninguna regla: se quedan igual y hay que decidirlas.
 UNION ALL

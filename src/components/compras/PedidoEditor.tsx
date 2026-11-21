@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select-native';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ESTADO_PEDIDO, claveNombre, esUnidadValida, fechaLarga, formatCantidad } from '@/lib/compras';
+import { AYUDA_UNIDAD_SOL, ESTADO_PEDIDO, UNIDAD_SOLES, claveNombre, cruzaSoles, esUnidadValida, fechaLarga, formatCantidad } from '@/lib/compras';
 import { SelectorUnidad } from '@/components/compras/SelectorUnidad';
 import { AvisoParecido, faltaResponderParecido } from '@/components/compras/AvisoParecido';
 import { AlertTriangle, BadgeCheck, ChevronDown, Gauge, Loader2, Plus, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
@@ -140,6 +140,10 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
 
     const unidadFinal = unidad;
     if (!esUnidadValida(unidadFinal)) return addToast('Elige la unidad de la lista (kg, unidad, atado…)', 'error');
+    const yaExiste = productos.find(p => claveNombre(p.nombre) === claveNombre(nombre));
+    if (yaExiste && esUnidadValida(yaExiste.unidad) && cruzaSoles(yaExiste.unidad, unidadFinal)) {
+      return addToast(yaExiste.unidad === UNIDAD_SOLES ? `${yaExiste.nombre} se compra en soles.` : `${yaExiste.nombre} se compra por cantidad (${yaExiste.unidad}), no en soles.`, 'error');
+    }
     const pregunta = faltaResponderParecido(nombre, productos, noEsParecido === nombre);
     if (pregunta) return addToast(pregunta, 'warning');
     setGuardando(true);
@@ -225,6 +229,8 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
     const item = items.find(i => i.id === itemId);
     const nueva = valor;
     if (!item || !esUnidadValida(nueva) || nueva === item.unidad) return;
+    const delCatalogo = productos.find(p => p.id === item.producto_id)?.unidad;
+    if (esUnidadValida(delCatalogo) && cruzaSoles(delCatalogo, nueva)) return addToast('Ese producto no se puede pasar entre «soles» y cantidad. Pídeselo a Gerencia.', 'error');
     const { error } = await onActualizar(itemId, { unidad: nueva });
     if (error) return addToast(`Error: ${error}`, 'error');
     const catalogo = productos.find(p => p.id === item.producto_id)?.unidad;
@@ -360,7 +366,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             </div>
             <div>
               <label className="text-xs font-medium" htmlFor={`uni-${pedido.id}`}>Unidad</label>
-              <SelectorUnidad id={`uni-${pedido.id}`} value={unidad} onChange={setUnidad}
+              <SelectorUnidad id={`uni-${pedido.id}`} value={unidad} onChange={setUnidad} delProducto={conocido?.unidad}
                 onKeyDown={e => e.key === 'Enter' && handleAgregar()} className="mt-1 h-10 bg-white px-2" />
             </div>
             <div className="flex items-end">
@@ -381,6 +387,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
             {!masOpciones && (resumenNuevo
               ? <span className="text-muted-foreground">{resumenNuevo}</span>
               : nombre.trim() && !conocido && <span className="text-muted-foreground">Producto nuevo: elige su proveedor y categoría aquí o después en la lista.</span>)}
+            {unidad === UNIDAD_SOLES && <span className="w-full text-muted-foreground">💡 {AYUDA_UNIDAD_SOL}</span>}
             <AvisoParecido nombre={nombre} productos={productos} descartado={noEsParecido === nombre}
               onUsar={handleNombre} onDescartar={() => setNoEsParecido(nombre)} />
           </div>
@@ -476,7 +483,7 @@ export function PedidoEditor({ pedido, productos, proveedores, onRecordarProveed
                       <span className="inline-flex items-center gap-1">
                         <Input type="number" inputMode="decimal" min="0" step="0.01" defaultValue={Number(i.cantidad)}
                           onBlur={e => handleCantidad(i.id, i.cantidad, e.target.value)} className="h-9 w-20" aria-label={`Cantidad de ${nombreItem}`} />
-                        <SelectorUnidad value={i.unidad} onChange={v => handleUnidad(i.id, v)}
+                        <SelectorUnidad value={i.unidad} onChange={v => handleUnidad(i.id, v)} delProducto={productos.find(p => p.id === i.producto_id)?.unidad}
                           className="h-9 w-24 px-2 text-xs" ariaLabel={`Unidad de ${nombreItem}`} />
                       </span>
                     ) : (

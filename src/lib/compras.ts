@@ -41,21 +41,35 @@ export const NOMBRE_FOTO: Record<RanuraEvidencia, string> = {
 /**
  * Lista ÚNICA de unidades (pedido de Jahnn, 21-nov-2026). Es la misma con la que Cash Control compara precios
  * (yayis-cash-control/src/lib/proveedores.ts → unidadCanonica). Nunca texto libre: así el catálogo no se fragmenta
- * («und», «unidades», «pqte», «litros»…). Ya no existe «sol»: se anota la cantidad real (atado, kg, unidad).
- * La base de datos también la hace cumplir (supabase/unidades_y_productos_unicos.sql).
+ * («und», «unidades», «pqte», «litros»…). La base de datos también la hace cumplir (supabase/unidades_2_aplicar.sql).
  */
 export const UNIDADES = [
   'unidad', 'kg', 'g', 'litro', 'ml', 'paquete', 'galón', 'caja', 'frasco', 'bolsa', 'atado', 'juego', 'balde', 'ciento', 'arroba', 'docena', 'rollo',
 ] as const;
-export type Unidad = typeof UNIDADES[number];
+
+/**
+ * «sol» = lo que el mercado vende POR MONTO (en Cajamarca: «1 sol de albahaca», «3 soles de culantro»).
+ * Un producto es o «por soles» o «por cantidad», nunca las dos cosas: la albahaca siempre en soles, el limón nunca.
+ * Pasar un producto de un tipo al otro solo lo hace Gerencia (Proveedores → Catálogo).
+ * Cash Control no compara precios de lo que va en soles (1 sol siempre cuesta S/ 1).
+ */
+export const UNIDAD_SOLES = 'sol';
+export type Unidad = typeof UNIDADES[number] | typeof UNIDAD_SOLES;
+
+export const AYUDA_UNIDAD_SOL = 'En soles: 2 = lo que se compra con S/ 2 (como en el mercado: «2 soles de culantro»).';
 
 export function esUnidadValida(u: string | null | undefined): u is Unidad {
-  return !!u && (UNIDADES as readonly string[]).includes(u);
+  return !!u && (u === UNIDAD_SOLES || (UNIDADES as readonly string[]).includes(u));
 }
 
-/** Formas viejas o mal escritas → la unidad de la lista. «sol/soles» → null (no dice cuánto se compró). */
-const VARIANTES: [RegExp, Unidad | null][] = [
-  [/^(sol|soles|s\/\.?)$/, null],
+/** ¿Cambiar de una unidad a otra pasa el producto de «por soles» a «por cantidad» (o al revés)? */
+export function cruzaSoles(antes: string | null | undefined, despues: string): boolean {
+  return (antes === UNIDAD_SOLES) !== (despues === UNIDAD_SOLES);
+}
+
+/** Formas viejas o mal escritas → la unidad de la lista. */
+const VARIANTES: [RegExp, Unidad][] = [
+  [/^(sol|soles|s\/\.?)$/, UNIDAD_SOLES],
   [/^(u|und|unds|unid|unids|unidad|unidades)$/, 'unidad'],
   [/^(kg|kgs|kilo|kilos|kilogramo|kilogramos)$/, 'kg'],
   [/^(g|gr|grs|gramo|gramos)$/, 'g'],
@@ -75,7 +89,7 @@ const VARIANTES: [RegExp, Unidad | null][] = [
   [/^(rollo|rollos)$/, 'rollo'],
 ];
 
-/** La unidad de la lista que corresponde a lo escrito (datos viejos), o null si no hay una clara (p. ej. «sol»). */
+/** La unidad de la lista que corresponde a lo escrito (datos viejos), o null si no hay una clara. */
 export function unidadDeLista(u: string | null | undefined): Unidad | null {
   const t = claveNombre(u ?? '');
   for (const [re, canon] of VARIANTES) if (re.test(t)) return canon;
