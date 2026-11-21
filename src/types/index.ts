@@ -203,6 +203,10 @@ export interface Proveedor {
   notas: string | null;
   activo: boolean;
   created_at: string;
+  /** «tecnico» = contacto de emergencia (electricista, gasfitero…): no entra a compras, listas ni precios.
+   *  Puede faltar si todavía no se corrió supabase/tecnicos.sql (= proveedor). */
+  tipo?: 'proveedor' | 'tecnico';
+  oficio?: string | null;
 }
 
 export interface Producto {

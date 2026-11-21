@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProveedores } from '@/hooks/useProveedores';
+import { esTecnico, useProveedores } from '@/hooks/useProveedores';
+import { Segmentado } from '@/components/ui/segmentado';
+import { enlaceWhatsApp, OFICIOS } from '@/lib/tecnicos';
 import { useProductos } from '@/hooks/useProductos';
 import { useHistorialPrecios } from '@/hooks/useHistorialPrecios';
 import { useToast } from '@/components/ui/toast';
@@ -15,7 +17,7 @@ import { getTodayLima } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
 import { precioMostrado } from '@/lib/precio-linea';
 import { claveProducto, formatPorcentaje, ofertasPorProveedor, precioHabitual, DIAS_MEJOR_PROVEEDOR } from '@/lib/precios';
-import { Check, ChevronDown, Loader2, Package, Pencil, Plus, Search, Store, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, MessageCircle, Package, Pencil, Phone, Plus, Search, Store, ToggleLeft, ToggleRight, Wrench, X } from 'lucide-react';
 import type { CondicionPago, Proveedor } from '@/types';
 
 interface FormProveedor {
@@ -24,9 +26,11 @@ interface FormProveedor {
   direccion: string;
   condicion_pago: CondicionPago;
   dias_credito: string;
+  tipo: 'proveedor' | 'tecnico';
+  oficio: string;
 }
 
-const VACIO: FormProveedor = { nombre: '', telefono: '', direccion: '', condicion_pago: 'contado', dias_credito: '0' };
+const VACIO: FormProveedor = { nombre: '', telefono: '', direccion: '', condicion_pago: 'contado', dias_credito: '0', tipo: 'proveedor', oficio: '' };
 
 function aForm(p: Proveedor): FormProveedor {
   return {
@@ -35,6 +39,8 @@ function aForm(p: Proveedor): FormProveedor {
     direccion: p.direccion ?? '',
     condicion_pago: p.condicion_pago,
     dias_credito: String(p.dias_credito),
+    tipo: esTecnico(p) ? 'tecnico' : 'proveedor',
+    oficio: p.oficio ?? '',
   };
 }
 
@@ -43,7 +49,10 @@ export function ProveedoresPage() {
   const esGerencia = profile?.rol === 'owner';
   // El catálogo de productos (unidad y proveedor habitual) afecta a las 3 sedes: lo manejan Gerencia y Compras.
   const veCatalogo = profile?.rol === 'owner' || profile?.rol === 'compras';
-  const { proveedores, loading, crearProveedor, actualizarProveedor } = useProveedores();
+  const { proveedores: contactos, loading, crearProveedor, actualizarProveedor } = useProveedores({ incluirTecnicos: true });
+  // Los técnicos van aparte (arriba) y no entran al catálogo de productos ni a los precios.
+  const proveedores = contactos.filter(p => !esTecnico(p));
+  const tecnicos = contactos.filter(esTecnico);
   const { productos, actualizarProducto } = useProductos();
   const historial = useHistorialPrecios();
   const desdeMejor = sumarDias(getTodayLima(), -DIAS_MEJOR_PROVEEDOR);
@@ -59,23 +68,29 @@ export function ProveedoresPage() {
   const [filtroProducto, setFiltroProducto] = useState('');
 
   function aDatos(f: FormProveedor) {
-    const credito = esGerencia && f.condicion_pago === 'credito';
+    const tecnico = f.tipo === 'tecnico';
+    const credito = !tecnico && esGerencia && f.condicion_pago === 'credito';
     return {
       nombre: f.nombre.trim(),
       telefono: f.telefono.trim() || null,
       direccion: f.direccion.trim() || null,
       condicion_pago: (credito ? 'credito' : 'contado') as CondicionPago,
       dias_credito: credito ? Math.max(0, parseInt(f.dias_credito) || 0) : 0,
+      // Solo se envía el tipo para técnicos: así registrar proveedores funciona aunque falte el SQL de técnicos.
+      ...(tecnico ? { tipo: 'tecnico' as const, oficio: f.oficio.trim() || null } : {}),
     };
   }
 
   async function handleCrear() {
-    if (!form.nombre.trim()) return addToast('Escribe el nombre del proveedor', 'error');
+    const tecnico = form.tipo === 'tecnico';
+    if (!form.nombre.trim()) return addToast(tecnico ? 'Escribe el nombre del técnico' : 'Escribe el nombre del proveedor', 'error');
+    if (tecnico && !form.oficio.trim()) return addToast('Escribe su oficio (electricista, gasfitero…)', 'error');
+    if (tecnico && !form.telefono.trim()) return addToast('Escribe su teléfono: es para llamarlo en una emergencia', 'error');
     setGuardando(true);
     const { error } = await crearProveedor(aDatos(form));
     setGuardando(false);
     if (error) return addToast(`Error: ${error}`, 'error');
-    addToast('Proveedor registrado', 'success');
+    addToast(tecnico ? 'Técnico registrado' : 'Proveedor registrado', 'success');
     setForm(VACIO);
     setNuevoAbierto(false);
   }
@@ -84,7 +99,7 @@ export function ProveedoresPage() {
     if (!edicion.nombre.trim()) return addToast('El nombre no puede quedar vacío', 'error');
     const { error } = await actualizarProveedor(id, aDatos(edicion));
     if (error) return addToast(`Error: ${error}`, 'error');
-    addToast('Proveedor actualizado', 'success');
+    addToast(edicion.tipo === 'tecnico' ? 'Técnico actualizado' : 'Proveedor actualizado', 'success');
     setEditandoId(null);
   }
 
@@ -104,33 +119,44 @@ export function ProveedoresPage() {
   const nombreProveedor = (id: string | null) => proveedores.find(p => p.id === id)?.nombre;
 
   const texto = busqueda.trim().toLowerCase();
-  const visibles = texto
-    ? proveedores.filter(p => [p.nombre, p.telefono, p.direccion].some(x => (x ?? '').toLowerCase().includes(texto)))
-    : proveedores;
+  const coincide = (p: Proveedor) => !texto || [p.nombre, p.telefono, p.direccion, p.oficio].some(x => (x ?? '').toLowerCase().includes(texto));
+  const visibles = proveedores.filter(coincide);
+  const tecnicosVisibles = tecnicos.filter(coincide).sort((a, b) => Number(b.activo) - Number(a.activo) || (a.oficio ?? '').localeCompare(b.oficio ?? ''));
 
-  if (loading && proveedores.length === 0) return <Loading text="Cargando proveedores..." />;
+  if (loading && contactos.length === 0) return <Loading text="Cargando proveedores..." />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-yayis-dark">Proveedores</h1>
         <Button onClick={() => setNuevoAbierto(v => !v)} variant={nuevoAbierto ? 'outline' : 'default'}>
-          {nuevoAbierto ? <X size={15} className="mr-1" /> : <Plus size={15} className="mr-1" />} {nuevoAbierto ? 'Cerrar' : 'Nuevo proveedor'}
+          {nuevoAbierto ? <X size={15} className="mr-1" /> : <Plus size={15} className="mr-1" />} {nuevoAbierto ? 'Cerrar' : 'Nuevo contacto'}
         </Button>
       </div>
 
       {nuevoAbierto && (
       <Card id="nuevo-proveedor">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><Plus size={18} /> Nuevo proveedor</CardTitle>
-          {!esGerencia && <p className="text-xs text-muted-foreground">Se registra al contado. Si trabaja a crédito, avisa a Gerencia para que lo configure.</p>}
+          <CardTitle className="flex items-center gap-2 text-base"><Plus size={18} /> Nuevo contacto</CardTitle>
+          {!esGerencia && form.tipo === 'proveedor' && <p className="text-xs text-muted-foreground">Se registra al contado. Si trabaja a crédito, avisa a Gerencia para que lo configure.</p>}
+          {form.tipo === 'tecnico' && <p className="text-xs text-muted-foreground">Para llamarlo en una emergencia. Los técnicos no entran a compras, listas ni precios.</p>}
         </CardHeader>
         <CardContent>
+          <div className="mb-3 max-w-sm">
+            <Segmentado etiqueta="Tipo de contacto" valor={form.tipo} onCambiar={v => setForm({ ...form, tipo: v as FormProveedor['tipo'] })}
+              opciones={[{ valor: 'proveedor', texto: 'Proveedor' }, { valor: 'tecnico', texto: 'Técnico' }]} />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Input placeholder="Nombre *" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} aria-label="Nombre del proveedor" />
-            <Input placeholder="Teléfono" inputMode="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} aria-label="Teléfono" />
-            <Input placeholder="Dónde queda (mercado, puesto...)" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} aria-label="Dirección" />
-            {esGerencia && (
+            <Input placeholder="Nombre *" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} aria-label={form.tipo === 'tecnico' ? 'Nombre del técnico' : 'Nombre del proveedor'} />
+            {form.tipo === 'tecnico' && (
+              <>
+                <Input placeholder="Oficio * (electricista…)" list="oficios" value={form.oficio} onChange={e => setForm({ ...form, oficio: e.target.value })} aria-label="Oficio" />
+                <datalist id="oficios">{OFICIOS.map(o => <option key={o} value={o} />)}</datalist>
+              </>
+            )}
+            <Input placeholder={form.tipo === 'tecnico' ? 'Teléfono *' : 'Teléfono'} inputMode="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} aria-label="Teléfono" />
+            <Input placeholder={form.tipo === 'tecnico' ? 'Zona o notas (opcional)' : 'Dónde queda (mercado, puesto...)'} value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} aria-label="Dirección" />
+            {esGerencia && form.tipo === 'proveedor' && (
               <div className="flex gap-2">
                 <Select value={form.condicion_pago} onChange={e => setForm({ ...form, condicion_pago: e.target.value as CondicionPago })} aria-label="Condición de pago">
                   <option value="contado">Al contado</option>
@@ -152,8 +178,59 @@ export function ProveedoresPage() {
 
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Buscar proveedor, teléfono o lugar…" value={busqueda} onChange={e => setBusqueda(e.target.value)} className="pl-9" aria-label="Buscar proveedor" />
+        <Input placeholder="Buscar proveedor, técnico, teléfono o lugar…" value={busqueda} onChange={e => setBusqueda(e.target.value)} className="pl-9" aria-label="Buscar proveedor" />
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Wrench size={18} /> Técnicos de emergencia ({tecnicosVisibles.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {tecnicos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aún no hay técnicos. Regístralos con «Nuevo contacto» → Técnico: electricista, gasfitero, refrigeración, máquina de café…</p>
+          ) : tecnicosVisibles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Ningún técnico coincide con la búsqueda.</p>
+          ) : tecnicosVisibles.map(t => editandoId === t.id ? (
+            <div key={t.id} className="grid gap-2 rounded-lg border bg-yayis-cream/40 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
+              <Input className="h-9" value={edicion.nombre} onChange={e => setEdicion({ ...edicion, nombre: e.target.value })} aria-label="Nombre" />
+              <Input className="h-9" list="oficios-edicion" value={edicion.oficio} onChange={e => setEdicion({ ...edicion, oficio: e.target.value })} aria-label="Oficio" placeholder="Oficio" />
+              <datalist id="oficios-edicion">{OFICIOS.map(o => <option key={o} value={o} />)}</datalist>
+              <Input className="h-9" inputMode="tel" value={edicion.telefono} onChange={e => setEdicion({ ...edicion, telefono: e.target.value })} aria-label="Teléfono" />
+              <div className="flex justify-end">
+                <Button size="icon" variant="ghost" onClick={() => handleGuardarEdicion(t.id)} aria-label="Guardar"><Check size={16} className="text-emerald-600" /></Button>
+                <Button size="icon" variant="ghost" onClick={() => setEditandoId(null)} aria-label="Cancelar"><X size={16} className="text-red-500" /></Button>
+              </div>
+            </div>
+          ) : (
+            <div key={t.id} className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 ${t.activo ? '' : 'bg-gray-50 text-muted-foreground'}`}>
+              <div className="min-w-0 flex-1">
+                <p className={`font-semibold ${t.activo ? 'text-yayis-dark' : 'line-through'}`}>{t.nombre}
+                  {t.oficio && <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{t.oficio}</span>}
+                </p>
+                <p className="text-xs text-muted-foreground">{[t.telefono, t.direccion].filter(Boolean).join(' · ') || 'Sin teléfono'}</p>
+              </div>
+              {t.telefono && (
+                <div className="flex gap-2">
+                  <a href={`tel:${t.telefono.replace(/\s+/g, '')}`} className="inline-flex h-10 items-center gap-1 rounded-md bg-yayis-green px-3 text-sm font-medium text-white" aria-label={`Llamar a ${t.nombre}`}>
+                    <Phone size={15} /> Llamar
+                  </a>
+                  {enlaceWhatsApp(t.telefono) && (
+                    <a href={enlaceWhatsApp(t.telefono)!} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-1 rounded-md border border-emerald-600 px-3 text-sm font-medium text-emerald-700" aria-label={`WhatsApp a ${t.nombre}`}>
+                      <MessageCircle size={15} /> WhatsApp
+                    </a>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center">
+                <Button size="icon" variant="ghost" onClick={() => { setEditandoId(t.id); setEdicion(aForm(t)); }} aria-label={`Editar ${t.nombre}`}><Pencil size={14} /></Button>
+                <button onClick={() => handleToggle(t)} title={t.activo ? 'Desactivar' : 'Activar'} aria-label={t.activo ? `Desactivar ${t.nombre}` : `Activar ${t.nombre}`}>
+                  {t.activo ? <ToggleRight size={24} className="text-emerald-500" /> : <ToggleLeft size={24} className="text-gray-400" />}
+                </button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
 
       <Card>

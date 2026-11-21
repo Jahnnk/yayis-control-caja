@@ -33,7 +33,8 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
   const { profile } = useAuth();
   const { createGasto, updateGasto } = useGastos();
   const { categorias } = useCategorias();
-  const { proveedores } = useProveedores();
+  // Un gasto sí puede ser de un técnico (lo que se le pagó al electricista).
+  const { proveedores } = useProveedores({ incluirTecnicos: true });
   const { addToast } = useToast();
 
   const isOwner = profile?.rol === 'owner';
@@ -248,7 +249,7 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
         <label className="text-sm font-medium" htmlFor="proveedor-gasto">Proveedor <span className="font-normal text-muted-foreground">(opcional)</span></label>
         <Select id="proveedor-gasto" value={form.proveedor_id} onChange={e => updateField('proveedor_id', e.target.value)} className="mt-1 h-11">
           <option value="">Sin proveedor</option>
-          {proveedores.filter(p => p.activo || p.id === form.proveedor_id).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          {proveedores.filter(p => p.activo || p.id === form.proveedor_id).map(p => <option key={p.id} value={p.id}>{p.nombre}{p.tipo === 'tecnico' ? ` (técnico${p.oficio ? `: ${p.oficio}` : ''})` : ''}</option>)}
         </Select>
       </div>
 

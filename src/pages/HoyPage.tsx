@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dato } from '@/components/ui/dato';
+import { ResumenAhorro } from '@/components/precios/ResumenAhorro';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { usePedidos } from '@/hooks/usePedidos';
 import { useEntregas, gastadoDe } from '@/hooks/useEntregas';
@@ -92,12 +93,14 @@ function Atajo({ to, icono: Icono, texto }: { to: string; icono: typeof Truck; t
 }
 
 /** Esqueleto común: saludo, lo que hay que hacer, los números de la semana y los atajos. */
-function Hoy({ subtitulo, tareas, listo, datos, atajos }: {
+function Hoy({ subtitulo, tareas, listo, datos, atajos, extra }: {
   subtitulo: string;
   tareas: Tarea[];
   listo: boolean;
   datos: ReactNode;
   atajos: ReactNode;
+  /** Secciones plegadas debajo de las cifras (por ejemplo, los precios de las compras). */
+  extra?: ReactNode;
 }) {
   const { profile } = useAuth();
   const { cambiarSede } = useSedeActiva();
@@ -142,6 +145,8 @@ function Hoy({ subtitulo, tareas, listo, datos, atajos }: {
 
       <section aria-label="Cómo vas" className="grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">{datos}</section>
 
+      {extra}
+
       <section aria-label="Atajos" className="flex flex-wrap gap-2">{atajos}</section>
     </div>
   );
@@ -180,6 +185,7 @@ function HoyAdministrador() {
         <Dato etiqueta="Compras tiene de tu sede" valor={formatMonto(enManos)} nota="por gastar o devolver" />
         <Dato etiqueta="Gerencia te debe reponer" valor={formatMonto(consolidado.total.total)} nota={`${consolidado.total.cantidad} gasto(s) pendiente(s)`} />
       </>}
+      extra={<ResumenAhorro sedeId={sedeId} />}
       atajos={<>
         <Atajo to="/gastos" icono={Plus} texto="Anotar un gasto" />
         <Atajo to="/pedidos" icono={ShoppingCart} texto="Mis listas" />
