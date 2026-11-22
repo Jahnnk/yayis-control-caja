@@ -1,9 +1,10 @@
-import { Menu, LogOut, MapPin } from 'lucide-react';
+import { Menu, LogOut, MapPin, House } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { Button } from '@/components/ui/button';
 import { ROL_LABEL } from '@/lib/roles';
+import { URL_INICIO_PUERTA, vinoDeLaPuerta } from '@/lib/puerta';
 
 // Pantallas que muestran las 3 sedes juntas (tienen su propio filtro de sede): el selector de arriba no aplica.
 const PANTALLAS_DE_TODAS_LAS_SEDES = ['/hoy', '/vista-general', '/finanzas', '/ruta', '/rendicion'];
@@ -25,6 +26,16 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <button onClick={onMenuToggle} className="lg:hidden text-yayis-dark hover:text-yayis-green">
           <Menu size={22} />
         </button>
+        {vinoDeLaPuerta() && (
+          <a
+            href={URL_INICIO_PUERTA}
+            title="Volver a Inicio: todas tus apps de Yayi's"
+            className="flex items-center gap-1 rounded-md border border-yayis-green/40 px-2 py-1 text-sm font-medium text-yayis-green hover:bg-yayis-cream"
+          >
+            <House size={16} className="shrink-0" />
+            <span>Inicio</span>
+          </a>
+        )}
         {puedeCambiarSede && !todasLasSedes ? (
           <label className="flex items-center gap-2">
             <MapPin size={16} className="text-yayis-green shrink-0" />
