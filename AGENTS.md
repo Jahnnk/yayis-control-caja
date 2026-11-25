@@ -249,6 +249,15 @@ Flujo: **Admin arma pedido → Compras (Fabio) compra → Admin confirma recepci
 - Recomendación: pedir **boleta separada por sede** cuando Fabio compre para dos sedes el mismo día (lunes: Atelier + Fonavi).
 - Fases: **2A**, **2B** y **3** hechas. **4** (pendiente, cuando Jahnn lo decida) = fondo propio de Fabio: pasar de "entregas por sede" a una caja de Compras que Gerencia repone directamente.
 
+### Delivery de compras (decisiones de Jahnn, 24-nov-2026)
+Desde que Compras quedó sin persona (24-oct-2026), cada administrador **gestiona** las compras de su sede: coordina con los proveedores y con un **delivery tercerizado que compra con SU plata**, saca factura de lo que se puede (en el mercado no siempre) y cobra carreras. La sede le devuelve todo. Pantalla `/delivery-compras` (admin y Gerencia), hook `useDeliveryCompras`, reglas `lib/delivery-compras.ts`, SQL `supabase/delivery_de_compras.sql` (lo corre Jahnn).
+- **Registrar lo que trajo** (`RegistrarTraido`): productos con cantidad y lo pagado (los de la lista del día se traen con un toque y quedan comprados y recibidos conforme), proveedor por producto, y por proveedor su comprobante (factura/boleta con foto; sin comprobante = dónde compró, por escrito) y su categoría; carreras = cantidad × precio. Todo se guarda con `registrar_compra_repartidor` (todo o nada): un `encargos_repartidor` «por pagar» + una compra por proveedor con `condicion_pago = 'reembolso'` (sin entrega, `metodo_pago` null) + sus `compra_items`. El tope sin boleta NO aplica a estas compras (las paga el delivery).
+- **Pagarle** (`PagarDelivery`, `pagar_repartidor`): Yape/transferencia (captura obligatoria) o efectivo. Ahí nacen los gastos pendientes de reposición: uno por compra («Compra a X», con proveedor, comprobante y categoría; origen «compras» por el disparador) y uno por las carreras (Delivery y fletes, `con_monto_semanal`).
+- **Anular** solo mientras no se le pagó: borra el registro y la lista vuelve a «por comprar».
+- «Hoy» del administrador: tarjeta «Págale a …» (urgente desde 2 días). Registro de Gastos: al elegir Insumos o Packaging, aviso que lleva a Delivery de compras.
+- Los precios llegan solos a Cash Control (`compras_para_cash_control` lee todas las `compra_items`).
+- El delivery se registra en la tabla `repartidores` (por ahora con SQL; Gerencia).
+
 ### Deliverys de Compras (decisiones de Jahnn, 2-oct-2026)
 Fabio también entrega productos de Yayi's a clientes. Se controla cuántos hace y el dinero que cobra. Tablas `deliverys` y `liquidaciones_delivery`, función `recibir_efectivo_delivery` (`supabase/deliverys.sql`, la ejecuta Jahnn). **No mueve la caja chica**: no crea gastos ni reposiciones.
 - **Quién registra:** Fabio, desde el celular, apenas entrega (sede de origen, cliente, valor del producto, valor del delivery —monto libre—, cómo pagó el cliente).

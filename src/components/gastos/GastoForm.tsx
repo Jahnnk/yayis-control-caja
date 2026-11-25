@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGastos, validarConstancia } from '@/hooks/useGastos';
@@ -271,6 +272,13 @@ export function GastoForm({ onSaved, editData, onCancelEdit, categoriasFrecuente
           </Select>
         </div>
       </div>
+
+      {/* Compras de mercadería: si las trajo el delivery, van en «Delivery de compras» (ahí quedan los precios). */}
+      {categoriaElegida && ['insumos', 'packaging'].includes(categoriaElegida.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()) && !editData && (
+        <p className="rounded-md bg-sky-50 px-3 py-2 text-xs text-sky-900">
+          ¿Lo compró el delivery? Regístralo en <Link to="/delivery-compras" className="font-semibold underline">Delivery de compras</Link>: así se guarda el precio de cada producto y el gasto se crea solo al pagarle.
+        </p>
+      )}
 
       {/* Forma de pago */}
       <div>

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Sun, ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard, Bike, Eye, Gauge } from 'lucide-react';
+import { Sun, ClipboardList, BarChart3, Settings, Users, X, ShoppingCart, Truck, Store, Wallet, PackageCheck, LayoutDashboard, Bike, Eye, Gauge, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
@@ -32,6 +32,7 @@ const navItems = [
   { to: '/resumen', label: 'Resumen', icon: BarChart3, grupo: 'ver', roles: ['owner', 'admin', 'viewer'] },
   { to: '/presupuesto', label: 'Presupuesto', icon: Gauge, grupo: 'ver', roles: ['owner', 'admin', 'viewer'] },
   { to: '/pedidos', label: 'Pedidos y recepción', icon: ShoppingCart, grupo: 'compras', roles: ['owner', 'admin'] },
+  { to: '/delivery-compras', label: 'Delivery de compras', icon: ShoppingBag, grupo: 'compras', roles: ['owner', 'admin'] },
   { to: '/ruta', label: 'Ruta de compras', icon: Truck, grupo: 'compras', roles: ['owner', 'compras'] },
   { to: '/proveedores', label: 'Proveedores', icon: Store, grupo: 'compras', roles: ['owner', 'admin', 'compras'] },
   { to: '/recepcion', label: 'Dinero de la semana', icon: PackageCheck, grupo: 'dinero', roles: ['owner', 'admin'] },

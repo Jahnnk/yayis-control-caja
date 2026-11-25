@@ -192,6 +192,8 @@ export interface ResumenSemanalData {
 
 // ===== Compras (Fase 2) =====
 export type CondicionPago = 'contado' | 'credito';
+/** Forma de pago de una compra: además, «reembolso» = la pagó el delivery de compras y la sede le devuelve (24-nov-2026). */
+export type CondicionCompra = CondicionPago | 'reembolso';
 
 export interface Proveedor {
   id: string;
@@ -315,7 +317,7 @@ export interface Compra {
   entrega_id: string | null;
   fecha: string;
   total: number;
-  condicion_pago: CondicionPago;
+  condicion_pago: CondicionCompra;
   /** Como se pago: efectivo o cuentas (Yape/transferencia). Null si es a credito. */
   metodo_pago: MetodoPago | null;
   tipo_comprobante: TipoComprobante;
