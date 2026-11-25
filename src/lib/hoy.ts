@@ -69,6 +69,8 @@ export function tareasDeAdministrador(d: {
   deliverys: DeliveryDetalle[];
   /** Lo que le queda del monto semanal (para sugerir entregar dinero a Compras). */
   quedaSemanal: number;
+  /** Lo que se le debe al delivery de compras (compró con su plata) y desde cuándo. */
+  deudaDelivery?: { total: number; nombre: string; desde: string } | null;
 }): Tarea[] {
   const { hoy, pedidos, entregas } = d;
   const t: Tarea[] = [];
@@ -135,6 +137,17 @@ export function tareasDeAdministrador(d: {
         boton: 'Entregar dinero', ir: '/recepcion',
       });
     }
+  }
+
+  // El delivery de compras pone su plata: devolvérsela pronto (desde 2 días es urgente).
+  if (d.deudaDelivery && d.deudaDelivery.total > 0) {
+    const dias = diasEntre(d.deudaDelivery.desde, hoy);
+    t.push({
+      clave: 'pagar-delivery', urgencia: dias >= 2 ? 'ahora' : 'hoy', icono: 'dinero',
+      titulo: `Págale a ${d.deudaDelivery.nombre}`,
+      detalle: `Le debes ${formatMonto(d.deudaDelivery.total)} de compras y carreras${dias >= 1 ? ` desde el ${fechaCorta(d.deudaDelivery.desde)}` : ''}. Al pagarle, los gastos se crean solos.`,
+      boton: 'Pagar', ir: '/delivery-compras',
+    });
   }
 
   const efectivo = d.deliverys.filter(esEfectivoPendiente);

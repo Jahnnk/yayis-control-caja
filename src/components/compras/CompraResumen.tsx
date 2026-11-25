@@ -31,6 +31,7 @@ export function CompraResumen({ compra, onEliminar, onCompletar, children }: Pro
     : `${compra.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}${compra.numero_comprobante ? ` ${compra.numero_comprobante}` : ''}`;
   const pago = recojo ? 'ya estaba pagado' : compra.condicion_pago === 'credito'
     ? `A crédito, vence ${compra.fecha_vencimiento ? fechaCorta(compra.fecha_vencimiento) : '—'}`
+    : compra.condicion_pago === 'reembolso' ? 'La pagó el delivery (se le devuelve)'
     : compra.metodo_pago === 'cuentas' ? 'Yape/transferencia' : 'Efectivo';
 
   return (

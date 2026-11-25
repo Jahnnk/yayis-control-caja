@@ -366,7 +366,7 @@ export function VistaGeneralPage() {
                   <span className="font-medium">{c.proveedores?.nombre}</span>
                   <span className="text-xs text-muted-foreground">
                     {c.tipo_comprobante === 'sin_comprobante' ? 'Sin boleta' : c.tipo_comprobante === 'boleta' ? 'Boleta' : 'Factura'}
-                    {c.condicion_pago === 'credito' ? ' · a crédito' : c.metodo_pago === 'cuentas' ? ' · Yape/transf.' : ' · efectivo'}
+                    {c.condicion_pago === 'credito' ? ' · a crédito' : c.condicion_pago === 'reembolso' ? ' · la pagó el delivery' : c.metodo_pago === 'cuentas' ? ' · Yape/transf.' : ' · efectivo'}
                   </span>
                   {c.evidencia_pendiente && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">Foto pendiente</span>}
                   <span className="ml-auto font-bold">{formatMonto(Number(c.total))}</span>

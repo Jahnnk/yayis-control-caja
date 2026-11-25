@@ -15,6 +15,7 @@ import { useFinanzas } from '@/hooks/useFinanzas';
 import { useAlertasPresupuesto } from '@/hooks/useAlertasPresupuesto';
 import { usePorReponerSedes } from '@/hooks/usePorReponerSedes';
 import { calcularAlertas, gastadoEntrega } from '@/lib/alertas';
+import { useDeliveryCompras } from '@/hooks/useDeliveryCompras';
 import { tareasDeAdministrador, tareasDeCompras, tareasDeGerencia, type IconoTarea, type Tarea, type Urgencia } from '@/lib/hoy';
 import { esEfectivoPendiente } from '@/lib/deliverys';
 import { fechaLarga } from '@/lib/compras';
@@ -162,12 +163,23 @@ function HoyAdministrador() {
   // La caja chica de la semana: todo lo que sale de la caja de la sede (sus gastos + compras de Fabio al contado).
   const { caja } = useCajaSemana(sedeId, hoy);
   const { consolidado } = useConsolidadoReposicion();
+  const delivery = useDeliveryCompras();
   const listo = useListo(l1 || l2 || l3);
+  const deudaDelivery = useMemo(() => {
+    const porPagar = delivery.encargos.filter(e => e.estado === 'por_pagar');
+    if (porPagar.length === 0) return null;
+    const nombres = Array.from(new Set(porPagar.map(e => e.repartidores?.nombre ?? 'el delivery')));
+    return {
+      total: roundTwo(porPagar.reduce((t, e) => t + Number(e.total_compras) + Number(e.total_carreras), 0)),
+      nombre: nombres.length === 1 ? nombres[0]! : 'los deliverys',
+      desde: porPagar.map(e => e.fecha).sort()[0]!,
+    };
+  }, [delivery.encargos]);
 
   const tareas = useMemo(() => tareasDeAdministrador({
     hoy, sede: sedeActiva ? { nombre: sedeActiva.nombre, dias_compra: sedeActiva.dias_compra ?? [] } : null,
-    pedidos, entregas, deliverys, quedaSemanal: saldo.queda,
-  }), [hoy, sedeActiva, pedidos, entregas, deliverys, saldo.queda]);
+    pedidos, entregas, deliverys, quedaSemanal: saldo.queda, deudaDelivery,
+  }), [hoy, sedeActiva, pedidos, entregas, deliverys, saldo.queda, deudaDelivery]);
   const enManos = roundTwo(entregas.filter(e => e.estado === 'abierta').reduce((s, e) => s + Number(e.monto) - gastadoDe(e), 0));
 
   return (
