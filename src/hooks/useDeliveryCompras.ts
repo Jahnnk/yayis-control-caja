@@ -20,6 +20,8 @@ export interface EncargoDetalle {
   precio_carrera: number;
   total_carreras: number;
   total_compras: number;
+  /** Si hubo varias tarifas: el detalle por tramos (si fue una sola, null). */
+  detalle_carreras: { cantidad: number; precio: number }[] | null;
   notas: string | null;
   estado: 'por_pagar' | 'pagado';
   metodo_pago: MetodoPago | null;
@@ -88,7 +90,7 @@ export function useDeliveryCompras() {
 
   /** Sube las fotos y guarda todo de una vez. Si la base lo rechaza, borra las fotos subidas. */
   const registrar = useCallback(async (d: {
-    repartidorId: string; pedidoId: string | null; fecha: string; carreras: number; precioCarrera: number; notas: string;
+    repartidorId: string; pedidoId: string | null; fecha: string; carreras: { cantidad: number; precio: number }[]; notas: string;
     compras: CompraParaGuardar[];
   }): Promise<{ error: string | null }> => {
     if (!sedeId || !user) return { error: 'No se pudo identificar tu sede.' };
@@ -112,7 +114,7 @@ export function useDeliveryCompras() {
     }
     const { error } = await supabase.rpc('registrar_compra_repartidor', {
       p_sede: sedeId, p_repartidor: d.repartidorId, p_pedido: d.pedidoId, p_fecha: d.fecha,
-      p_carreras: d.carreras, p_precio_carrera: d.precioCarrera, p_notas: d.notas, p_compras: compras,
+      p_carreras: d.carreras, p_notas: d.notas, p_compras: compras,
     });
     if (error) { await borrarEvidencias(subidas); return { error: mensaje(error) }; }
     await cargar();

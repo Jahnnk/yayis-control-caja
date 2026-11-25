@@ -14,6 +14,7 @@ import { useSedeActiva } from '@/contexts/SedeActivaContext';
 import { fechaCorta } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto, roundTwo } from '@/lib/utils';
+import { textoCarreras } from '@/lib/delivery-compras';
 
 const totalDe = (e: EncargoDetalle) => roundTwo(Number(e.total_compras) + Number(e.total_carreras));
 const sinComprobante = (e: EncargoDetalle) => roundTwo(e.compras.filter(c => c.tipo_comprobante === 'sin_comprobante').reduce((t, c) => t + Number(c.total), 0));
@@ -142,7 +143,7 @@ function TarjetaEncargo({ e, children }: { e: EncargoDetalle; children?: React.R
               <p className="mt-1 text-muted-foreground">Categoría: {c.categorias?.nombre ?? '—'}</p>
             </div>
           ))}
-          {Number(e.total_carreras) > 0 && <p className="flex justify-between"><span>{e.carreras} carreras × {formatMonto(Number(e.precio_carrera))}</span><span className="tabular-nums">{formatMonto(Number(e.total_carreras))}</span></p>}
+          {Number(e.total_carreras) > 0 && <p className="flex justify-between"><span>{textoCarreras(e.carreras, Number(e.precio_carrera), e.detalle_carreras)}</span><span className="tabular-nums">{formatMonto(Number(e.total_carreras))}</span></p>}
           {e.notas && <p className="text-muted-foreground">Nota: {e.notas}</p>}
         </div>
       )}

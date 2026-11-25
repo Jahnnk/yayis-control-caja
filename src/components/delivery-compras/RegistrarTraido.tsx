@@ -18,7 +18,7 @@ import { claveNombre, fechaCorta } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto } from '@/lib/utils';
 import {
-  cuentaDelivery, num, porProveedor, precioSugerido, queFalta, subida,
+  cuentaDelivery, num, porProveedor, tramosValidos, precioSugerido, queFalta, subida,
   type ComprobanteProveedor, type LineaTraida,
 } from '@/lib/delivery-compras';
 import type { PedidoConItems, TipoComprobante } from '@/types';
@@ -44,7 +44,7 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
   repartidores: Repartidor[];
   /** Listas de la sede con productos pendientes (para traerlos). */
   pedidos: PedidoConItems[];
-  guardar: (d: { repartidorId: string; pedidoId: string | null; fecha: string; carreras: number; precioCarrera: number; notas: string; compras: CompraParaGuardar[] }) => Promise<{ error: string | null }>;
+  guardar: (d: { repartidorId: string; pedidoId: string | null; fecha: string; carreras: { cantidad: number; precio: number }[]; notas: string; compras: CompraParaGuardar[] }) => Promise<{ error: string | null }>;
 }) {
   const { addToast } = useToast();
   const { productos, obtenerOCrear } = useProductos();
@@ -59,21 +59,25 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
   const [pedidoId, setPedidoId] = useState<string | null>(null);
   const [lineas, setLineas] = useState<LineaTraida[]>([nuevaLinea()]);
   const [comprobantes, setComprobantes] = useState<Record<string, ComprobanteProveedor>>({});
-  const [carreras, setCarreras] = useState('');
-  const [precioCarrera, setPrecioCarrera] = useState('');
+  // Carreras por tramos: la tarifa de siempre y, si fue más lejos, otra tarifa.
+  const [tramos, setTramos] = useState<{ clave: string; cantidad: string; precio: string }[]>([{ clave: 't0', cantidad: '', precio: '' }]);
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState<{ linea: string; nombre: string } | null>(null);
 
   useEffect(() => { if (!repartidorId && repartidores[0]) setRepartidorId(repartidores[0].id); }, [repartidores, repartidorId]);
-  useEffect(() => { if (repartidor && precioCarrera === '') setPrecioCarrera(repartidor.precio_carrera > 0 ? repartidor.precio_carrera.toFixed(2) : ''); }, [repartidor, precioCarrera]);
+  useEffect(() => {
+    if (!repartidor || repartidor.precio_carrera <= 0) return;
+    setTramos(prev => (prev[0] && prev[0].precio === '' ? [{ ...prev[0], precio: repartidor.precio_carrera.toFixed(2) }, ...prev.slice(1)] : prev));
+  }, [repartidor]);
 
   const habituales = usePreciosHabituales(lineas.map(l => l.productoId).filter((x): x is string => !!x));
   const ultimoUnitario = (l: LineaTraida) => (l.productoId ? habituales.get(claveProducto(l.productoId, l.unidad))?.unitario ?? null : null);
 
   const usadas = useMemo(() => lineas.filter(l => l.productoNombre.trim() !== '' || num(l.pagado) > 0), [lineas]);
   const grupos = useMemo(() => porProveedor(usadas), [usadas]);
-  const cuenta = cuentaDelivery(grupos, comprobantes, num(carreras), num(precioCarrera));
+  const tramosNum = tramos.map(t => ({ cantidad: num(t.cantidad), precio: num(t.precio) }));
+  const cuenta = cuentaDelivery(grupos, comprobantes, tramosNum);
   const falta = !repartidor ? 'Elige el delivery.' : queFalta(lineas, comprobantes);
 
   // Cada proveedor nuevo en la lista recibe su comprobante con la categoría que se adivina por su primer producto.
@@ -147,7 +151,7 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
   };
 
   const reiniciar = () => {
-    setLineas([nuevaLinea()]); setComprobantes({}); setCarreras(''); setNotas(''); setPedidoId(null); setFecha(hoy); setCambiarFecha(false);
+    setLineas([nuevaLinea()]); setComprobantes({}); setTramos([{ clave: 't0', cantidad: '', precio: repartidor && repartidor.precio_carrera > 0 ? repartidor.precio_carrera.toFixed(2) : '' }]); setNotas(''); setPedidoId(null); setFecha(hoy); setCambiarFecha(false);
   };
 
   const enviar = async () => {
@@ -170,7 +174,7 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
       };
     });
     const { error } = await guardar({
-      repartidorId: repartidor.id, pedidoId: pedido?.id ?? null, fecha, carreras: Math.floor(num(carreras)), precioCarrera: num(precioCarrera), notas, compras,
+      repartidorId: repartidor.id, pedidoId: pedido?.id ?? null, fecha, carreras: tramosValidos(tramosNum), notas, compras,
     });
     setGuardando(false);
     if (error) { addToast(error, 'error'); return; }
@@ -323,14 +327,26 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
         {/* Carreras */}
         <section className="rounded-lg border bg-white p-3">
           <h4 className="text-sm font-bold text-yayis-dark">Carreras</h4>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-            <Input inputMode="numeric" value={carreras} onChange={e => setCarreras(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" aria-label="Cantidad de carreras" className="w-20 text-right" />
-            <span>carreras ×</span>
-            <div className="relative w-28">
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">S/</span>
-              <Input inputMode="decimal" value={precioCarrera} onChange={e => setPrecioCarrera(e.target.value)} aria-label="Precio por carrera" className="pl-7 text-right" />
+          {tramos.map((t, k) => (
+            <div key={t.clave} className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <Input inputMode="numeric" value={t.cantidad} placeholder="0" aria-label="Cantidad de carreras" className="w-20 text-right"
+                onChange={e => setTramos(prev => prev.map(x => (x.clave === t.clave ? { ...x, cantidad: e.target.value.replace(/[^\d]/g, '') } : x)))} />
+              <span>carreras ×</span>
+              <div className="relative w-28">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">S/</span>
+                <Input inputMode="decimal" value={t.precio} aria-label="Precio por carrera" className="pl-7 text-right"
+                  onChange={e => setTramos(prev => prev.map(x => (x.clave === t.clave ? { ...x, precio: e.target.value } : x)))} />
+              </div>
+              <span className="ml-auto font-semibold tabular-nums">= {formatMonto(Math.floor(num(t.cantidad)) * num(t.precio))}</span>
+              {k > 0 && (
+                <button type="button" onClick={() => setTramos(prev => prev.filter(x => x.clave !== t.clave))} className="text-muted-foreground hover:text-red-600" aria-label="Quitar tarifa"><Trash2 size={16} /></button>
+              )}
             </div>
-            <span className="ml-auto font-semibold tabular-nums">= {formatMonto(cuenta.carreras)}</span>
+          ))}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <button type="button" onClick={() => setTramos(prev => [...prev, { clave: crypto.randomUUID(), cantidad: '', precio: '' }])}
+              className="flex items-center gap-1 text-xs font-medium text-yayis-green"><Plus size={14} /> Otra tarifa (más lejos)</button>
+            {tramos.length > 1 && <span className="text-sm font-bold tabular-nums">Total {formatMonto(cuenta.carreras)}</span>}
           </div>
         </section>
 

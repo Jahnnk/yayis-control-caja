@@ -9,6 +9,7 @@ import type { EncargoDetalle } from '@/hooks/useDeliveryCompras';
 import { fechaCorta } from '@/lib/compras';
 import { getTodayLima } from '@/lib/dates';
 import { formatMonto, roundTwo } from '@/lib/utils';
+import { textoCarreras } from '@/lib/delivery-compras';
 import type { MetodoPago } from '@/types';
 
 /** Devolverle al delivery lo que pagó más sus carreras. Al guardar nacen los gastos para la rendición. */
@@ -58,7 +59,7 @@ export function PagarDelivery({ encargo, onClose, pagar }: {
             </div>
           ))}
           {Number(encargo.total_carreras) > 0 && (
-            <div className="flex justify-between"><span>{encargo.carreras} carreras × {formatMonto(Number(encargo.precio_carrera))}</span><span className="tabular-nums">{formatMonto(Number(encargo.total_carreras))}</span></div>
+            <div className="flex justify-between"><span>{textoCarreras(encargo.carreras, Number(encargo.precio_carrera), encargo.detalle_carreras)}</span><span className="tabular-nums">{formatMonto(Number(encargo.total_carreras))}</span></div>
           )}
           <div className="mt-1 flex justify-between border-t pt-1 font-bold text-yayis-dark"><span>Total</span><span className="tabular-nums">{formatMonto(total)}</span></div>
         </div>

@@ -10,7 +10,7 @@ import type { TipoComprobante } from '@/types';
 // Reglas (las mismas que valida la base en supabase/delivery_de_compras.sql):
 //   · una compra por proveedor; cada una con su categoría de gasto y al menos un producto con precio;
 //   · con factura o boleta: la foto del comprobante; sin comprobante (mercado): dónde y qué, por escrito;
-//   · carreras = cantidad × precio por carrera.
+//   · carreras por tramos: no siempre cuestan lo mismo (más lejos cobra más): 5 × S/ 6 + 2 × S/ 8.
 
 export interface LineaTraida {
   clave: string;
@@ -53,6 +53,20 @@ export function porProveedor(lineas: LineaTraida[]): { proveedorId: string; line
   }));
 }
 
+/** Un tramo de carreras: cuántas y a cuánto cada una. */
+export interface TramoCarreras { cantidad: number; precio: number }
+
+/** Solo los tramos con carreras (enteras) y precio válido. */
+export const tramosValidos = (t: TramoCarreras[]) =>
+  t.filter(x => Math.floor(x.cantidad) > 0 && x.precio >= 0).map(x => ({ cantidad: Math.floor(x.cantidad), precio: roundTwo(x.precio) }));
+
+/** «7 carreras × S/ 6.00» o «7 carreras: 5 × S/ 6.00 + 2 × S/ 8.00». */
+export function textoCarreras(cantidad: number, precio: number, detalle: TramoCarreras[] | null | undefined): string {
+  const f = (n: number) => `S/ ${Number(n).toFixed(2)}`;
+  if (detalle && detalle.length > 1) return `${cantidad} carreras: ${detalle.map(t => `${t.cantidad} × ${f(t.precio)}`).join(' + ')}`;
+  return `${cantidad} carrera${cantidad === 1 ? '' : 's'} × ${f(precio)}`;
+}
+
 export interface CuentaDelivery {
   conComprobante: number;
   sinComprobante: number;
@@ -64,14 +78,14 @@ export interface CuentaDelivery {
 export function cuentaDelivery(
   grupos: { proveedorId: string; total: number }[],
   comprobantes: Record<string, Pick<ComprobanteProveedor, 'tipo'>>,
-  carreras: number, precioCarrera: number,
+  tramos: TramoCarreras[],
 ): CuentaDelivery {
   let con = 0, sin = 0;
   for (const g of grupos) {
     if ((comprobantes[g.proveedorId]?.tipo ?? 'factura') === 'sin_comprobante') sin += g.total;
     else con += g.total;
   }
-  const c = roundTwo(Math.max(0, Math.floor(carreras)) * Math.max(0, precioCarrera));
+  const c = roundTwo(tramosValidos(tramos).reduce((t, x) => t + roundTwo(x.cantidad * x.precio), 0));
   return { conComprobante: roundTwo(con), sinComprobante: roundTwo(sin), carreras: c, total: roundTwo(con + sin + c) };
 }
 
