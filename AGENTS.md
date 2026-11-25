@@ -256,7 +256,8 @@ Desde que Compras quedó sin persona (24-oct-2026), cada administrador **gestion
 - **Anular** solo mientras no se le pagó: borra el registro y la lista vuelve a «por comprar».
 - «Hoy» del administrador: tarjeta «Págale a …» (urgente desde 2 días). Registro de Gastos: al elegir Insumos o Packaging, aviso que lleva a Delivery de compras.
 - Los precios llegan solos a Cash Control (`compras_para_cash_control` lee todas las `compra_items`).
-- El delivery se registra en la tabla `repartidores` (por ahora con SQL; Gerencia).
+- **Quién trajo la compra:** el delivery de siempre u otro (si no puede, se pide otro, p. ej. una app). El administrador elige con un toque o agrega uno nuevo («Otro delivery», con su tarifa habitual opcional) — `supabase/repartidores_admin.sql`. Editar o desactivar deliverys es de Gerencia (SQL por ahora).
+- **Decisión de Jahnn:** el delivery NO registra nada (cobraría extra); todo lo hace el administrador.
 
 ### Deliverys de Compras (decisiones de Jahnn, 2-oct-2026)
 Fabio también entrega productos de Yayi's a clientes. Se controla cuántos hace y el dinero que cobra. Tablas `deliverys` y `liquidaciones_delivery`, función `recibir_efectivo_delivery` (`supabase/deliverys.sql`, la ejecuta Jahnn). **No mueve la caja chica**: no crea gastos ni reposiciones.

@@ -136,6 +136,24 @@ export function useDeliveryCompras() {
     return { error: null };
   }, [sedeId, user, cargar]);
 
+  /** Otro delivery (el de siempre no pudo: una app u otra persona). Lo puede agregar el administrador. */
+  const crearRepartidor = useCallback(async (nombre: string, precioCarrera: number): Promise<{ repartidor: Repartidor | null; error: string | null }> => {
+    const limpio = nombre.trim().replace(/\s+/g, ' ');
+    if (limpio.length < 2) return { repartidor: null, error: 'Escribe el nombre del delivery.' };
+    const ya = repartidores.find(r => r.nombre.toLowerCase() === limpio.toLowerCase());
+    if (ya) return { repartidor: ya, error: null };
+    const { data, error } = await supabase.from('repartidores')
+      .insert({ nombre: limpio, precio_carrera: Math.max(0, precioCarrera || 0) })
+      .select('id, nombre, telefono, precio_carrera').single();
+    if (error || !data) {
+      if (error && /row-level security|policy/i.test(error.message)) return { repartidor: null, error: 'Falta preparar la base: hay que correr supabase/repartidores_admin.sql en Supabase.' };
+      return { repartidor: null, error: mensaje(error) };
+    }
+    const r = { ...(data as Repartidor), precio_carrera: Number((data as Repartidor).precio_carrera) };
+    setRepartidores(prev => [...prev, r].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')));
+    return { repartidor: r, error: null };
+  }, [repartidores]);
+
   const anular = useCallback(async (encargo: EncargoDetalle): Promise<{ error: string | null }> => {
     const { error } = await supabase.rpc('anular_encargo_repartidor', { p_encargo: encargo.id });
     if (error) return { error: mensaje(error) };
@@ -144,5 +162,5 @@ export function useDeliveryCompras() {
     return { error: null };
   }, [cargar]);
 
-  return { repartidores, encargos, loading, error, cargar, registrar, pagar, anular };
+  return { repartidores, encargos, loading, error, cargar, registrar, pagar, anular, crearRepartidor };
 }

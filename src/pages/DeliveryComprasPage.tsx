@@ -27,7 +27,7 @@ const sinComprobante = (e: EncargoDetalle) => roundTwo(e.compras.filter(c => c.t
 export default function DeliveryComprasPage() {
   const { sedeActiva } = useSedeActiva();
   const { addToast } = useToast();
-  const { repartidores, encargos, loading, error, registrar, pagar, anular } = useDeliveryCompras();
+  const { repartidores, encargos, loading, error, registrar, pagar, anular, crearRepartidor } = useDeliveryCompras();
   const { pedidos } = usePedidos();
   const [registrando, setRegistrando] = useState(false);
   const [pagando, setPagando] = useState<EncargoDetalle | null>(null);
@@ -38,21 +38,20 @@ export default function DeliveryComprasPage() {
   const debe = roundTwo(porPagar.reduce((t, e) => t + totalDe(e), 0));
   const mes = getTodayLima().slice(0, 7);
   const delMes = encargos.filter(e => e.fecha.startsWith(mes));
-  const nombre = repartidores.length === 1 ? repartidores[0]!.nombre : 'el delivery';
+  // A quién se le debe: si es una sola persona, su nombre.
+  const deudores = Array.from(new Set(porPagar.map(e => e.repartidores?.nombre ?? 'el delivery')));
+  const nombre = deudores.length === 1 ? deudores[0]! : deudores.length > 1 ? 'los deliverys' : repartidores.length === 1 ? repartidores[0]!.nombre : 'el delivery';
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-yayis-dark"><Bike size={24} /> Delivery de compras</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {nombre === 'el delivery' ? 'El delivery' : nombre} compra con su plata y trae factura de lo que se puede. Cuando llega, registra qué trajo y a cuánto; luego devuélvele lo que pagó más sus carreras. Al pagarle, los gastos se crean solos para la rendición de {sedeActiva?.nombre ?? 'tu sede'}.
+          Tú gestionas la compra; el delivery que la hace (el de siempre u otro, si no puede) paga con su plata y trae factura de lo que se puede. Cuando llega, registra qué trajo y a cuánto; luego devuélvele lo que pagó más sus carreras. Al pagarle, los gastos se crean solos para la rendición de {sedeActiva?.nombre ?? 'tu sede'}.
         </p>
       </div>
 
       {error && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{error}</p>}
-      {!error && !loading && repartidores.length === 0 && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Todavía no hay un delivery registrado. Pídele a Gerencia que lo agregue.</p>
-      )}
 
       <section className="grid grid-cols-2 gap-2">
         <Dato etiqueta={`Le debes a ${nombre}`} valor={formatMonto(debe)} nota={porPagar.length === 0 ? 'Todo pagado' : `${porPagar.length} compra${porPagar.length === 1 ? '' : 's'} por pagar`} alerta={debe > 0} />
@@ -60,7 +59,7 @@ export default function DeliveryComprasPage() {
           nota={`${formatMonto(roundTwo(delMes.reduce((t, e) => t + Number(e.total_carreras), 0)))} en carreras · ${formatMonto(roundTwo(delMes.reduce((t, e) => t + sinComprobante(e), 0)))} sin comprobante`} />
       </section>
 
-      <Button className="h-12 w-full text-base" disabled={repartidores.length === 0 || !!error} onClick={() => setRegistrando(true)}>
+      <Button className="h-12 w-full text-base" disabled={!!error} onClick={() => setRegistrando(true)}>
         <Plus size={18} className="mr-1.5" /> Registrar lo que trajo
       </Button>
 
@@ -88,7 +87,7 @@ export default function DeliveryComprasPage() {
       )}
 
       {registrando && (
-        <RegistrarTraido open onClose={() => setRegistrando(false)} repartidores={repartidores} pedidos={pedidos} guardar={registrar} />
+        <RegistrarTraido open onClose={() => setRegistrando(false)} repartidores={repartidores} pedidos={pedidos} guardar={registrar} crearRepartidor={crearRepartidor} />
       )}
       <PagarDelivery encargo={pagando} onClose={() => setPagando(null)} pagar={pagar} />
       <ConfirmDialog open={!!anulando} title="Anular este registro" variant="destructive" confirmLabel="Anular"

@@ -38,13 +38,14 @@ const COMPROBANTES = [
  * en la mano, qué compró, a cuánto, de qué proveedor y con qué comprobante, y las carreras. Los productos de la
  * lista del día se traen con un toque (y quedan comprados y recibidos). Reglas: lib/delivery-compras.ts.
  */
-export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar }: {
+export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar, crearRepartidor }: {
   open: boolean;
   onClose: () => void;
   repartidores: Repartidor[];
   /** Listas de la sede con productos pendientes (para traerlos). */
   pedidos: PedidoConItems[];
   guardar: (d: { repartidorId: string; pedidoId: string | null; fecha: string; carreras: { cantidad: number; precio: number }[]; notas: string; compras: CompraParaGuardar[] }) => Promise<{ error: string | null }>;
+  crearRepartidor: (nombre: string, precioCarrera: number) => Promise<{ repartidor: Repartidor | null; error: string | null }>;
 }) {
   const { addToast } = useToast();
   const { productos, obtenerOCrear } = useProductos();
@@ -64,12 +65,23 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState<{ linea: string; nombre: string } | null>(null);
+  const [otroDelivery, setOtroDelivery] = useState<{ nombre: string; precio: string } | null>(null);
 
   useEffect(() => { if (!repartidorId && repartidores[0]) setRepartidorId(repartidores[0].id); }, [repartidores, repartidorId]);
+  // Al elegir quién trajo la compra, la tarifa de carrera es la suya (mientras no se hayan anotado carreras).
   useEffect(() => {
-    if (!repartidor || repartidor.precio_carrera <= 0) return;
-    setTramos(prev => (prev[0] && prev[0].precio === '' ? [{ ...prev[0], precio: repartidor.precio_carrera.toFixed(2) }, ...prev.slice(1)] : prev));
+    if (!repartidor) return;
+    const precio = repartidor.precio_carrera > 0 ? repartidor.precio_carrera.toFixed(2) : '';
+    setTramos(prev => (prev.length === 1 && prev[0]!.cantidad === '' ? [{ ...prev[0]!, precio }] : prev));
   }, [repartidor]);
+
+  const agregarDelivery = async () => {
+    if (!otroDelivery) return;
+    const { repartidor: r, error } = await crearRepartidor(otroDelivery.nombre, num(otroDelivery.precio));
+    if (error || !r) { addToast(error ?? 'No se pudo agregar', 'error'); return; }
+    setRepartidorId(r.id);
+    setOtroDelivery(null);
+  };
 
   const habituales = usePreciosHabituales(lineas.map(l => l.productoId).filter((x): x is string => !!x));
   const ultimoUnitario = (l: LineaTraida) => (l.productoId ? habituales.get(claveProducto(l.productoId, l.unidad))?.unitario ?? null : null);
@@ -78,7 +90,7 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
   const grupos = useMemo(() => porProveedor(usadas), [usadas]);
   const tramosNum = tramos.map(t => ({ cantidad: num(t.cantidad), precio: num(t.precio) }));
   const cuenta = cuentaDelivery(grupos, comprobantes, tramosNum);
-  const falta = !repartidor ? 'Elige el delivery.' : queFalta(lineas, comprobantes);
+  const falta = !repartidor ? 'Elige quién trajo la compra.' : queFalta(lineas, comprobantes);
 
   // Cada proveedor nuevo en la lista recibe su comprobante con la categoría que se adivina por su primer producto.
   useEffect(() => {
@@ -200,12 +212,35 @@ export function RegistrarTraido({ open, onClose, repartidores, pedidos, guardar 
       }>
       <div className="space-y-5">
         {/* Quién y cuándo */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          {repartidores.length > 1 && (
-            <Select value={repartidorId} onChange={e => setRepartidorId(e.target.value)} aria-label="Delivery" className="w-auto">
-              {repartidores.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-            </Select>
+        <section>
+          <p className="text-sm font-bold text-yayis-dark">¿Quién trajo la compra?</p>
+          <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Delivery">
+            {repartidores.map(r => (
+              <Button key={r.id} type="button" variant={repartidorId === r.id ? 'default' : 'outline'} aria-pressed={repartidorId === r.id}
+                className="h-10" onClick={() => { setRepartidorId(r.id); setOtroDelivery(null); }}>{r.nombre}</Button>
+            ))}
+            {!otroDelivery && (
+              <Button type="button" variant="outline" className="h-10 text-yayis-green" onClick={() => setOtroDelivery({ nombre: '', precio: '' })}>
+                <Plus size={16} className="mr-1" /> Otro delivery
+              </Button>
+            )}
+          </div>
+          {otroDelivery && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border bg-yayis-cream/40 p-2">
+              <Input autoFocus value={otroDelivery.nombre} placeholder="Nombre (ej. PedidosYa)" aria-label="Nombre del delivery" className="min-w-[10rem] flex-1"
+                onChange={e => setOtroDelivery({ ...otroDelivery, nombre: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void agregarDelivery(); }} />
+              <div className="relative w-36">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">S/</span>
+                <Input inputMode="decimal" value={otroDelivery.precio} placeholder="Carrera (opcional)" aria-label="Precio habitual por carrera" className="pl-7"
+                  onChange={e => setOtroDelivery({ ...otroDelivery, precio: e.target.value })} />
+              </div>
+              <Button type="button" onClick={() => void agregarDelivery()}>Agregar</Button>
+              <button type="button" className="text-xs text-muted-foreground" onClick={() => setOtroDelivery(null)}>Cancelar</button>
+            </div>
           )}
+        </section>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           {cambiarFecha ? (
             <Input type="date" value={fecha} max={hoy} onChange={e => setFecha(e.target.value)} className="w-auto" aria-label="Fecha de la compra" />
           ) : (
